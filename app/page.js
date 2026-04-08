@@ -23,7 +23,18 @@ import Tesseract from "tesseract.js";
 
 import { detectLeague } from "./utils/detectLeague";
 
-
+const BOOKMAKER_UPLOAD_OPTIONS = [
+  "Auto",
+  "DraftKings",
+  "BetMGM",
+  "FanDuel",
+  "Caesars",
+  "Fanatics",
+  "theScore",
+  "bet365",
+  "Circa",
+  "Kalshi",
+];
 
 const BET_TYPE_OPTIONS = [
   "",
@@ -271,6 +282,7 @@ export default function Home() {
 
   const resizeStateRef = useRef(null);
   const [uploadOwner, setUploadOwner] = useState("Me");
+  const [uploadBookmaker, setUploadBookmaker] = useState("Auto");
   const [changelog, setChangelog] = useState([
     "v1: initial OCR parser and CSV export",
     "v2: editor, duplicate handling, account owner, source tags, implied probability, confidence",
@@ -282,28 +294,29 @@ export default function Home() {
   const noticeTimerRef = useRef(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("betSlipAppStateV1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
-      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
-      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
-    } catch (error) {
-      console.error("Could not load local app state", error);
-    }
-  }, []);
+  try {
+    const raw = localStorage.getItem("betSlipAppStateV1");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+    if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+    if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+    if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+  } catch (error) {
+    console.error("Could not load local app state", error);
+  }
+}, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "betSlipAppStateV1",
-        JSON.stringify({ rows, uploadOwner, changelog })
-      );
-    } catch (error) {
-      console.error("Could not save local app state", error);
-    }
-  }, [rows, uploadOwner, changelog]);
+ useEffect(() => {
+  try {
+    localStorage.setItem(
+      "betSlipAppStateV1",
+      JSON.stringify({ rows, uploadOwner, uploadBookmaker, changelog })
+    );
+  } catch (error) {
+    console.error("Could not save local app state", error);
+  }
+}, [rows, uploadOwner, uploadBookmaker, changelog]);
 
   const reviewColumns = [
     { key: "select", label: "", sortable: false },
@@ -445,7 +458,7 @@ export default function Home() {
         setProcessingMessage(`Reading ${i + 1} of ${files.length}: ${file.name}`);
         const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
         const extractedText = result.data.text || "";
-        const parsed = parseBetSlip(extractedText, file.name);
+        const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
         newRows.push({
           id: crypto.randomUUID(),
           ...parsed,
@@ -724,35 +737,43 @@ export default function Home() {
     }
   };
 
-  const exportAppState = () => {
-    const payload = { exportedAt: new Date().toISOString(), rows, uploadOwner, changelog };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "bet-slip-app-state.json";
-    link.click();
-    URL.revokeObjectURL(url);
-    showNotice("App state exported");
+const exportAppState = () => {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    rows,
+    uploadOwner,
+    uploadBookmaker,
+    changelog,
   };
 
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "bet-slip-app-state.json";
+  link.click();
+  URL.revokeObjectURL(url);
+  showNotice("App state exported");
+};
+
   const importAppState = async (fileList) => {
-    const file = fileList?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
-      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
-      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
-      showNotice("App state imported");
-    } catch (error) {
-      console.error(error);
-      showNotice("Could not import app state");
-    }
-  };
+  const file = fileList?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+    if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+    if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+    if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+    showNotice("App state imported");
+  } catch (error) {
+    console.error(error);
+    showNotice("Could not import app state");
+  }
+};
 
   const addChangelogEntry = () => {
     const entry = window.prompt("Add a changelog entry");
@@ -847,6 +868,22 @@ export default function Home() {
             <option value="Wife">Wife</option>
           </select>
         </label>
+
+
+  <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
+  Upload sportsbook
+  <select
+    value={uploadBookmaker}
+    onChange={(e) => setUploadBookmaker(e.target.value)}
+    style={{ ...selectStyle, width: 140, padding: "6px 8px" }}
+  >
+    {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
+      <option key={option} value={option}>
+        {option}
+      </option>
+    ))}
+  </select>
+</label>
 
         <label
           style={{
