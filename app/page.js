@@ -1,4 +1,12 @@
 "use client";
+import { parseBetSlip, enrichRow } from "./utils/parser";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+  detectOddsMissingReason,
+  extractBestOdds,
+  extractPayouts,
+} from "./utils/oddsHelpers";
 
 import {
   addDuplicateWarnings,
@@ -13,41 +21,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
 
-const emptyParsed = {
-  eventDate: "",
-  betDate: "",
-  bookmaker: "",
-  sportLeague: "",
-  selection: "",
-  betType: "",
-  fixtureEvent: "",
-  stake: "",
-  oddsUS: "",
-  oddsSource: "",
-  oddsMissingReason: "",
-  live: "",
-  bonusBet: "",
-  win: "",
-  marketDetail: "",
-  payout: "",
-  toWin: "",
-  rawPlacedDate: "",
-  status: "",
-  parseWarning: "",
-  duplicateWarning: "",
-  sourceFileName: "",
-  sourceText: "",
-  sourceImageUrl: "",
-  reviewNotes: "",
-  betId: "",
-  accountOwner: "Me",
-  betSourceTag: "",
-  impliedProbability: "",
-  confidenceFlag: "",
-  likelyParserIssue: "N",
-  reviewLater: "N",
-  duplicateIgnored: "N",
-};
+import { detectLeague } from "./utils/detectLeague";
+
+
 
 const BET_TYPE_OPTIONS = [
   "",
@@ -61,307 +37,9 @@ const BET_TYPE_OPTIONS = [
   "futures",
 ];
 
-const BET_SOURCE_OPTIONS = [
-  "",
-  "EV",
-  "Promo",
-  "Boost",
-  "Arb/Hedge",
-  "Fun",
-];
+const BET_SOURCE_OPTIONS = ["", "EV", "Promo", "Boost", "Arb/Hedge", "Fun"];
 
 const ACCOUNT_OPTIONS = ["Me", "Wife"];
-function cleanTextLine(value) {
-  return String(value || "")
-    .replace(/\bCASH\s*OUT\b/gi, "")
-    .replace(/\bASH\s*OUT\b/gi, "")
-    .replace(/\bASHOUT\b/gi, "")
-    .replace(/\bCASHOUT\b/gi, "")
-    .replace(/[®™«»©]/g, "")
-    .replace(/[()\[\]{}]/g, "")
-    .replace(/[|]/g, " ")
-    .replace(/[^\w\s@.+\-/:&'#,]/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function formatDateMMDDYYYY(dateObj) {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
-  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const d = String(dateObj.getDate()).padStart(2, "0");
-  const y = String(dateObj.getFullYear());
-  return `${m}/${d}/${y}`;
-}
-
-function normalizeDateString(raw) {
-  if (!raw) return "";
-  return raw.replace(/(\d)(AM|PM)$/i, "$1 $2").replace(/\s+/g, " ").trim();
-}
-
-function nextWeekdayFromDate(baseDate, weekdayIndex) {
-  const result = new Date(baseDate);
-  result.setHours(0, 0, 0, 0);
-  const current = result.getDay();
-  let diff = weekdayIndex - current;
-  if (diff < 0) diff += 7;
-  result.setDate(result.getDate() + diff);
-  return result;
-}
-
-function getMatch(text, regex) {
-  const match = text.match(regex);
-  return match ? (match[1] || "").trim() : "";
-}
-
-function parsePlacedDate(cleaned) {
-  const raw =
-    getMatch(cleaned, /([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4},\s+\d{1,2}:\d{2}:\d{2}(?:AM|PM))/i) ||
-    getMatch(cleaned, /([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4},\s+\d{1,2}:\d{2}(?:AM|PM))/i) ||
-    getMatch(cleaned, /([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})/i) ||
-    "";
-  if (!raw) return { raw: "", normalized: "", dateObj: null, dateOnly: "" };
-  const normalized = normalizeDateString(raw);
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) return { raw, normalized, dateObj: null, dateOnly: "" };
-  return { raw, normalized, dateObj: parsed, dateOnly: formatDateMMDDYYYY(parsed) };
-}
-
-function parseMonthDayEventDate(cleaned, placedDateObj) {
-  if (!placedDateObj) return "";
-  const monthDayMatch = cleaned.match(
-    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
-  );
-  if (!monthDayMatch) return "";
-  const parsed = new Date(`${monthDayMatch[1]} ${monthDayMatch[2]} ${placedDateObj.getFullYear()}`);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return formatDateMMDDYYYY(parsed);
-}
-
-function inferEventDate(cleaned, placedDateObj) {
-  if (!placedDateObj) return "";
-  const monthDay = parseMonthDayEventDate(cleaned, placedDateObj);
-  if (monthDay) return monthDay;
-  if (/\bToday\b/i.test(cleaned)) return formatDateMMDDYYYY(placedDateObj);
-  if (/\bTomorrow\b/i.test(cleaned)) {
-    const next = new Date(placedDateObj);
-    next.setDate(next.getDate() + 1);
-    return formatDateMMDDYYYY(next);
-  }
-  const weekdayMatch = cleaned.match(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i);
-  if (weekdayMatch) {
-    const map = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
-    const idx = map[weekdayMatch[1].toLowerCase()];
-    if (idx !== undefined) return formatDateMMDDYYYY(nextWeekdayFromDate(placedDateObj, idx));
-  }
-  return "";
-}
-
-function detectSportsbook(cleaned) {
-  const containsAny = (patterns) => patterns.some((pattern) => pattern.test(cleaned));
-  return containsAny([/draftkings/i, /braftkings/i, /dk\d+/i, /\bmybets\b/i, /\bdkne\b/i, /the crown is yours/i])
-    ? "DraftKings"
-    : /betmgm/i.test(cleaned)
-    ? "BetMGM"
-    : /caesars/i.test(cleaned)
-    ? "Caesars"
-    : /fanduel/i.test(cleaned)
-    ? "FanDuel"
-    : /fanatics/i.test(cleaned)
-    ? "Fanatics"
-    : /thescore|score bet/i.test(cleaned)
-    ? "theScore"
-    : /bet365/i.test(cleaned)
-    ? "bet365"
-    : /circa/i.test(cleaned)
-    ? "Circa"
-    : /kalshi/i.test(cleaned)
-    ? "Kalshi"
-    : "";
-}
-
-function singularizeStat(label) {
-  const lower = label.toLowerCase();
-  if (lower === "home runs") return "home run";
-  if (lower === "three pointers made") return "threes";
-  return label;
-}
-
-function detectLeague({ cleaned, marketDetail, fixtureEvent, selection, isParlay }) {
-  const text = [cleaned, marketDetail, fixtureEvent, selection].filter(Boolean).join(" ").toLowerCase();
-
-  const hasBaseball =
-    /mlb|baseball|world baseball|wbc|spring training|run line|home runs|rbis|hits|strikeouts|earned runs|puerto rico|chinese taipei|australia|red sox|cubs|braves|giants|reds|astros|yankees|dodgers|phillies|mets|padres|mariners/.test(
-      text
-    );
-  const hasNBA = /\bnba\b|points|rebounds|assists|three pointers|triple-double|double-double/.test(text);
-  const hasNCAAM =
-    /college basketball \(m\)|cbb \(m\)|ncaam|men'?s college basketball|college hulkey|southern university|alabama state|grambling|alabama a&m|army @ bucknell|eastern michigan|buffalo|clemson @ north carolina/.test(
-      text
-    );
-  const hasNCAAW =
-    /college basketball \(w\)|cbb \(w\)|ncaaw|women'?s college basketball|georgia tech @ california/.test(
-      text
-    );
-  const hasNHL = /\bnhl\b|hockey|goalscorer|shots on goal|puck line|mats zuccarello|evander kane/.test(text);
-  const hasTennis = /tennis|atp|wta|total games|games spread/.test(text);
-  const hasSoccer =
-    /soccer|mls|premier league|champions league|la liga|serie a|bundesliga|ligue 1|concacaf|orlando city|inter miami/.test(
-      text
-    );
-  const hasMMA = /\bufc\b|mma|ko\/tko\/dq|submission|decision|max holloway|oliveira/.test(text);
-
-  const hits = [hasBaseball, hasNBA, hasNCAAM, hasNCAAW, hasNHL, hasTennis, hasSoccer, hasMMA].filter(Boolean).length;
-
-  if (isParlay && hits > 1) return "Multi";
-  if (hasNCAAM) return "NCAAM";
-  if (hasNCAAW) return "NCAAW";
-  if (hasNBA) return "NBA";
-  if (hasNHL) return "NHL";
-  if (hasBaseball) return "Baseball";
-  if (hasMMA) return "MMA";
-  if (hasTennis) return "Tennis";
-  if (hasSoccer) return "Soccer";
-  return "";
-}
-
-function buildPlayerPropSelection(rawSelection, marketDetail) {
-  const cleanedSelection = cleanTextLine(rawSelection);
-  const cleanedMarket = cleanTextLine(marketDetail);
-  const overUnderMatch = cleanedSelection.match(/\b(Over|Under)\s*([\d.]+)/i);
-
-  if (overUnderMatch) {
-    const direction = overUnderMatch[1].toLowerCase();
-    const line = overUnderMatch[2];
-    const propPatterns = [
-      { regex: /^(.*)\s+Rebounds O\/U$/i, label: "rebounds" },
-      { regex: /^(.*)\s+Points O\/U$/i, label: "points" },
-      { regex: /^(.*)\s+Assists O\/U$/i, label: "assists" },
-      { regex: /^(.*)\s+Three Pointers Made(?: O\/U| Made O\/U)?$/i, label: "threes" },
-      { regex: /^(.*)\s+Points \+ Rebounds \+ Assists(?: O\/U)?$/i, label: "points + rebounds + assists" },
-      { regex: /^(.*)\s+Passing Yards$/i, label: "passing yards" },
-      { regex: /^(.*)\s+Rushing Yards$/i, label: "rushing yards" },
-      { regex: /^(.*)\s+Receiving Yards$/i, label: "receiving yards" },
-      { regex: /^(.*)\s+Shots on Goal$/i, label: "shots on goal" },
-      { regex: /^(.*)\s+Strikeouts$/i, label: "strikeouts" },
-      { regex: /^(.*)\s+Hits$/i, label: "hits" },
-      { regex: /^(.*)\s+RBIs$/i, label: "RBIs" },
-      { regex: /^(.*)\s+Earned Runs Allowed(?: O\/U)?$/i, label: "earned runs" },
-    ];
-
-    for (const item of propPatterns) {
-      const m = cleanedMarket.match(item.regex);
-      if (m) return `${m[1]} ${direction} ${line} ${item.label}`.trim();
-    }
-  }
-
-  if (/triple-double/i.test(cleanedMarket)) return `${cleanedSelection} triple-double`.trim();
-  if (/double-double/i.test(cleanedMarket)) return `${cleanedSelection} double-double`.trim();
-  if (/ko\/tko\/dq/i.test(cleanedMarket)) return `${cleanedSelection} by KO/TKO/DQ`.trim();
-  if (/submission/i.test(cleanedMarket)) return `${cleanedSelection} by submission`.trim();
-  if (/decision/i.test(cleanedMarket)) return `${cleanedSelection} by decision`.trim();
-
-  const plusMatch = cleanedSelection.match(/^(\d+)\+$/i);
-  if (plusMatch) {
-    const n = plusMatch[1];
-    const propPatterns = [
-      { regex: /^(.*)\s+Three Pointers Made(?: O\/U| Made O\/U)?$/i, label: "three pointers made" },
-      { regex: /^(.*)\s+Home Runs$/i, label: "home runs" },
-      { regex: /^(.*)\s+Hits$/i, label: "hits" },
-      { regex: /^(.*)\s+RBIs$/i, label: "RBIs" },
-      { regex: /^(.*)\s+Strikeouts$/i, label: "strikeouts" },
-      { regex: /^(.*)\s+Shots on Goal$/i, label: "shots on goal" },
-    ];
-
-    for (const item of propPatterns) {
-      const m = cleanedMarket.match(item.regex);
-      if (m) return `${m[1]} ${n}+ ${singularizeStat(item.label)}`.trim();
-    }
-  }
-
-  if (/Anytime Goalscorer/i.test(cleanedMarket) && cleanedSelection) return `${cleanedSelection} anytime goal`;
-  if (/First Goalscorer/i.test(cleanedMarket) && cleanedSelection) return `${cleanedSelection} first goal`;
-  if (/Last Goalscorer/i.test(cleanedMarket) && cleanedSelection) return `${cleanedSelection} last goal`;
-  if (/Anytime Touchdown Scorer/i.test(cleanedMarket) && cleanedSelection) return `${cleanedSelection} anytime touchdown`;
-  if (/First Touchdown Scorer/i.test(cleanedMarket) && cleanedSelection) return `${cleanedSelection} first touchdown`;
-
-  if (cleanedMarket && !cleanedSelection) return cleanedMarket;
-  return cleanedSelection;
-}
-function detectStatus(cleaned, receiptWindowText) {
-  const windowText = receiptWindowText || cleaned;
-  if (/\bCashed Out\b/i.test(windowText) || /\bPaid:\s*\$/i.test(windowText)) return "Cashed Out";
-  if (/Bet Settled/i.test(windowText)) {
-    if (/\bWon\b/i.test(windowText)) return "Won";
-    if (/\bLost\b/i.test(windowText)) return "Lost";
-  }
-  if (/\bOpen\b/i.test(windowText) && !/Bet Settled/i.test(windowText)) return "Open";
-  return "";
-}
-
-function detectLive(text) {
-  const livePatterns = [
-    /\bLive\b/i,
-    /\bLive Moneyline\b/i,
-    /\b1st Quarter\b/i,
-    /\b2nd Quarter\b/i,
-    /\b3rd Quarter\b/i,
-    /\b4th Quarter\b/i,
-    /\bQ1\b/i,
-    /\bQ2\b/i,
-    /\bQ3\b/i,
-    /\bQ4\b/i,
-    /\b1st Period\b/i,
-    /\b2nd Period\b/i,
-    /\b3rd Period\b/i,
-    /\b1st Inning\b/i,
-    /\b2nd Inning\b/i,
-    /\b3rd Inning\b/i,
-    /\b4th Inning\b/i,
-    /\b5th Inning\b/i,
-    /\b6th Inning\b/i,
-    /\b7th Inning\b/i,
-    /\b8th Inning\b/i,
-    /\b9th Inning\b/i,
-    /\bSet 1\b/i,
-    /\bSet 2\b/i,
-    /\bSet 3\b/i,
-    /\bQuarter\b/i,
-    /\bPeriod\b/i,
-    /\binnings?\b/i,
-  ];
-  return livePatterns.some((re) => re.test(text)) ? "Y" : "N";
-}
-
-function americanOddsFromStakeAndReturn(stakeValue, totalReturnValue) {
-  const stake = Number(String(stakeValue || "").replace(/,/g, ""));
-  const payout = Number(String(totalReturnValue || "").replace(/,/g, ""));
-  if (!Number.isFinite(stake) || !Number.isFinite(payout) || stake <= 0 || payout <= stake) return "";
-  const decimalOdds = payout / stake;
-  if (!Number.isFinite(decimalOdds) || decimalOdds <= 1) return "";
-  if (decimalOdds >= 2) return `+${Math.round((decimalOdds - 1) * 100)}`;
-  return `${Math.round(-100 / (decimalOdds - 1))}`;
-}
-
-function americanOddsFromStakeAndProfit(stakeValue, profitValue) {
-  const stake = Number(String(stakeValue || "").replace(/,/g, ""));
-  const profit = Number(String(profitValue || "").replace(/,/g, ""));
-  if (!Number.isFinite(stake) || !Number.isFinite(profit) || stake <= 0 || profit <= 0) return "";
-  if (profit >= stake) return `+${Math.round((profit / stake) * 100)}`;
-  return `${Math.round(-(100 / (profit / stake)))}`;
-}
-
-function detectOddsMissingReason({ oddsUS, stake, payout, toWin }) {
-  if (oddsUS) return "";
-  if (!stake) return "No stake shown";
-  if (!payout && !toWin) return "No payout or to-win shown";
-  if (!payout) return "No payout shown";
-  if (!toWin) return "No to-win shown";
-  return "No odds detected";
-}
-
-function extractBetId(text) {
-  return getMatch(text, /\b(DK\d{12,})\b/i) || getMatch(text, /\b(ID:?\s*[A-Z0-9\-]{8,})\b/i) || "";
-}
 
 function parseVisibleTeamMatchup(lines) {
   const teamLines = [];
@@ -387,35 +65,41 @@ function parseMyBetsCards(lines) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!/\b(Wager:|Wager Amount:)\s*\$?/i.test(line)) continue;
-    const windowStart = Math.max(0, i - 3);
-    const windowEnd = Math.min(lines.length, i + 6);
+
+    const windowStart = Math.max(0, i - 4);
+    const windowEnd = Math.min(lines.length, i + 8);
     const cardLines = lines.slice(windowStart, windowEnd);
     const cardText = cardLines.join("\n");
-    const selectionLine = cardLines.find((l) => /[+-]\d{2,5}.*(?:Open|Cashed Out|Won|Lost|Paid)?/i.test(l)) || "";
+
+    const selectionLine =
+      cardLines.find((l) => /[+-]\d{2,5}.*(?:Open|Cashed Out|Won|Lost|Paid)?/i.test(l)) || "";
     const marketLine =
       cardLines.find((l) =>
-        /\b(Moneyline|Live Moneyline|Points O\/U|Assists O\/U|Rebounds O\/U|Three Pointers Made(?: O\/U| Made O\/U)?|Total Games|Games Spread|Triple-Double|Double-Double|Earned Runs Allowed(?: O\/U)?)\b/i.test(
+        /\b(Moneyline|Live Moneyline|Points O\/U|Assists O\/U|Rebounds O\/U|Three Pointers(?: Made)?(?: O\/U| Made O\/U)?|Total Games|Games Spread|Triple-Double|Double-Double|Earned Runs(?: Allowed)?(?: O\/U)?|Anytime Goalscorer)\b/i.test(
           l
         )
       ) || "";
-    const wagerLine = cardLines.find((l) => /\bWager:\s*\$?/i.test(l)) || "";
-    const payoutLine = cardLines.find((l) => /\b(To Pay:|Paid:)\s*\$?/i.test(l)) || "";
-    const eventLine = cardLines.find((l) => /\b(Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i.test(l)) || "";
+    const wagerLine = cardLines.find((l) => /\bWager:\s*\$?|\bWager Amount:\s*\$?/i.test(l)) || "";
+    const payoutLine = cardLines.find((l) => /\b(To Pay:|Paid:|Total Payout:)\s*\$?/i.test(l)) || "";
+    const eventLine =
+      cardLines.find((l) => /\b(Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i.test(l)) || "";
     const visibleMatchup = parseVisibleTeamMatchup(cardLines);
 
+    const rawSelection = cleanTextLine(selectionLine)
+      .replace(/\b(?:Open|Cashed Out|Won|Lost)\b/gi, "")
+      .replace(/[+-]\d{2,5}.*$/i, "")
+      .trim();
+
+    const extractedPayouts = extractPayouts(cardText);
+
     cards.push({
-      rawSelection: cleanTextLine(selectionLine)
-        .replace(/\b(?:Open|Cashed Out|Won|Lost)\b/gi, "")
-        .replace(/[+-]\d{2,5}.*$/i, "")
-        .trim(),
+      rawSelection,
       marketDetail: cleanTextLine(marketLine),
       fixtureEvent: cleanTextLine(eventLine || visibleMatchup),
       stake:
-        getMatch(wagerLine, /Wager:\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
-        getMatch(cardText, /Wager:\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
-      payout:
-        getMatch(payoutLine, /(?:To Pay:|Paid:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
-        getMatch(cardText, /(?:To Pay:|Paid:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+        getMatch(wagerLine, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+        getMatch(cardText, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+      payout: extractedPayouts.payout,
       oddsUS:
         getMatch(selectionLine, /([+-]\d{2,5})/) ||
         getMatch(cardText, /([+-]\d{2,5})\s+(?:Open|Cashed Out|Won|Lost)\b/i) ||
@@ -431,13 +115,21 @@ function parseMyBetsCards(lines) {
         : "",
       live: detectLive(cardText),
       sourceText: cardText,
+      screenType: "my_bets_card",
     });
   }
 
   const unique = [];
   const seen = new Set();
   for (const card of cards) {
-    const key = [card.rawSelection, card.marketDetail, card.stake, card.payout, card.oddsUS, card.status].join("|");
+    const key = [
+      card.rawSelection,
+      card.marketDetail,
+      card.stake,
+      card.payout,
+      card.oddsUS,
+      card.status,
+    ].join("|");
     if (!seen.has(key)) {
       seen.add(key);
       unique.push(card);
@@ -446,315 +138,7 @@ function parseMyBetsCards(lines) {
   return unique;
 }
 
-function normalizeTeamNames(text) {
-  const replacements = [
-    [/\bLA Clippers\b/gi, "Los Angeles Clippers"],
-    [/\bLA Lakers\b/gi, "Los Angeles Lakers"],
-    [/\bGS Warriors\b|\bGolden St Warriors\b/gi, "Golden State Warriors"],
-    [/\bNY Knicks\b/gi, "New York Knicks"],
-    [/\bOKC Thunder\b/gi, "Oklahoma City Thunder"],
-    [/\bMavs\b/gi, "Mavericks"],
-    [/\bT-Wolves\b|\bTWolves\b/gi, "Timberwolves"],
-  ];
-  let result = String(text || "");
-  for (const [regex, replacement] of replacements) result = result.replace(regex, replacement);
-  return result.replace(/\s{2,}/g, " ").trim();
-}
 
-function enrichRow(row) {
-  const normalizedFixture = normalizeTeamNames(row.fixtureEvent);
-  const normalizedSelection = normalizeTeamNames(row.selection);
-  const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
-  const confidenceFlag = computeConfidence({
-    ...row,
-    fixtureEvent: normalizedFixture,
-    selection: normalizedSelection,
-    bookmaker: normalizedBookmaker,
-  });
-  const weirdFixture = /log in|sign up|add more|bet slip|cash out|deposit|withdraw|place bet|responsible gaming/i.test(
-    normalizedFixture || ""
-  );
-  const missingCore = !normalizedBookmaker || !normalizedSelection || !row.betType;
-  const likelyParserIssue = row.parseWarning || confidenceFlag === "Low" || weirdFixture || missingCore ? "Y" : "N";
-  return {
-    ...row,
-    bookmaker: normalizedBookmaker,
-    fixtureEvent: normalizedFixture,
-    selection: normalizedSelection,
-    impliedProbability: impliedProbabilityFromAmericanOdds(row.oddsUS),
-    confidenceFlag,
-    likelyParserIssue,
-  };
-}
-
-function parseBetSlip(text, sourceFileName = "") {
-  const cleaned = text.replace(/\r/g, "").trim();
-  const lines = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
-  const looksLikeActiveBetSlip = /\bBet Slip\b/i.test(cleaned) && /\bAdd More\b/i.test(cleaned);
-  const looksLikeReceipt =
-    /\bBet Placed\b/i.test(cleaned) || /\bBet Settled\b/i.test(cleaned) || /\bReceipt\b/i.test(cleaned) || /\bMy Bets\b/i.test(cleaned);
-
-  if (!looksLikeReceipt && looksLikeActiveBetSlip) {
-    return enrichRow({
-      ...emptyParsed,
-      parseWarning: "Unsupported screen type: active bet slip, not a receipt.",
-      sourceFileName,
-      sourceText: text,
-    });
-  }
-
-  const sportsbook = detectSportsbook(cleaned);
-  const betId = extractBetId(cleaned);
-  const receiptIndex = lines.findIndex((line) => /^Bet Placed$|^Bet Settled$/i.test(line));
-  const receiptBlock = receiptIndex !== -1 ? lines.slice(receiptIndex, Math.min(lines.length, receiptIndex + 20)) : lines;
-  const receiptText = receiptBlock.join("\n");
-
-  let parseWarning = "";
-  const wagerCount = (receiptText.match(/\bWager Amount:/gi) || []).length + (receiptText.match(/\bWager:/gi) || []).length;
-  if (wagerCount > 1) parseWarning = "Multiple bets detected in one screenshot. Results may reflect only one bet.";
-
-  const stopWords = [
-    /^Wager Amount:/i,
-    /^Wager:/i,
-    /^Total Payout:/i,
-    /^To Win:/i,
-    /^To Pay:/i,
-    /^Paid:/i,
-    /^Bet With Friends/i,
-    /^\+ Create Group/i,
-    /^Keep Picks/i,
-    /^in Bet Slip/i,
-    /^Receipt/i,
-    /^Cash\/Out/i,
-    /^Cash Out/i,
-  ];
-  const isStopLine = (line) => stopWords.some((re) => re.test(line));
-
-  let rawSelection = "";
-  let marketDetail = "";
-  let fixtureEvent = "";
-
-  if (receiptIndex !== -1) {
-    const after = lines.slice(receiptIndex + 1);
-    rawSelection = cleanTextLine(after[0] || "");
-    marketDetail = cleanTextLine(after[1] || "");
-    let eventStartIndex = 2;
-
-    if (/O\/$/i.test(marketDetail) && cleanTextLine(after[2] || "").toLowerCase() === "u") {
-      marketDetail = `${marketDetail} U`;
-      eventStartIndex = 3;
-    }
-
-    const eventLines = [];
-    for (let i = eventStartIndex; i < after.length; i++) {
-      const line = after[i];
-      if (!line || isStopLine(line)) break;
-      if (
-        /^Market settled based on/i.test(line) ||
-        /^In the event of/i.test(line) ||
-        /^If a match does not reach/i.test(line) ||
-        /^If the bet is cashed out/i.test(line) ||
-        /^Any bets placed after/i.test(line) ||
-        /^There will be no push/i.test(line)
-      ) {
-        break;
-      }
-      if (i === eventStartIndex && cleanTextLine(line).toLowerCase() === "u") continue;
-      eventLines.push(line);
-    }
-    fixtureEvent = eventLines.join(" ");
-  }
-
-  if (!rawSelection) {
-    rawSelection =
-      getMatch(
-        receiptText,
-        /Bet Placed\s+([\s\S]*?)\s+(?:Moneyline|Live Moneyline|Spread|Run Line|Puck Line|Games Spread|Total|Total Games|Anytime Goalscorer|First Goalscorer|Last Goalscorer|Anytime Touchdown Scorer|First Touchdown Scorer|Parlay|Same Game Parlay|SGP|KO\/TKO\/DQ|Submission|Decision)/i
-      ) ||
-      getMatch(
-        receiptText,
-        /Bet Settled\s+([\s\S]*?)\s+(?:Moneyline|Live Moneyline|Spread|Run Line|Puck Line|Games Spread|Total|Total Games|Anytime Goalscorer|First Goalscorer|Last Goalscorer|Anytime Touchdown Scorer|First Touchdown Scorer|Parlay|Same Game Parlay|SGP|KO\/TKO\/DQ|Submission|Decision)/i
-      ) ||
-      "";
-  }
-
-  rawSelection = cleanTextLine(rawSelection);
-
-  if (!marketDetail) {
-    const knownMarketPatterns = [
-      /Moneyline/i,
-      /Live Moneyline/i,
-      /Spread/i,
-      /Run Line/i,
-      /Puck Line/i,
-      /Games Spread/i,
-      /Total/i,
-      /Total Games/i,
-      /Anytime Goalscorer/i,
-      /First Goalscorer/i,
-      /Last Goalscorer/i,
-      /Anytime Touchdown Scorer/i,
-      /First Touchdown Scorer/i,
-      /Points O\/U/i,
-      /Rebounds O\/U/i,
-      /Assists O\/U/i,
-      /Three Pointers Made(?: O\/U| Made O\/U)?/i,
-      /Triple-Double/i,
-      /Double-Double/i,
-      /Points \+ Rebounds \+ Assists/i,
-      /Shots on Goal/i,
-      /Passing Yards/i,
-      /Rushing Yards/i,
-      /Receiving Yards/i,
-      /Strikeouts/i,
-      /Hits/i,
-      /RBIs/i,
-      /Home Runs/i,
-      /Earned Runs Allowed(?: O\/U)?/i,
-      /KO\/TKO\/DQ/i,
-      /Submission/i,
-      /Decision/i,
-      /^Parlay$/i,
-      /^Same Game Parlay$/i,
-      /^SGP$/i,
-      /^\d+\s*Pick Parlay$/i,
-    ];
-    const foundLine = receiptBlock.find((line) => knownMarketPatterns.some((re) => re.test(line)));
-    if (foundLine) marketDetail = cleanTextLine(foundLine);
-  }
-
-  if (!fixtureEvent) {
-    fixtureEvent =
-      getMatch(receiptText, /([A-Za-z0-9 .&'()\/-]+\s*@\s*[A-Za-z0-9 .&'()\/-]+)/i) ||
-      getMatch(receiptText, /([A-Za-z0-9 .&'()\/-]+\s+vs\s+[A-Za-z0-9 .&'()\/-]+)/i);
-  }
-
-  fixtureEvent = cleanTextLine(fixtureEvent).replace(/,\s*[A-Z]{2}\b/, "").replace(/\s{2,}/g, " ").trim();
-
-  const stake =
-    getMatch(receiptText, /Wager Amount:\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
-    getMatch(receiptText, /Wager:\s*\$?([\d,]+(?:\.\d{1,2})?)/i);
-  const payout =
-    getMatch(receiptText, /Total Payout:\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
-    getMatch(receiptText, /To Pay:\s*\$?([\d,]+(?:\.\d{1,2})?)/i);
-  const toWinDirect = getMatch(receiptText, /To Win:\s*\$?([\d,]+(?:\.\d{1,2})?)/i);
-
-  let oddsUS =
-    (rawSelection.match(/([+-]\d{2,5})\s*$/i) || [])[1] ||
-    getMatch(receiptText, /Odds:\s*([+-]\d{2,5})/i) ||
-    getMatch(receiptText, /(?:CASH\s*OUT|ASH\s*OUT)?\s*([+-]\d{2,5})\b/i) ||
-    "";
-
-  let oddsSource = oddsUS ? "OCR" : "";
-
-  if (!oddsUS && stake && payout) {
-    const calc = americanOddsFromStakeAndReturn(stake, payout);
-    if (calc) {
-      oddsUS = calc;
-      oddsSource = "Calculated";
-    }
-  }
-
-  if (!oddsUS && stake && toWinDirect) {
-    const calc = americanOddsFromStakeAndProfit(stake, toWinDirect);
-    if (calc) {
-      oddsUS = calc;
-      oddsSource = "Calculated";
-    }
-  }
-
-  const placedInfo = parsePlacedDate(cleaned);
-  const betDate = placedInfo.dateOnly;
-  const eventDate = inferEventDate(receiptText || cleaned, placedInfo.dateObj);
-  const bonusBet = /\bBonus Bet\b/i.test(receiptText) ? "Y" : "N";
-  const toWin =
-    toWinDirect ||
-    (() => {
-      const wager = parseFloat((stake || "").replace(/,/g, ""));
-      const pay = parseFloat((payout || "").replace(/,/g, ""));
-      if (!Number.isNaN(wager) && !Number.isNaN(pay) && pay >= wager) return (pay - wager).toFixed(2);
-      return "";
-    })();
-
-  const oddsMissingReason = detectOddsMissingReason({ oddsUS, stake, payout, toWin });
-  const status = detectStatus(cleaned, receiptText);
-  const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
-  const lowerMarketDetail = (marketDetail || "").toLowerCase();
-
-  const isParlay =
-    /^parlay$/i.test(marketDetail) ||
-    /^same game parlay$/i.test(marketDetail) ||
-    /^sgp$/i.test(marketDetail) ||
-    /^\d+\s*pick parlay$/i.test(marketDetail);
-
-  const isFuture =
-    /\bfutures?\b|\bmvp\b|\bdivision winner\b|\bconference winner\b|\bchampionship\b|\bto win the\b|\baward\b|\bseason wins\b/i.test(
-      receiptText
-    );
-
-  const isPlayerProp =
-    /\bplayer\b/i.test(receiptText) ||
-    /\bpoints?\b|\brebounds?\b|\bassists?\b|\bthree pointers made\b|\bmade o\/u\b|\bgoalscorer\b|\btouchdown scorer\b|\bshots on goal\b|\bpassing yards\b|\brushing yards\b|\breceiving yards\b|\bstrikeouts?\b|\bhits?\b|\brbis?\b|\bstolen bases?\b|\bhome runs?\b|\btriple-double\b|\bdouble-double\b|\bearned runs\b|\bko\/tko\/dq\b|\bsubmission\b|\bdecision\b/i.test(
-      lowerMarketDetail
-    );
-
-  const isMoneyline = !isPlayerProp && /\bmoneyline\b|\blive moneyline\b/i.test(lowerMarketDetail);
-  const isSpread = !isPlayerProp && /\bspread\b|\brun line\b|\bpuck line\b|\bgames spread\b/i.test(lowerMarketDetail);
-  const isTotal = !isPlayerProp && /\btotal\b|\btotal games\b/i.test(lowerMarketDetail);
-
-  let betType = "straight";
-  if (isParlay) betType = "parlay";
-  else if (isFuture) betType = "futures";
-  else if (isPlayerProp) betType = "player prop";
-  else if (isMoneyline) betType = "moneyline";
-  else if (isSpread) betType = "spread";
-  else if (isTotal) betType = "total";
-
-  let selection = isPlayerProp ? buildPlayerPropSelection(rawSelection, marketDetail) : rawSelection;
-  selection = cleanTextLine(selection).replace(/\s+[+-]\d{2,5}\s*$/i, "").trim();
-
-  const sportLeague = detectLeague({
-    cleaned: receiptText || cleaned,
-    marketDetail,
-    fixtureEvent,
-    selection,
-    isParlay,
-  });
-
-  if (isParlay) {
-    const parlayLabel = sportLeague === "Multi" ? "multi-sport parlay" : sportLeague ? `${sportLeague} parlay` : "Parlay";
-    selection = parlayLabel;
-    fixtureEvent = parlayLabel;
-  }
-
-  return enrichRow({
-    ...emptyParsed,
-    eventDate,
-    betDate,
-    bookmaker: sportsbook,
-    sportLeague,
-    selection,
-    betType,
-    fixtureEvent,
-    stake,
-    oddsUS,
-    oddsSource,
-    oddsMissingReason,
-    live: detectLive(cleaned),
-    bonusBet,
-    win,
-    marketDetail,
-    payout,
-    toWin,
-    rawPlacedDate: placedInfo.raw,
-    status,
-    parseWarning,
-    sourceFileName,
-    sourceText: text,
-    reviewNotes: "",
-    betId,
-  });
-}
 function escapeCsv(value) {
   const str = String(value ?? "");
   return `"${str.replace(/"/g, '""')}"`;
@@ -856,6 +240,36 @@ export default function Home() {
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
   const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
+
+  const [columnWidths, setColumnWidths] = useState({
+    select: 52,
+    edit: 84,
+    image: 72,
+    sourceFileName: 180,
+    accountOwner: 90,
+    bookmaker: 110,
+    betId: 150,
+    eventDate: 105,
+    betDate: 105,
+    sportLeague: 110,
+    selection: 220,
+    betType: 110,
+    betSourceTag: 110,
+    fixtureEvent: 220,
+    stake: 90,
+    oddsUS: 90,
+    oddsMissingReason: 150,
+    impliedProbability: 90,
+    confidenceFlag: 95,
+    likelyParserIssue: 80,
+    live: 70,
+    reviewLater: 75,
+    warnings: 220,
+    actions: 170,
+  });
+
+  const resizeStateRef = useRef(null);
   const [uploadOwner, setUploadOwner] = useState("Me");
   const [changelog, setChangelog] = useState([
     "v1: initial OCR parser and CSV export",
@@ -863,6 +277,7 @@ export default function Home() {
     "v3: upload owner toggle, editor above table, league and prop detection expanded, QA helpers",
     "v4: local storage, app state import/export, changelog, improved league and prop classification",
     "v5: odds missing reason, stronger college/soccer league fallbacks, image thumbnails, improved upload button and review table",
+    "v6: screen type classification, stronger odds/payout fallback, parlay summaries, improved DK hardening",
   ]);
   const noticeTimerRef = useRef(null);
 
@@ -881,11 +296,41 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("betSlipAppStateV1", JSON.stringify({ rows, uploadOwner, changelog }));
+      localStorage.setItem(
+        "betSlipAppStateV1",
+        JSON.stringify({ rows, uploadOwner, changelog })
+      );
     } catch (error) {
       console.error("Could not save local app state", error);
     }
   }, [rows, uploadOwner, changelog]);
+
+  const reviewColumns = [
+    { key: "select", label: "", sortable: false },
+    { key: "edit", label: "Select", sortable: false },
+    { key: "image", label: "Image", sortable: false },
+    { key: "sourceFileName", label: "Source File", sortable: true },
+    { key: "accountOwner", label: "Owner", sortable: true },
+    { key: "bookmaker", label: "Bookmaker", sortable: true },
+    { key: "betId", label: "Bet ID", sortable: true },
+    { key: "eventDate", label: "Event Date", sortable: true },
+    { key: "betDate", label: "Bet Date", sortable: true },
+    { key: "sportLeague", label: "Sport / League", sortable: true },
+    { key: "selection", label: "Selection", sortable: true },
+    { key: "betType", label: "Bet Type", sortable: true },
+    { key: "betSourceTag", label: "Source Tag", sortable: true },
+    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
+    { key: "stake", label: "Stake", sortable: true },
+    { key: "oddsUS", label: "Odds", sortable: true },
+    { key: "oddsMissingReason", label: "Odds Note", sortable: true },
+    { key: "impliedProbability", label: "Imp Prob", sortable: true },
+    { key: "confidenceFlag", label: "Confidence", sortable: true },
+    { key: "likelyParserIssue", label: "QA", sortable: true },
+    { key: "live", label: "Live", sortable: true },
+    { key: "reviewLater", label: "Review", sortable: true },
+    { key: "warnings", label: "Warnings", sortable: true },
+    { key: "actions", label: "Actions", sortable: false },
+  ];
 
   const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
 
@@ -898,7 +343,31 @@ export default function Home() {
   }, [rowsWithWarnings, showReviewLaterOnly, showLowConfidenceOnly, showLikelyParserIssuesOnly]);
 
   const selectedRow = rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
-  const selectedVisibleIds = visibleRows.map((row) => row.id);
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const sortedVisibleRows = useMemo(() => {
+    if (!sortConfig?.key) return visibleRows;
+    return [...visibleRows].sort((a, b) =>
+      compareValues(
+        getSortableValue(a, sortConfig.key),
+        getSortableValue(b, sortConfig.key),
+        sortConfig.direction
+      )
+    );
+  }, [visibleRows, sortConfig]);
+
+  const selectedVisibleIds = sortedVisibleRows.map((row) => row.id);
   const allVisibleSelected =
     selectedVisibleIds.length > 0 && selectedVisibleIds.every((id) => selectedIds.includes(id));
 
@@ -998,9 +467,7 @@ export default function Home() {
   };
 
   const handleRowFieldChange = (id, field, value) =>
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? enrichRow({ ...row, [field]: value }) : row))
-    );
+    setRows((prev) => prev.map((row) => (row.id === id ? enrichRow({ ...row, [field]: value }) : row)));
 
   const toggleSelected = (id) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -1017,6 +484,31 @@ export default function Home() {
     setRows((prev) => prev.filter((row) => row.id !== id));
     setSelectedIds((prev) => prev.filter((x) => x !== id));
     showNotice("Row deleted");
+  };
+
+  const setWinStatusForSelected = (winValue) => {
+    if (selectedIds.length === 0) {
+      showNotice(`No selected rows to mark ${winValue === "Y" ? "win" : "loss"}`);
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (!selectedIds.includes(row.id)) return row;
+        const next = {
+          ...row,
+          win: winValue,
+          status: winValue === "Y" ? "Won" : "Lost",
+        };
+        return enrichRow(next);
+      })
+    );
+
+    showNotice(
+      `${selectedIds.length} row${selectedIds.length === 1 ? "" : "s"} marked ${
+        winValue === "Y" ? "win" : "loss"
+      }`
+    );
   };
 
   const deleteSelected = () => {
@@ -1269,6 +761,39 @@ export default function Home() {
     showNotice("Changelog updated");
   };
 
+  const startResize = (event, columnKey) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    resizeStateRef.current = {
+      columnKey,
+      startX: event.clientX,
+      startWidth: columnWidths[columnKey] || 120,
+    };
+
+    const onMouseMove = (moveEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+
+      const delta = moveEvent.clientX - state.startX;
+      const nextWidth = Math.max(60, state.startWidth + delta);
+
+      setColumnWidths((prev) => ({
+        ...prev,
+        [state.columnKey]: nextWidth,
+      }));
+    };
+
+    const onMouseUp = () => {
+      resizeStateRef.current = null;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
   const editorFields = [
     ["eventDate", "EventDate"],
     ["betDate", "Bet Date"],
@@ -1302,7 +827,15 @@ export default function Home() {
     >
       <h1>Bet Slip Reader</h1>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          marginBottom: 8,
+          alignItems: "center",
+        }}
+      >
         <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
           Upload owner
           <select
@@ -1363,9 +896,27 @@ export default function Home() {
         <button onClick={addChangelogEntry} style={buttonStyle}>
           Add Changelog Note
         </button>
+
         <button onClick={deleteSelected} style={buttonStyle} disabled={selectedIds.length === 0}>
           Delete Selected
         </button>
+
+        <button
+          onClick={() => setWinStatusForSelected("Y")}
+          style={buttonStyle}
+          disabled={selectedIds.length === 0}
+        >
+          Mark Selected Win
+        </button>
+
+        <button
+          onClick={() => setWinStatusForSelected("N")}
+          style={buttonStyle}
+          disabled={selectedIds.length === 0}
+        >
+          Mark Selected Loss
+        </button>
+
         <button onClick={clearAll} style={buttonStyle} disabled={rowsWithWarnings.length === 0}>
           Clear All
         </button>
@@ -1608,175 +1159,222 @@ export default function Home() {
           <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
             <table
               style={{
-                borderCollapse: "collapse",
+                borderCollapse: "separate",
+                borderSpacing: 0,
                 width: "100%",
                 backgroundColor: "#fff",
                 tableLayout: "fixed",
               }}
             >
+              <colgroup>
+                {reviewColumns.map((col) => (
+                  <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
+                ))}
+              </colgroup>
+
               <thead>
                 <tr>
-                  {[
-                    <input key="all" type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />,
-                    "Select",
-                    "Image",
-                    "Source File",
-                    "Owner",
-                    "Bookmaker",
-                    "Bet ID",
-                    "EventDate",
-                    "Bet Date",
-                    "Sport / League",
-                    "Selection",
-                    "Bet Type",
-                    "Source Tag",
-                    "Fixture / Event",
-                    "Stake",
-                    "Odds",
-                    "Odds Note",
-                    "Imp Prob",
-                    "Confidence",
-                    "QA",
-                    "Live",
-                    "Review",
-                    "Warnings",
-                    "Actions",
-                  ].map((header, idx) => (
-                    <th
-                      key={typeof header === "string" ? header : `hdr-${idx}`}
-                      style={{
-                        border: "1px solid #ccc",
-                        padding: 8,
-                        background: "#f0f0f0",
-                        color: "#000",
-                        textAlign: "left",
-                        whiteSpace: "nowrap",
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 2,
-                      }}
-                    >
-                      {header}
-                    </th>
-                  ))}
+                  {reviewColumns.map((col, idx) => {
+                    const isSorted = sortConfig.key === col.key;
+                    const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
+
+                    return (
+                      <th
+                        key={col.key}
+                        style={{
+                          borderRight: "1px solid #d1d5db",
+                          borderBottom: "2px solid #9ca3af",
+                          padding: 0,
+                          background: "#e5e7eb",
+                          color: "#111827",
+                          textAlign: "left",
+                          whiteSpace: "nowrap",
+                          fontWeight: 700,
+                          position: "relative",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "relative",
+                            minHeight: 42,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (col.sortable) handleSort(col.key);
+                            }}
+                            style={{
+                              width: "100%",
+                              border: "none",
+                              background: "transparent",
+                              textAlign: "left",
+                              padding: "10px 18px 10px 12px",
+                              fontWeight: 700,
+                              color: "#111827",
+                              cursor: col.sortable ? "pointer" : "default",
+                            }}
+                          >
+                            {idx === 0 ? (
+                              <input
+                                type="checkbox"
+                                checked={allVisibleSelected}
+                                onChange={toggleSelectAllVisible}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              `${col.label}${sortArrow}`
+                            )}
+                          </button>
+
+                          <div
+                            onMouseDown={(e) => startResize(e, col.key)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              right: 0,
+                              width: 14,
+                              height: "100%",
+                              cursor: "col-resize",
+                              zIndex: 2,
+                              background: "transparent",
+                            }}
+                          />
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
 
               <tbody>
-                {visibleRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => setSelectedRowId(row.id)}
-                    style={{
-                      backgroundColor:
-                        row.id === selectedRowId ? "#f7fbff" : row.confidenceFlag === "Low" ? "#fffaf0" : "#fff",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <td style={cellStyle}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(row.id)}
-                        onChange={() => toggleSelected(row.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
+                {sortedVisibleRows.map((row, index) => {
+                  const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
 
-                    <td style={cellStyle}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedRowId(row.id);
-                        }}
-                        style={smallButtonStyle}
-                      >
-                        {row.id === selectedRowId ? "Selected" : "Edit"}
-                      </button>
-                    </td>
+                  const rowBg =
+                    row.id === selectedRowId
+                      ? "#f7fbff"
+                      : row.confidenceFlag === "Low"
+                      ? "#fffaf0"
+                      : zebra;
 
-                    <td style={cellStyle}>
-                      {row.sourceImageUrl ? (
-                        <a
-                          href={row.sourceImageUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={() => setSelectedRowId(row.id)}
+                      style={{
+                        backgroundColor: rowBg,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(row.id)}
+                          onChange={() => toggleSelected(row.id)}
                           onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRowId(row.id);
+                          }}
+                          style={smallButtonStyle}
                         >
-                          <img
-                            src={row.sourceImageUrl}
-                            alt={row.sourceFileName}
-                            style={{
-                              width: 44,
-                              height: 44,
-                              objectFit: "cover",
-                              borderRadius: 4,
-                              border: "1px solid #ccc",
+                          {row.id === selectedRowId ? "Selected" : "Edit"}
+                        </button>
+                      </td>
+
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        {row.sourceImageUrl ? (
+                          <a
+                            href={row.sourceImageUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <img
+                              src={row.sourceImageUrl}
+                              alt={row.sourceFileName}
+                              style={{
+                                width: 44,
+                                height: 44,
+                                objectFit: "cover",
+                                borderRadius: 4,
+                                border: "1px solid #ccc",
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          ""
+                        )}
+                      </td>
+
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.sourceFileName}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.accountOwner}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{getDisplayedBookmaker(row)}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betId}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.eventDate}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betDate}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.sportLeague}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.selection}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betType}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betSourceTag}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.fixtureEvent}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.stake}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.oddsUS}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.oddsMissingReason}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.impliedProbability}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.confidenceFlag}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        {row.likelyParserIssue === "Y" ? "Check" : ""}
+                      </td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.live}</td>
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.reviewLater}</td>
+
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        {row.parseWarning && <div>{row.parseWarning}</div>}
+                        {row.duplicateWarning && <div>{row.duplicateWarning}</div>}
+                      </td>
+
+                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWinStatusForRow(row.id, "Y", true);
                             }}
-                          />
-                        </a>
-                      ) : (
-                        ""
-                      )}
-                    </td>
-
-                    <td style={cellStyle}>{row.sourceFileName}</td>
-                    <td style={cellStyle}>{row.accountOwner}</td>
-                    <td style={cellStyle}>{getDisplayedBookmaker(row)}</td>
-                    <td style={cellStyle}>{row.betId}</td>
-                    <td style={cellStyle}>{row.eventDate}</td>
-                    <td style={cellStyle}>{row.betDate}</td>
-                    <td style={cellStyle}>{row.sportLeague}</td>
-                    <td style={cellStyle}>{row.selection}</td>
-                    <td style={cellStyle}>{row.betType}</td>
-                    <td style={cellStyle}>{row.betSourceTag}</td>
-                    <td style={cellStyle}>{row.fixtureEvent}</td>
-                    <td style={cellStyle}>{row.stake}</td>
-                    <td style={cellStyle}>{row.oddsUS}</td>
-                    <td style={cellStyle}>{row.oddsMissingReason}</td>
-                    <td style={cellStyle}>{row.impliedProbability}</td>
-                    <td style={cellStyle}>{row.confidenceFlag}</td>
-                    <td style={cellStyle}>{row.likelyParserIssue === "Y" ? "Check" : ""}</td>
-                    <td style={cellStyle}>{row.live}</td>
-                    <td style={cellStyle}>{row.reviewLater}</td>
-
-                    <td style={cellStyle}>
-                      {row.parseWarning && <div>{row.parseWarning}</div>}
-                      {row.duplicateWarning && <div>{row.duplicateWarning}</div>}
-                    </td>
-
-                    <td style={cellStyle}>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWinStatusForRow(row.id, "Y", true);
-                          }}
-                          style={smallButtonStyle}
-                        >
-                          Win
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWinStatusForRow(row.id, "N", true);
-                          }}
-                          style={smallButtonStyle}
-                        >
-                          Loss
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteRow(row.id);
-                          }}
-                          style={smallButtonStyle}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            style={smallButtonStyle}
+                          >
+                            Win
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWinStatusForRow(row.id, "N", true);
+                            }}
+                            style={smallButtonStyle}
+                          >
+                            Loss
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteRow(row.id);
+                            }}
+                            style={smallButtonStyle}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
