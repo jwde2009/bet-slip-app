@@ -4,7 +4,65 @@ import {
   americanOddsFromStakeAndReturn,
   detectOddsMissingReason,
 } from "./oddsHelpers";
+function getBetMgmTargetLines(cleaned) {
+  const lines = String(cleaned || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
+  const acceptedIndex = lines.findIndex((line) =>
+    /your bet has been accepted|good luck/i.test(line)
+  );
+
+  const typeIndex = lines.findIndex((line) =>
+    /straights?\s*\(\d+\)|single\s*\(\d+\)|parlay|same game parlay|sgp/i.test(line)
+  );
+
+  const startIndex =
+    typeIndex !== -1
+      ? typeIndex + 1
+      : acceptedIndex !== -1
+      ? acceptedIndex + 1
+      : 0;
+
+  let endIndex = lines.length;
+
+  for (let i = startIndex; i < lines.length; i++) {
+    if (
+      /^stake\b/i.test(lines[i]) ||
+      /^risk\b/i.test(lines[i]) ||
+      /^total payout\b/i.test(lines[i]) ||
+      /^returns?\b/i.test(lines[i]) ||
+      /^to win\b/i.test(lines[i]) ||
+      /^win\b/i.test(lines[i]) ||
+      /keep placed bets in bet slip|share my bet/i.test(lines[i])
+    ) {
+      endIndex = i;
+      break;
+    }
+  }
+
+  return lines.slice(startIndex, endIndex);
+}
+
+function isBetMgmNoiseLine(line) {
+  if (!line) return true;
+
+  return (
+    /your bet has been accepted|good luck|promotion used|odds boost|incl\. boosted winnings/i.test(line) ||
+    /^balance\s*:/i.test(line) ||
+    /^close$/i.test(line) ||
+    /^sports$/i.test(line) ||
+    /^search sports$/i.test(line) ||
+    /^resources\.?$/i.test(line) ||
+    /^current time:/i.test(line) ||
+    /^copyright/i.test(line) ||
+    /^all\s+[A-Za-z]/i.test(line) ||
+    /^today\s*-/i.test(line) ||
+    /^starting in\b/i.test(line) ||
+    /^login duration:/i.test(line)
+  );
+}
 export function parseBetMgmSlip({
   cleaned,
   originalText,
@@ -66,61 +124,30 @@ export function parseBetMgmSlip({
     }
   }
 
-  const acceptedIndex = lines.findIndex((line) =>
-    /your bet has been accepted|good luck/i.test(line)
-  );
-
-  const typeIndex = lines.findIndex((line) =>
-    /straights?\s*\(\d+\)|single\s*\(\d+\)|parlay|same game parlay|sgp/i.test(line)
-  );
-
-  const eventIndex = lines.findIndex((line) =>
-    /\s@\s|\sat\s|\svs\.?\s/i.test(line)
-  );
-
-  const ignoredLine = (line) =>
-    !line ||
-    /your bet has been accepted|good luck|promotion used|odds boost|cash out|edit bet|max payout|share/i.test(line) ||
-    /^stake\b/i.test(line) ||
-    /^risk\b/i.test(line) ||
-    /^total payout\b/i.test(line) ||
-    /^returns?\b/i.test(line) ||
-    /^to win\b/i.test(line) ||
-    /^win\b/i.test(line);
+   const targetLines = getBetMgmTargetLines(cleaned)
+    .map(cleanTextLine)
+    .filter((line) => line && !isBetMgmNoiseLine(line));
 
   let rawSelection = "";
   let marketDetail = "";
   let fixtureEvent = "";
 
-  if (eventIndex !== -1) {
-    fixtureEvent = cleanTextLine(lines[eventIndex]);
+  const eventLineIndex = targetLines.findIndex((line) =>
+    /\s@\s|\sat\s|\svs\.?\s/i.test(line) || /\s-\s/.test(line)
+  );
 
-    const candidates = lines
-      .slice(
-        Math.max(
-          0,
-          (typeIndex !== -1 ? typeIndex : acceptedIndex !== -1 ? acceptedIndex : 0) + 1
-        ),
-        eventIndex
-      )
-      .map(cleanTextLine)
-      .filter((line) => !ignoredLine(line));
-
-    if (candidates.length >= 1) rawSelection = candidates[0];
-    if (candidates.length >= 2) marketDetail = candidates[1];
-
-    if (!marketDetail && candidates.length >= 3) {
-      marketDetail = candidates[candidates.length - 1];
-    }
+  if (eventLineIndex !== -1) {
+    fixtureEvent = targetLines[eventLineIndex] || "";
+    rawSelection = targetLines[eventLineIndex - 2] || "";
+    marketDetail = targetLines[eventLineIndex - 1] || "";
   }
 
-  if (!rawSelection) {
-    const candidateLines = lines
-      .map(cleanTextLine)
-      .filter((line) => !ignoredLine(line));
+  if (!rawSelection && targetLines.length >= 1) {
+    rawSelection = targetLines[0];
+  }
 
-    rawSelection =
-      candidateLines.find((line) => !/\s@\s|\sat\s|\svs\.?\s/i.test(line)) || "";
+  if (!marketDetail && targetLines.length >= 2) {
+    marketDetail = targetLines[1];
   }
 
   if (!fixtureEvent) {
@@ -128,8 +155,11 @@ export function parseBetMgmSlip({
       getMatch(cleaned, /([A-Za-z0-9 .&'()\/-]+\s+at\s+[A-Za-z0-9 .&'()\/-]+)/i) ||
       getMatch(cleaned, /([A-Za-z0-9 .&'()\/-]+\s*@\s*[A-Za-z0-9 .&'()\/-]+)/i) ||
       getMatch(cleaned, /([A-Za-z0-9 .&'()\/-]+\s+vs\.?\s+[A-Za-z0-9 .&'()\/-]+)/i) ||
+      getMatch(cleaned, /([A-Za-z0-9 .&'()\/-]+\s-\s[A-Za-z0-9 .&'()\/-]+)/i) ||
       "";
   }
+
+  fixtureEvent = cleanTextLine(fixtureEvent);
 
   fixtureEvent = cleanTextLine(fixtureEvent);
 
@@ -169,7 +199,9 @@ export function parseBetMgmSlip({
     : rawSelection;
 
   selection = cleanTextLine(selection)
-    .replace(/\s+[+-]\d{2,5}\s*$/i, "")
+        .replace(/\s+[+-]?\d{1,5}\s*$/i, "")
+    .replace(/\s+[Hh][Oo]\s*$/i, "")
+    .replace(/\s+#\d+\s*$/i, "")
     .trim();
 
   const sportLeague = detectLeague({
