@@ -1,5 +1,5 @@
-import { parseBetMgm } from "./parseBetMgm";
-import { parseDraftKings } from "./parseDraftKings";
+import { parseBetMgmSlip } from "./parseBetMgm";
+import { parseDraftKingsLikeSlip } from "./parseDraftKings";
 
 const emptyParsed = {
   eventDate: "",

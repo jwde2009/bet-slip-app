@@ -133,13 +133,33 @@ export function parseBetMgmSlip({
   let fixtureEvent = "";
 
   const eventLineIndex = targetLines.findIndex((line) =>
-    /\s@\s|\sat\s|\svs\.?\s/i.test(line) || /\s-\s/.test(line)
-  );
-
+  /\s@\s|\sat\s|\svs\.?\s/i.test(line) ||
+  /\s-\s/.test(line) ||
+  /\bvs\b/i.test(line)
+);
   if (eventLineIndex !== -1) {
     fixtureEvent = targetLines[eventLineIndex] || "";
-    rawSelection = targetLines[eventLineIndex - 2] || "";
-    marketDetail = targetLines[eventLineIndex - 1] || "";
+    if (eventLineIndex !== -1) {
+  fixtureEvent = targetLines[eventLineIndex] || "";
+
+  const before = targetLines.slice(0, eventLineIndex);
+
+  // Filter out junk lines
+  const usable = before.filter((line) =>
+    line &&
+    !/^(today|starting in|player|close|all\s)/i.test(line)
+  );
+
+  if (usable.length >= 1) {
+    rawSelection = usable[usable.length - 2] || usable[usable.length - 1] || "";
+    marketDetail = usable[usable.length - 1] || "";
+  }
+
+  // fallback if only one usable line
+  if (!marketDetail && usable.length >= 1) {
+    marketDetail = usable[usable.length - 1];
+  }
+}
   }
 
   if (!rawSelection && targetLines.length >= 1) {
@@ -198,11 +218,12 @@ export function parseBetMgmSlip({
     ? buildPlayerPropSelection(rawSelection, marketDetail)
     : rawSelection;
 
-  selection = cleanTextLine(selection)
-        .replace(/\s+[+-]?\d{1,5}\s*$/i, "")
-    .replace(/\s+[Hh][Oo]\s*$/i, "")
-    .replace(/\s+#\d+\s*$/i, "")
-    .trim();
+ selection = cleanTextLine(selection)
+  .replace(/\s+[+-]?\d{1,5}\s*$/i, "")
+  .replace(/\s+[Hh][Oo]\s*$/i, "")
+  .replace(/\s+#\d+\s*$/i, "")
+  .replace(/\s+\d{3,4}\s*$/i, "")
+  .trim();
 
   const sportLeague = detectLeague({
     cleaned,
