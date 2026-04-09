@@ -4,9 +4,13 @@ function getMatch(text, regex) {
 }
 
 function isLikelyAmericanOddsToken(token) {
-  if (!token) return false;
-  if (!/^[+-]\d{2,5}$/.test(token)) return false;
-  return true;
+  const num = parseInt(token, 10);
+  if (isNaN(num)) return false;
+
+  return (
+    /^[+-]\d{3,5}$/.test(token) &&   // must be 3+ digits
+    Math.abs(num) >= 100            // eliminate -14, -13, etc
+  );
 }
 
 export function americanOddsFromStakeAndReturn(stakeValue, totalReturnValue) {

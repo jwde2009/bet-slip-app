@@ -146,9 +146,9 @@ function extractFanDuelFinancials(cleaned = "", rawSelection = "") {
   const text = normalizeMoneySpacing(cleaned);
 
   const stake =
-    toMoneyNumber(getMatch(text, /\bwager\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)) ||
-    toMoneyNumber(getMatch(text, /\bstake\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)) ||
-    toMoneyNumber(getMatch(text, /\brisk\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i));
+    toMoneyNumber(getMatch(text, /\bwager\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)) ||
+    toMoneyNumber(getMatch(text, /\bstake\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)) ||
+    toMoneyNumber(getMatch(text, /\brisk\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i));
 
   const toWin = toMoneyNumber(
     getMatch(text, /\bto win\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
@@ -223,6 +223,45 @@ function scoreSelectionLine(line = "") {
   return score;
 }
 
+function formatDateToMMDDYYYY(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function parseFanDuelBetDate(text = "") {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+
+  // Example: Mar 3, 2026, 3:17 PM
+  let m = s.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i
+  );
+  if (m) {
+    const d = new Date(m[0]);
+    const formatted = formatDateToMMDDYYYY(d);
+    if (formatted) return formatted;
+  }
+
+  // Example: 03/03/2026 or 3/3/2026
+  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (m) {
+    const mm = String(m[1]).padStart(2, "0");
+    const dd = String(m[2]).padStart(2, "0");
+    const yyyy = m[3];
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  // Example ISO-ish fallback: 2026-03-03
+  m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) {
+    return `${m[2]}/${m[3]}/${m[1]}`;
+  }
+
+  return "";
+}
+
 export function parseFanDuelSlip({
   cleaned,
   originalText,
@@ -240,14 +279,22 @@ export function parseFanDuelSlip({
 
   const text = normalizeMoneySpacing(cleaned);
   const lines = text.split("\n").map(cleanLine).filter(Boolean);
+  const dateLikeLines = lines.filter((line) =>
+  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b/i.test(line) ||
+  /\b\d{1,2}\/\d{1,2}\/\d{4}\b/.test(line) ||
+  /\b\d{4}-\d{2}-\d{2}\b/.test(line) ||
+  /\b(today|tomorrow)\b/i.test(line) ||
+  /\b\d{1,2}:\d{2}\s*(AM|PM)\b/i.test(line)
+);
 
+console.log("FANDUEL DATE-LIKE LINES:", dateLikeLines);
   const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
   const status = typeof detectStatus === "function" ? detectStatus(text) : "";
   const isLive = typeof detectLive === "function" ? detectLive(text) : false;
 
   const parsedBetDate =
-    typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
-  const betDate = toDateOnly(parsedBetDate);
+  typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
+const betDate = toDateOnly(parsedBetDate) || parseFanDuelBetDate(text);
 
 
   let fixture = "";
@@ -286,7 +333,7 @@ export function parseFanDuelSlip({
     }
   }
 
-  const { stake, toWin, payout, odds } = extractFanDuelFinancials(text);
+  const { stake, toWin, payout, odds } = extractFanDuelFinancials(text, selection);
 
   let impliedOdds = odds;
 
