@@ -301,7 +301,11 @@ export default function ReviewTable({
       );
     }
 
-    return <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row[colKey] || ""}</td>;
+return (
+  <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+    {row[colKey] || ""}
+  </td>
+);
   };
 
   return (

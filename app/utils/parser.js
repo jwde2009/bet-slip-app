@@ -1,6 +1,6 @@
 import { parseBetMgmSlip } from "./parseBetMgm";
 import { parseDraftKingsLikeSlip } from "./parseDraftKings";
-
+import { parseFanDuelSlip } from "./parseFanDuel";
 const emptyParsed = {
   eventDate: "",
   betDate: "",
@@ -190,7 +190,46 @@ function detectSportsbook(cleaned) {
     ? "Kalshi"
     : "";
 }
+function looksLikeFanDuelText(text = "") {
+  const t = String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/[|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 
+  let score = 0;
+
+  // Direct brand hit
+  if (/\bfanduel\b/.test(t)) score += 10;
+
+  // Strong FanDuel receipt-shape markers
+  if (/\bshare bet\b/.test(t)) score += 4;
+  if (/\bwager\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\bodds\s*[+-]\s*\d{2,4}\b/.test(t)) score += 3;
+  if (/\bto win\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\btotal payout\s*\$?\s*\d/.test(t)) score += 3;
+
+  // Common UI text seen in FanDuel screenshots
+  if (/\bbetslip close\b/.test(t)) score += 1;
+  if (/\bbalance\s*:/.test(t)) score += 1;
+  if (/\bremove all selections\b/.test(t)) score += 1;
+  if (/\baccept odds movements\b/.test(t)) score += 1;
+
+  // Event line shape: Team A @ Team B 8:10PM CT
+  if (/@/.test(t) && /\b\d{1,2}:\d{2}\s*(am|pm)\s*(ct|et|mt|pt)?\b/i.test(t)) {
+    score += 2;
+  }
+
+  // Require multiple FanDuel-style anchors so we do not over-route
+  const hasCoreReceiptShape =
+    /\bwager\s*\$?\s*\d/i.test(t) &&
+    /\bodds\s*[+-]\s*\d{2,4}\b/i.test(t) &&
+    /\bto win\s*\$?\s*\d/i.test(t);
+
+  if (hasCoreReceiptShape) score += 2;
+
+  return score >= 8;
+}
 function singularizeStat(label) {
   const lower = label.toLowerCase();
   if (lower === "home runs") return "home run";
@@ -471,12 +510,35 @@ const shared = {
 
 export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto") {
   const cleaned = normalizeOcrText(text);
+  const lowerCleaned = String(cleaned || "").toLowerCase();
 
   const detectedSportsbook = detectSportsbook(cleaned);
   const sportsbook =
     uploadBookmaker && uploadBookmaker !== "Auto"
       ? uploadBookmaker
       : detectedSportsbook;
+
+  const forcedBook = String(uploadBookmaker || "").trim().toLowerCase();
+
+  if (forcedBook === "fanduel") {
+    return parseFanDuelSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook: "FanDuel",
+      shared,
+    });
+  }
+
+  if (/\bfanduel\b/.test(lowerCleaned) || looksLikeFanDuelText(cleaned)) {
+    return parseFanDuelSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook: "FanDuel",
+      shared,
+    });
+  }
 
   if (sportsbook === "BetMGM") {
     return parseBetMgmSlip({
