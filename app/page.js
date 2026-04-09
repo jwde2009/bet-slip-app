@@ -10,15 +10,14 @@ import {
 
 import {
   addDuplicateWarnings,
-  compareValues,
   computeConfidence,
   getDisplayedBookmaker,
-  getSortableValue,
   impliedProbabilityFromAmericanOdds,
   makeDuplicateKey,
 } from "./utils/tableHelpers";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReviewTable from "./components/ReviewTable";
 import Tesseract from "tesseract.js";
 
 import { detectLeague } from "./utils/detectLeague";
@@ -252,11 +251,12 @@ export default function Home() {
   const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
+  const [tableMode, setTableMode] = useState("debug");
 
   const [columnWidths, setColumnWidths] = useState({
     select: 52,
     edit: 84,
-    image: 72,
+    image: 96,
     sourceFileName: 180,
     accountOwner: 90,
     bookmaker: 110,
@@ -275,6 +275,7 @@ export default function Home() {
     confidenceFlag: 95,
     likelyParserIssue: 80,
     live: 70,
+    bonusBet: 75,
     reviewLater: 75,
     warnings: 220,
     actions: 170,
@@ -318,33 +319,6 @@ export default function Home() {
   }
 }, [rows, uploadOwner, uploadBookmaker, changelog]);
 
-  const reviewColumns = [
-    { key: "select", label: "", sortable: false },
-    { key: "edit", label: "Select", sortable: false },
-    { key: "image", label: "Image", sortable: false },
-    { key: "sourceFileName", label: "Source File", sortable: true },
-    { key: "accountOwner", label: "Owner", sortable: true },
-    { key: "bookmaker", label: "Bookmaker", sortable: true },
-    { key: "betId", label: "Bet ID", sortable: true },
-    { key: "eventDate", label: "Event Date", sortable: true },
-    { key: "betDate", label: "Bet Date", sortable: true },
-    { key: "sportLeague", label: "Sport / League", sortable: true },
-    { key: "selection", label: "Selection", sortable: true },
-    { key: "betType", label: "Bet Type", sortable: true },
-    { key: "betSourceTag", label: "Source Tag", sortable: true },
-    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
-    { key: "stake", label: "Stake", sortable: true },
-    { key: "oddsUS", label: "Odds", sortable: true },
-    { key: "oddsMissingReason", label: "Odds Note", sortable: true },
-    { key: "impliedProbability", label: "Imp Prob", sortable: true },
-    { key: "confidenceFlag", label: "Confidence", sortable: true },
-    { key: "likelyParserIssue", label: "QA", sortable: true },
-    { key: "live", label: "Live", sortable: true },
-    { key: "reviewLater", label: "Review", sortable: true },
-    { key: "warnings", label: "Warnings", sortable: true },
-    { key: "actions", label: "Actions", sortable: false },
-  ];
-
   const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
 
   const visibleRows = useMemo(() => {
@@ -369,18 +343,7 @@ export default function Home() {
     });
   };
 
-  const sortedVisibleRows = useMemo(() => {
-    if (!sortConfig?.key) return visibleRows;
-    return [...visibleRows].sort((a, b) =>
-      compareValues(
-        getSortableValue(a, sortConfig.key),
-        getSortableValue(b, sortConfig.key),
-        sortConfig.direction
-      )
-    );
-  }, [visibleRows, sortConfig]);
-
-  const selectedVisibleIds = sortedVisibleRows.map((row) => row.id);
+  const selectedVisibleIds = visibleRows.map((row) => row.id);
   const allVisibleSelected =
     selectedVisibleIds.length > 0 && selectedVisibleIds.every((id) => selectedIds.includes(id));
 
@@ -396,7 +359,7 @@ export default function Home() {
     if (rowsWithWarnings.length === 0) setSelectedRowId("");
   }, [rowsWithWarnings, visibleRows, selectedRowId]);
 
-  const showNotice = (message) => {
+    const showNotice = (message) => {
     setSaveNotice(message);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => {
@@ -404,6 +367,7 @@ export default function Home() {
       noticeTimerRef.current = null;
     }, 2000);
   };
+
 
   const moveSelection = (delta) => {
     if (visibleRows.length === 0) return;
@@ -987,6 +951,18 @@ const exportAppState = () => {
           Show likely parser issues only
         </label>
 
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          Table view
+          <select
+            value={tableMode}
+            onChange={(e) => setTableMode(e.target.value)}
+            style={{ ...selectStyle, width: 150, padding: "6px 8px" }}
+          >
+            <option value="debug">Debug</option>
+            <option value="simplified">Simplified</option>
+          </select>
+        </label>
+
         <span>Keyboard: W = win, L = loss, ↑/↓ = move rows</span>
       </div>
 
@@ -1123,6 +1099,16 @@ const exportAppState = () => {
               <option value="N">N</option>
             </select>
 
+            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
+            <select
+              value={selectedRow.bonusBet || "N"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="N">N</option>
+              <option value="Y">Y</option>
+            </select>
+
             <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
             <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
 
@@ -1190,232 +1176,24 @@ const exportAppState = () => {
         </div>
       )}
 
-      {visibleRows.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <h3 style={{ color: "#000" }}>Review Queue</h3>
-          <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
-            <table
-              style={{
-                borderCollapse: "separate",
-                borderSpacing: 0,
-                width: "100%",
-                backgroundColor: "#fff",
-                tableLayout: "fixed",
-              }}
-            >
-              <colgroup>
-                {reviewColumns.map((col) => (
-                  <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
-                ))}
-              </colgroup>
-
-              <thead>
-                <tr>
-                  {reviewColumns.map((col, idx) => {
-                    const isSorted = sortConfig.key === col.key;
-                    const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
-
-                    return (
-                      <th
-                        key={col.key}
-                        style={{
-                          borderRight: "1px solid #d1d5db",
-                          borderBottom: "2px solid #9ca3af",
-                          padding: 0,
-                          background: "#e5e7eb",
-                          color: "#111827",
-                          textAlign: "left",
-                          whiteSpace: "nowrap",
-                          fontWeight: 700,
-                          position: "relative",
-                        }}
-                      >
-                        <div
-                          style={{
-                            position: "relative",
-                            minHeight: 42,
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (col.sortable) handleSort(col.key);
-                            }}
-                            style={{
-                              width: "100%",
-                              border: "none",
-                              background: "transparent",
-                              textAlign: "left",
-                              padding: "10px 18px 10px 12px",
-                              fontWeight: 700,
-                              color: "#111827",
-                              cursor: col.sortable ? "pointer" : "default",
-                            }}
-                          >
-                            {idx === 0 ? (
-                              <input
-                                type="checkbox"
-                                checked={allVisibleSelected}
-                                onChange={toggleSelectAllVisible}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : (
-                              `${col.label}${sortArrow}`
-                            )}
-                          </button>
-
-                          <div
-                            onMouseDown={(e) => startResize(e, col.key)}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              position: "absolute",
-                              top: 0,
-                              right: 0,
-                              width: 14,
-                              height: "100%",
-                              cursor: "col-resize",
-                              zIndex: 2,
-                              background: "transparent",
-                            }}
-                          />
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-
-              <tbody>
-                {sortedVisibleRows.map((row, index) => {
-                  const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
-
-                  const rowBg =
-                    row.id === selectedRowId
-                      ? "#f7fbff"
-                      : row.confidenceFlag === "Low"
-                      ? "#fffaf0"
-                      : zebra;
-
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => setSelectedRowId(row.id)}
-                      style={{
-                        backgroundColor: rowBg,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(row.id)}
-                          onChange={() => toggleSelected(row.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </td>
-
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedRowId(row.id);
-                          }}
-                          style={smallButtonStyle}
-                        >
-                          {row.id === selectedRowId ? "Selected" : "Edit"}
-                        </button>
-                      </td>
-
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        {row.sourceImageUrl ? (
-                          <a
-                            href={row.sourceImageUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <img
-                              src={row.sourceImageUrl}
-                              alt={row.sourceFileName}
-                              style={{
-                                width: 44,
-                                height: 44,
-                                objectFit: "cover",
-                                borderRadius: 4,
-                                border: "1px solid #ccc",
-                              }}
-                            />
-                          </a>
-                        ) : (
-                          ""
-                        )}
-                      </td>
-
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.sourceFileName}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.accountOwner}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{getDisplayedBookmaker(row)}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betId}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.eventDate}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betDate}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.sportLeague}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.selection}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betType}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.betSourceTag}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.fixtureEvent}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.stake}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.oddsUS}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.oddsMissingReason}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.impliedProbability}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.confidenceFlag}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        {row.likelyParserIssue === "Y" ? "Check" : ""}
-                      </td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.live}</td>
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>{row.reviewLater}</td>
-
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        {row.parseWarning && <div>{row.parseWarning}</div>}
-                        {row.duplicateWarning && <div>{row.duplicateWarning}</div>}
-                      </td>
-
-                      <td style={{ ...cellStyle, backgroundColor: rowBg }}>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setWinStatusForRow(row.id, "Y", true);
-                            }}
-                            style={smallButtonStyle}
-                          >
-                            Win
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setWinStatusForRow(row.id, "N", true);
-                            }}
-                            style={smallButtonStyle}
-                          >
-                            Loss
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteRow(row.id);
-                            }}
-                            style={smallButtonStyle}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                {visibleRows.length > 0 && (
+        <ReviewTable
+          rows={visibleRows}
+          selectedRowId={selectedRowId}
+          setSelectedRowId={setSelectedRowId}
+          selectedIds={selectedIds}
+          toggleSelected={toggleSelected}
+          toggleSelectAllVisible={toggleSelectAllVisible}
+          allVisibleSelected={allVisibleSelected}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+          columnWidths={columnWidths}
+          startResize={startResize}
+          setWinStatusForRow={setWinStatusForRow}
+          deleteRow={deleteRow}
+          handleRowFieldChange={handleRowFieldChange}
+          tableMode={tableMode}
+        />
       )}
     </div>
   );
