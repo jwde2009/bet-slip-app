@@ -51,6 +51,32 @@ const BET_SOURCE_OPTIONS = ["", "EV", "Promo", "Boost", "Arb/Hedge", "Fun"];
 
 const ACCOUNT_OPTIONS = ["Me", "Wife"];
 
+function getRowAttentionLevel(row) {
+  if (!row || row.reviewResolved === "Y") return "";
+
+  const parseWarningText = String(row.parseWarning || "").toLowerCase();
+  const duplicateWarningText = String(row.duplicateWarning || "").toLowerCase();
+  const confidence = String(row.confidenceFlag || "").toLowerCase();
+
+  if (duplicateWarningText.includes("duplicate")) return "duplicate";
+
+  if (
+    confidence === "low" ||
+    parseWarningText.includes("stake_missing") ||
+    parseWarningText.includes("payout_missing") ||
+    parseWarningText.includes("selection_missing") ||
+    parseWarningText.includes("fixture_missing") ||
+    parseWarningText.includes("no_bet_date_detected") ||
+    parseWarningText.includes("payout_estimated") ||
+    parseWarningText.includes("payout_mismatch")
+  ) {
+    return "warning";
+  }
+
+  return "";
+}
+
+
 function parseVisibleTeamMatchup(lines) {
   const teamLines = [];
   for (const line of lines) {
@@ -240,6 +266,7 @@ const cellStyle = {
   whiteSpace: "nowrap",
 };
 
+
 export default function Home() {
   const [rows, setRows] = useState([]);
   const [selectedRowId, setSelectedRowId] = useState("");
@@ -424,8 +451,9 @@ export default function Home() {
         const extractedText = result.data.text || "";
         const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
         newRows.push({
-          id: crypto.randomUUID(),
           ...parsed,
+          parserId: parsed.id || "",
+          id: crypto.randomUUID(),
           accountOwner: uploadOwner,
           sourceImageUrl: URL.createObjectURL(file),
         });
@@ -576,6 +604,7 @@ export default function Home() {
         "Duplicate Warning",
         "Review Notes",
         "OCR Text",
+        "Debug Trace",
       ];
 
       const csvRows = rowsToExport.map((row) => [
@@ -610,6 +639,7 @@ export default function Home() {
         escapeCsv(row.duplicateWarning),
         escapeCsv(row.reviewNotes),
         escapeCsv(row.sourceText),
+        escapeCsv(JSON.stringify(row.debugTrace || [])),
       ]);
 
       return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
@@ -991,11 +1021,34 @@ const exportAppState = () => {
         </div>
       </div>
 
+      
+
+                {visibleRows.length > 0 && (
+        <ReviewTable
+          rows={visibleRows}
+          selectedRowId={selectedRowId}
+          setSelectedRowId={setSelectedRowId}
+          selectedIds={selectedIds}
+          toggleSelected={toggleSelected}
+          toggleSelectAllVisible={toggleSelectAllVisible}
+          allVisibleSelected={allVisibleSelected}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+          columnWidths={columnWidths}
+          startResize={startResize}
+          setWinStatusForRow={setWinStatusForRow}
+          deleteRow={deleteRow}
+          handleRowFieldChange={handleRowFieldChange}
+          tableMode={tableMode}
+          getRowAttentionLevel={getRowAttentionLevel}
+        />
+      )}
+
       {selectedRow && (
         <div
           style={{
-            marginTop: 20,
-            marginBottom: 20,
+            marginTop: 24,
+            marginBottom: 0,
             padding: 16,
             border: "1px solid #ddd",
             borderRadius: 8,
@@ -1008,6 +1061,18 @@ const exportAppState = () => {
           {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
 
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewResolved",
+                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+          >
+            {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            </button>
             <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
               Mark Win + Next
             </button>
@@ -1160,6 +1225,13 @@ const exportAppState = () => {
               onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
               style={textAreaStyle}
             />
+            
+            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
+            <textarea
+              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
+              readOnly
+              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
+            />
 
             <label style={{ fontWeight: "bold" }}>OCR Text</label>
             <div>
@@ -1174,26 +1246,6 @@ const exportAppState = () => {
             </div>
           </div>
         </div>
-      )}
-
-                {visibleRows.length > 0 && (
-        <ReviewTable
-          rows={visibleRows}
-          selectedRowId={selectedRowId}
-          setSelectedRowId={setSelectedRowId}
-          selectedIds={selectedIds}
-          toggleSelected={toggleSelected}
-          toggleSelectAllVisible={toggleSelectAllVisible}
-          allVisibleSelected={allVisibleSelected}
-          sortConfig={sortConfig}
-          handleSort={handleSort}
-          columnWidths={columnWidths}
-          startResize={startResize}
-          setWinStatusForRow={setWinStatusForRow}
-          deleteRow={deleteRow}
-          handleRowFieldChange={handleRowFieldChange}
-          tableMode={tableMode}
-        />
       )}
     </div>
   );

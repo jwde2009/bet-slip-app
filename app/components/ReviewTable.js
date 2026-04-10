@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   compareValues,
   getDisplayedBookmaker,
@@ -50,6 +50,7 @@ export default function ReviewTable({
   deleteRow,
   handleRowFieldChange,
   tableMode = "debug",
+  getRowAttentionLevel,
 }) {
   const [hoverPreview, setHoverPreview] = useState({
     rowId: "",
@@ -57,17 +58,68 @@ export default function ReviewTable({
     alt: "",
     visible: false,
     locked: false,
+    x: 0,
+    y: 0,
+  });
+  const [previewZoomed, setPreviewZoomed] = useState(false);
+  const closeHoverPreview = () => {
+  setHoverPreview({
+    rowId: "",
+    src: "",
+    alt: "",
+    visible: false,
+    locked: false,
+    x: 0,
+    y: 0,
+  });
+  setPreviewZoomed(false);
+};
+    const [dragState, setDragState] = useState({
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
   });
 
-  const closeHoverPreview = () => {
-    setHoverPreview({
-      rowId: "",
-      src: "",
-      alt: "",
-      visible: false,
-      locked: false,
-    });
+    const getPreviewPositionFromElement = (element) => {
+    const rect = element.getBoundingClientRect();
+    const previewWidth = 760;
+    const gap = 16;
+
+    let x = rect.right + gap;
+    let y = rect.top;
+
+    if (x + previewWidth > window.innerWidth - 20) {
+      x = Math.max(20, rect.left - previewWidth - gap);
+    }
+
+    if (y < 20) y = 20;
+
+    return { x, y };
   };
+
+  useEffect(() => {
+    if (!dragState.dragging) return;
+
+    const handleMouseMove = (e) => {
+      setHoverPreview((prev) => ({
+        ...prev,
+        x: Math.max(20, e.clientX - dragState.offsetX),
+        y: Math.max(20, e.clientY - dragState.offsetY),
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDragState((prev) => ({ ...prev, dragging: false }));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [dragState]);
 
   const simplifiedColumns = [
     { key: "select", label: "", sortable: false },
@@ -170,55 +222,70 @@ export default function ReviewTable({
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, overflow: "visible" }}>
           {row.sourceImageUrl ? (
             <div
-              onClick={(e) => {
-                e.stopPropagation();
-                setHoverPreview((prev) => {
-                  const sameRow = prev.rowId === row.id;
+  onClick={(e) => {
+  e.stopPropagation();
+  setPreviewZoomed(false);
 
-                  if (sameRow && prev.locked) {
-                    return {
-                      rowId: "",
-                      src: "",
-                      alt: "",
-                      visible: false,
-                      locked: false,
-                    };
-                  }
+  const position = getPreviewPositionFromElement(e.currentTarget);
 
-                  return {
-                    rowId: row.id,
-                    src: row.sourceImageUrl,
-                    alt: row.sourceFileName,
-                    visible: true,
-                    locked: true,
-                  };
-                });
-              }}
-              onMouseEnter={() => {
-                setHoverPreview((prev) => {
-                  if (prev.locked) return prev;
-                  return {
-                    rowId: row.id,
-                    src: row.sourceImageUrl,
-                    alt: row.sourceFileName,
-                    visible: true,
-                    locked: false,
-                  };
-                });
-              }}
-              onMouseLeave={() => {
-                setHoverPreview((prev) =>
-                  prev.locked
-                    ? prev
-                    : {
-                        rowId: "",
-                        src: "",
-                        alt: "",
-                        visible: false,
-                        locked: false,
-                      }
-                );
-              }}
+    setHoverPreview((prev) => {
+      const sameRow = prev.rowId === row.id;
+
+      if (sameRow && prev.locked) {
+        return {
+          rowId: "",
+          src: "",
+          alt: "",
+          visible: false,
+          locked: false,
+          x: 0,
+          y: 0,
+        };
+      }
+
+      return {
+        rowId: row.id,
+        src: row.sourceImageUrl,
+        alt: row.sourceFileName,
+        visible: true,
+        locked: true,
+        x: position.x,
+        y: position.y,
+      };
+    });
+  }}
+  onMouseEnter={(e) => {
+  setPreviewZoomed(false);
+  const position = getPreviewPositionFromElement(e.currentTarget);
+
+    setHoverPreview((prev) => {
+      if (prev.locked) return prev;
+      return {
+        rowId: row.id,
+        src: row.sourceImageUrl,
+        alt: row.sourceFileName,
+        visible: true,
+        locked: false,
+        x: position.x,
+        y: position.y,
+      };
+    });
+  }}
+  onMouseLeave={() => {
+    setHoverPreview((prev) =>
+      prev.locked
+        ? prev
+        : {
+            rowId: "",
+            src: "",
+            alt: "",
+            visible: false,
+            locked: false,
+            x: 0,
+            y: 0,
+          }
+    );
+  }}
               style={{
                 display: "inline-block",
                 cursor: "pointer",
@@ -229,10 +296,10 @@ export default function ReviewTable({
                 src={row.sourceImageUrl}
                 alt={row.sourceFileName}
                 style={{
-                  width: 60,
-                  height: 60,
+                  width: 84,
+                  height: 84,
                   objectFit: "cover",
-                  borderRadius: 4,
+                  borderRadius: 6,
                   border: "1px solid #ccc",
                 }}
               />
@@ -311,11 +378,11 @@ return (
   return (
     <div style={{ marginTop: 20 }}>
       {hoverPreview.visible && hoverPreview.src && (
-        <div
+                <div
           style={{
             position: "fixed",
-            right: 20,
-            top: 80,
+            left: hoverPreview.x,
+            top: hoverPreview.y,
             zIndex: 9999,
             pointerEvents: hoverPreview.locked ? "auto" : "none",
             background: "#fff",
@@ -324,19 +391,33 @@ return (
             boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
             padding: 12,
             maxHeight: "85vh",
-            overflow: "auto",
+            overflowX: "auto",
+            overflowY: "auto",
             width: 760,
           }}
         >
           <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 10,
-              gap: 12,
-            }}
-          >
+  onMouseDown={(e) => {
+    if (!hoverPreview.locked) return;
+
+    e.preventDefault();
+
+    setDragState({
+      dragging: true,
+      offsetX: e.clientX - hoverPreview.x,
+      offsetY: e.clientY - hoverPreview.y,
+    });
+  }}
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 12,
+    cursor: hoverPreview.locked ? "move" : "default",
+    userSelect: "none",
+  }}
+>
             <div style={{ fontWeight: 700, color: "#111827" }}>
               {hoverPreview.locked ? "Locked Preview" : "Preview"}
             </div>
@@ -368,23 +449,34 @@ return (
               <strong>Odds:</strong> {previewRow?.oddsUS || "--"}
             </div>
             <div>
-              <strong>Confidence:</strong>{" "}
-              <span
-                style={{
-                  fontWeight: 700,
-                  color:
-                    previewRow?.confidenceFlag === "High"
-                      ? "#166534"
-                      : previewRow?.confidenceFlag === "Medium"
-                      ? "#b45309"
-                      : previewRow?.confidenceFlag === "Low"
-                      ? "#b91c1c"
-                      : "#374151",
-                }}
-              >
-                {previewRow?.confidenceFlag || "--"}
-              </span>
-            </div>
+  <strong>Confidence:</strong>{" "}
+  <span
+    style={{
+      fontWeight: 700,
+      color:
+        previewRow?.confidenceFlag === "High"
+          ? "#166534"
+          : previewRow?.confidenceFlag === "Medium"
+          ? "#b45309"
+          : previewRow?.confidenceFlag === "Low"
+          ? "#b91c1c"
+          : "#374151",
+    }}
+  >
+    {previewRow?.confidenceFlag || "--"}
+  </span>
+</div>
+
+<div>
+  <strong>Review Status:</strong>{" "}
+  {previewRow?.reviewResolved === "Y"
+    ? "Resolved"
+    : getRowAttentionLevel?.(previewRow) === "duplicate"
+    ? "Duplicate"
+    : getRowAttentionLevel?.(previewRow) === "warning"
+    ? "Needs Review"
+    : "--"}
+</div>
           </div>
 
           {hoverPreview.locked && previewRow && (
@@ -405,6 +497,20 @@ return (
 
               <button
                 type="button"
+                onClick={() =>
+                  handleRowFieldChange(
+                    previewRow.id,
+                    "reviewResolved",
+                    previewRow.reviewResolved === "Y" ? "N" : "Y"
+                  )
+                }
+                style={smallButtonStyle}
+              >
+                {previewRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setWinStatusForRow(previewRow.id, "Y", false)}
                 style={smallButtonStyle}
               >
@@ -418,7 +524,15 @@ return (
               >
                 Mark Loss
               </button>
-
+              
+              <button
+                type="button"
+                onClick={() => setPreviewZoomed((prev) => !prev)}
+                style={smallButtonStyle}
+              >
+               {previewZoomed ? "Normal Size" : "Zoom Image"}
+              </button>
+              
               <button
                 type="button"
                 onClick={() => {
@@ -433,16 +547,27 @@ return (
           )}
 
           <img
-            src={hoverPreview.src}
-            alt={hoverPreview.alt}
-            style={{
-              maxWidth: "100%",
-              maxHeight: "70vh",
-              objectFit: "contain",
-              display: "block",
-              borderRadius: 6,
-            }}
-          />
+  src={hoverPreview.src}
+  alt={hoverPreview.alt}
+  onClick={() => {
+    if (hoverPreview.locked) {
+      setPreviewZoomed((prev) => !prev);
+    }
+  }}
+  style={{
+    maxWidth: previewZoomed ? "none" : "100%",
+    width: previewZoomed ? "auto" : "100%",
+    maxHeight: previewZoomed ? "none" : "70vh",
+    objectFit: "contain",
+    display: "block",
+    borderRadius: 6,
+    cursor: hoverPreview.locked
+      ? previewZoomed
+        ? "zoom-out"
+        : "zoom-in"
+      : "default",
+  }}
+/>
         </div>
       )}
 
@@ -543,12 +668,18 @@ return (
           <tbody>
             {sortedRows.map((row, index) => {
               const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
+              const attentionLevel = getRowAttentionLevel ? getRowAttentionLevel(row) : "";
+              const isResolved = row.reviewResolved === "Y";
 
               const rowBg =
                 row.id === selectedRowId
                   ? "#f7fbff"
-                  : row.confidenceFlag === "Low"
-                  ? "#fffaf0"
+                  : isResolved
+                  ? "#f1f8e9"
+                  : attentionLevel === "duplicate"
+                  ? "#fdecea"
+                  : attentionLevel === "warning"
+                  ? "#fff8e1"
                   : zebra;
 
               return (
@@ -558,6 +689,17 @@ return (
                   style={{
                     backgroundColor: rowBg,
                     cursor: "pointer",
+                    outline:
+                      row.id === selectedRowId
+                        ? "2px solid #93c5fd"
+                        : isResolved
+                        ? "2px solid #a3d9a5"
+                        : attentionLevel === "duplicate"
+                        ? "2px solid #dc2626"
+                        : attentionLevel === "warning"
+                        ? "2px solid #f0b429"
+                        : "none",
+                    outlineOffset: "-2px",
                   }}
                 >
                   {reviewColumns.map((col) => (

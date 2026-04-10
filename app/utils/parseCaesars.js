@@ -121,6 +121,12 @@ function cleanCaesarsSelection(text = "") {
   s = s.replace(/^\d+\s+(?=[A-Z][a-z])/, "");
   s = s.replace(/[\[\(\{].*?[\]\)\}]/g, "");
   s = s.replace(/["'=~®©]/g, "");
+
+  // remove short trailing OCR junk like M12, A, Ml2, +1, -10
+  s = s.replace(/\s+[A-Za-z]{1,3}\d{1,3}\s*$/i, "");
+  s = s.replace(/\s+[A-Za-z]\s*$/i, "");
+  s = s.replace(/\s+[+-]\d{1,2}\s*$/i, "");
+
   s = s.replace(/\s{2,}/g, " ").trim();
 
   return s;
@@ -348,6 +354,13 @@ const { stake, toWin, payout, odds } = extractCaesarsFinancials(
   selectionCandidate
 );
 
+let finalToWin = toWin;
+let finalPayout = payout;
+let payoutEstimated = false;
+let payoutMismatch = false;
+let calculatedToWin = "";
+let calculatedPayout = "";
+
 if (debug) {
   debugTrace.push({
     stage: "financials",
@@ -355,6 +368,10 @@ if (debug) {
     toWin,
     payout,
     odds,
+    calculatedToWin,
+    calculatedPayout,
+    payoutEstimated,
+    payoutMismatch,
   });
 }
 
@@ -363,12 +380,58 @@ if (!impliedOdds && stake && toWin) {
   impliedOdds = americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
 }
 
+if (stake && impliedOdds) {
+  const stakeNum = Number(stake);
+  const oddsNum = Number(impliedOdds);
+
+  if (Number.isFinite(stakeNum) && Number.isFinite(oddsNum) && stakeNum > 0) {
+    if (oddsNum > 0) {
+      calculatedToWin = ((stakeNum * oddsNum) / 100).toFixed(2);
+    } else if (oddsNum < 0) {
+      calculatedToWin = ((stakeNum * 100) / Math.abs(oddsNum)).toFixed(2);
+    }
+
+    if (calculatedToWin) {
+      calculatedPayout = (stakeNum + Number(calculatedToWin)).toFixed(2);
+    }
+  }
+}
+
+if (!finalToWin && calculatedToWin) {
+  finalToWin = calculatedToWin;
+  payoutEstimated = true;
+}
+
+if (!finalPayout && calculatedPayout) {
+  finalPayout = calculatedPayout;
+  payoutEstimated = true;
+}
+
+if (payout && calculatedPayout) {
+  const payoutNum = Number(payout);
+  const calcNum = Number(calculatedPayout);
+
+  if (
+    Number.isFinite(payoutNum) &&
+    Number.isFinite(calcNum) &&
+    Math.abs(payoutNum - calcNum) > 0.15
+  ) {
+    payoutMismatch = true;
+  }
+}
+
 if (debug) {
   debugTrace.push({
     stage: "implied_odds",
     splitOdds: splitSelection.odds,
     extractedOdds: odds,
     finalImpliedOdds: impliedOdds,
+    calculatedToWin,
+    calculatedPayout,
+    finalToWin,
+    finalPayout,
+    payoutEstimated,
+    payoutMismatch,
   });
 }
 
@@ -384,18 +447,20 @@ const league = detectLeague(fixture, selection, marketDetail) || "";
 
   const warnings = [];
   if (!stake) warnings.push("stake_missing");
-  if (!payout && !toWin) warnings.push("payout_missing");
+  if (!finalPayout && !finalToWin) warnings.push("payout_missing");
   if (!selection) warnings.push("selection_missing");
   if (!fixture) warnings.push("fixture_missing");
   if (!betDate) warnings.push("no_bet_date_detected");
+  if (payoutEstimated) warnings.push("payout_estimated");
+  if (payoutMismatch) warnings.push("payout_mismatch");
 
   const oddsNote = impliedOdds
     ? ""
     : detectOddsMissingReason({
         oddsUS: impliedOdds,
         stake,
-        payout,
-        toWin,
+        payout: finalPayout,
+        toWin: finalToWin,
         screenType: "",
       });
 
@@ -432,6 +497,8 @@ const league = detectLeague(fixture, selection, marketDetail) || "";
   oddsUS: impliedOdds,
   oddsMissingReason: oddsNote,
   marketDetail,
+  payout: finalPayout,
+  toWin: finalToWin,
   live: liveFlag === "Y" ? "Y" : "N",
   bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
   reviewLater: warnings.length >= 2 ? "Y" : "N",

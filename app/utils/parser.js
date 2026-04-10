@@ -36,6 +36,7 @@ const emptyParsed = {
   likelyParserIssue: "N",
   reviewLater: "N",
   duplicateIgnored: "N",
+  reviewResolved: "N",
 };
 
 function cleanTextLine(value) {
