@@ -12,9 +12,45 @@ function toDateOnly(value) {
   return "";
 }
 
+function formatDateToMMDDYYYY(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function parseFanDuelBetDate(text = "") {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+
+  let m = s.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i
+  );
+  if (m) {
+    const d = new Date(m[0]);
+    const formatted = formatDateToMMDDYYYY(d);
+    if (formatted) return formatted;
+  }
+
+  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (m) {
+    const mm = String(m[1]).padStart(2, "0");
+    const dd = String(m[2]).padStart(2, "0");
+    const yyyy = m[3];
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) {
+    return `${m[2]}/${m[3]}/${m[1]}`;
+  }
+
+  return "";
+}
+
 function getMatch(text, regex, group = 1) {
-  const m = text.match(regex);
-  return m ? (m[group] || "").trim() : "";
+  const m = String(text || "").match(regex);
+  return m ? String(m[group] || "").trim() : "";
 }
 
 function toMoneyNumber(value) {
@@ -31,37 +67,42 @@ function cleanLine(line = "") {
 function normalizeMoneySpacing(text = "") {
   return String(text)
     .replace(/\$\s+/g, "$")
-    .replace(/\+\s+(\d{2,4})\b/g, "+$1")
-    .replace(/-\s+(\d{2,4})\b/g, "-$1");
+    .replace(/\+\s+(\d{2,5})\b/g, "+$1")
+    .replace(/-\s+(\d{2,5})\b/g, "-$1");
 }
 
 function cleanFanDuelSelection(text = "") {
   let s = cleanLine(text);
 
-  // Remove leading OCR symbols / garbage
   s = s.replace(/^[^A-Za-z0-9]+/, "");
-
-  // Normalize missing space before line values: "BYU2.5" or "Puerto Rico-2.5"
   s = s.replace(/([A-Za-z])([+-]\d)/g, "$1 $2");
 
-  // Remove common junk endings
+  // 🔥 NEW — remove embedded odds early
+  s = s.replace(/\s+[+-]\d{2,5}(?=\s|$)/g, "");
+
   s = s.replace(
-    /\s+(Ice\)|RELY|TEE\]|\[P5\)|\|P5\)|P5\)|Er\]|EXE|BEX\)|BED\)|REE\)|SKE\]|x1e¥4|R1e14|R1eY|RIetd|cele\)|cele\]|sacieiel|sacs\]|ret|Sette\)|Se¥id|BFE\)|FEY|EN\)|EL\)|B39|3\)|45|BEY\))\s*$/i,
+    /\s+(Ice\)|RELY|TEE\]|\[P5\)|\|P5\)|P5\)|Er\]|EXE|BEX\)|BED\)|REE\)|SKE\]|x1e¥4|R1e14|R1eY|RIetd|cele\)|cele\]|sacieiel|sacs\]|ret|Sette\)|Se¥id|BFE\)|FEY|EN\)|EL\)|B39|BEY\)|ELE\]|Ee\]|SELEY|RETT|xieTeY)\s*$/i,
     ""
   );
 
-  // Remove leftover trailing signed odds if they survived
-  s = s.replace(/\s[+-]\d{2,4}\)?\s*$/i, "");
-
-  // Remove leftover trailing unsigned 3-digit odds-like fragments
-  s = s.replace(/\s\d{3}\)?\s*$/i, "");
-
-  // Normalize "Player - Over 3.5" -> "Player Over 3.5"
+  s = s.replace(/\s[+-]\d{2,5}\)?\s*$/i, "");
+  s = s.replace(/\s["“”']?\d{3}\)?\s*$/i, "");
   s = s.replace(/\s+-\s+(Over|Under)\b/i, " $1");
+  s = s.replace(/^\d+\s+(?=[A-Z][a-z])/, "");
 
-  // Remove leading stray number before player name: "85 Deni Avdija..."
-  s = s.replace(/^\d+\s+(?=[A-Z][a-z])/,"");
+  // Remove trailing odds again (safe redundancy)
+  s = s.replace(/\s+[+-]\d{2,5}\s*$/i, "");
 
+  // Remove bracket junk
+  s = s.replace(/[\[\(\{].*?[\]\)\}]/g, "");
+
+  // Remove common OCR garbage tokens
+  s = s.replace(/\b(Ele|RELI|SELEY|BFE|E24|ED|EE|GD|TF)\b/gi, "");
+
+  // Remove stray symbols / quotes
+  s = s.replace(/["'=~®©]/g, "");
+
+  // Final cleanup
   s = s.replace(/\s+/g, " ").trim();
 
   return s;
@@ -83,8 +124,7 @@ function buildFallbackRowId({
 function splitTrailingOdds(text = "") {
   const s = cleanLine(text);
 
-  // Normal signed odds at the end
-  let m = s.match(/^(.*?)(\s[+-]\d{2,4})\s*$/);
+  let m = s.match(/^(.*?)(\s[+-]\d{3,5})\)?\s*$/);
   if (m) {
     return {
       text: m[1].trim(),
@@ -92,22 +132,21 @@ function splitTrailingOdds(text = "") {
     };
   }
 
-  // OCR sometimes drops the sign: e.g. "Under 156.5 114"
-  // Treat a bare 3-digit ending as negative odds only when the main text
-  // already looks like a bet selection.
-  m = s.match(/^(.*?)(\s\d{3})\s*$/);
+  m = s.match(/^(.*?)(\s["“”']?(\d{3}))\)?\s*$/);
   if (m) {
     const main = m[1].trim();
-    const trailing = m[2].trim();
+    const trailingDigits = m[3].trim();
 
     if (
       /\b(over|under)\b/i.test(main) ||
       /[+-]\d+(\.\d+)?/.test(main) ||
-      /\b(points|rebounds|assists|threes|three-pointers|hits|rbis|home runs|shots|shots on goal|strikeouts|touchdowns|goals)\b/i.test(main)
+      /\b(points|rebounds|assists|threes|three-pointers|hits|rbis|home runs|shots|shots on goal|strikeouts|touchdowns|goals)\b/i.test(
+        main
+      )
     ) {
       return {
         text: main,
-        odds: `-${trailing}`,
+        odds: `-${trailingDigits}`,
       };
     }
   }
@@ -121,17 +160,17 @@ function isLikelyEventLine(line = "") {
     /\b(wager|odds|to win|total payout|share bet|cash out|same game parlay|sgp)\b/i.test(
       line
     )
-  )
+  ) {
     return false;
+  }
   if (/\$/.test(line)) return false;
 
-  const hasMatchupSeparator =
+  return (
     /\s@\s/.test(line) ||
     /\bvs\.?\b/i.test(line) ||
     /\bv\b/.test(line) ||
-    /\bat\b/i.test(line);
-
-  return hasMatchupSeparator;
+    /\bat\b/i.test(line)
+  );
 }
 
 function cleanEventLine(line = "") {
@@ -167,7 +206,7 @@ function extractFanDuelFinancials(cleaned = "", rawSelection = "") {
 
   const odds =
     (bestOdds && typeof bestOdds === "object" ? bestOdds.oddsUS : bestOdds) ||
-    getMatch(text, /\bodds\s*([+-]\d{2,5})\b/i);
+    getMatch(text, /\bodds\s*:?\s*([+-]\d{3,5})\b/i);
 
   return { stake, toWin, payout, odds };
 }
@@ -176,11 +215,11 @@ function inferBetType(selection = "", marketDetail = "") {
   const s = `${selection} ${marketDetail}`.toLowerCase();
 
   const hasOverUnder = /\b(over|under)\b/.test(s);
-  const hasNamedSelection = /\b[a-z][a-z'.-]+\s+[a-z][a-z'.-]+\b/i.test(selection);
   const hasLine = /[+-]\d+(\.\d+)?/.test(selection);
+  const hasNamedSelection = /\b[a-z][a-z'.-]+\s+[a-z][a-z'.-]+\b/i.test(selection);
 
   const hasPropWords =
-    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals)\b/.test(
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|by ko\/tko|by points)\b/.test(
       s
     ) ||
     /^\d+\+\s+(made threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals)\b/i.test(
@@ -207,61 +246,37 @@ function scoreSelectionLine(line = "") {
 
   if (/\b(over|under)\b/.test(l)) score += 4;
   if (
-    /\b(points|rebounds|assists|threes|hits|rbis|home runs|shots|shots on goal|strikeouts|touchdowns|goals)\b/.test(
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|by ko\/tko|by points)\b/.test(
       l
     )
-  )
-    score += 4;
-
+  ) {
+    score += 5;
+  }
   if (/[+-]\d+(\.\d+)?/.test(line)) score += 3;
 
   if (/\$/.test(line)) score -= 5;
-  if (/\b(wager|odds|to win|total payout|share bet|cash out)\b/.test(l))
-    score -= 5;
+  if (/\b(wager|odds|to win|total payout|share bet|cash out)\b/.test(l)) score -= 5;
   if (isLikelyEventLine(line)) score -= 4;
 
   return score;
 }
+function parseDateFromScreenshotFileName(sourceFileName = "") {
+  const s = String(sourceFileName || "");
 
-function formatDateToMMDDYYYY(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const yyyy = String(date.getFullYear());
-  return `${mm}/${dd}/${yyyy}`;
-}
-
-function parseFanDuelBetDate(text = "") {
-  const s = String(text || "").replace(/\s+/g, " ").trim();
-
-  // Example: Mar 3, 2026, 3:17 PM
-  let m = s.match(
-    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i
-  );
+  // Matches: Screenshot_20260303-170021.png
+  let m = s.match(/Screenshot_(\d{4})(\d{2})(\d{2})-\d{6}/i);
   if (m) {
-    const d = new Date(m[0]);
-    const formatted = formatDateToMMDDYYYY(d);
-    if (formatted) return formatted;
+    return `${m[2]}/${m[3]}/${m[1]}`;
   }
 
-  // Example: 03/03/2026 or 3/3/2026
-  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
-  if (m) {
-    const mm = String(m[1]).padStart(2, "0");
-    const dd = String(m[2]).padStart(2, "0");
-    const yyyy = m[3];
-    return `${mm}/${dd}/${yyyy}`;
-  }
-
-  // Example ISO-ish fallback: 2026-03-03
-  m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  // Slightly looser fallback
+  m = s.match(/(\d{4})(\d{2})(\d{2})[-_]\d{6}/);
   if (m) {
     return `${m[2]}/${m[3]}/${m[1]}`;
   }
 
   return "";
 }
-
 export function parseFanDuelSlip({
   cleaned,
   originalText,
@@ -279,23 +294,18 @@ export function parseFanDuelSlip({
 
   const text = normalizeMoneySpacing(cleaned);
   const lines = text.split("\n").map(cleanLine).filter(Boolean);
-  const dateLikeLines = lines.filter((line) =>
-  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b/i.test(line) ||
-  /\b\d{1,2}\/\d{1,2}\/\d{4}\b/.test(line) ||
-  /\b\d{4}-\d{2}-\d{2}\b/.test(line) ||
-  /\b(today|tomorrow)\b/i.test(line) ||
-  /\b\d{1,2}:\d{2}\s*(AM|PM)\b/i.test(line)
-);
 
-console.log("FANDUEL DATE-LIKE LINES:", dateLikeLines);
   const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
   const status = typeof detectStatus === "function" ? detectStatus(text) : "";
   const isLive = typeof detectLive === "function" ? detectLive(text) : false;
 
-  const parsedBetDate =
+const parsedBetDate =
   typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
-const betDate = toDateOnly(parsedBetDate) || parseFanDuelBetDate(text);
 
+const betDate =
+  toDateOnly(parsedBetDate) ||
+  parseFanDuelBetDate(text) ||
+  parseDateFromScreenshotFileName(sourceFileName);
 
   let fixture = "";
   for (const line of lines) {
@@ -305,22 +315,22 @@ const betDate = toDateOnly(parsedBetDate) || parseFanDuelBetDate(text);
     }
   }
 
-  let selection = "";
+  let selectionCandidate = "";
   let bestScore = -100;
 
   for (const line of lines) {
     const score = scoreSelectionLine(line);
     if (score > bestScore) {
       bestScore = score;
-      selection = line;
+      selectionCandidate = line;
     }
   }
 
   if (bestScore < 2) {
-    selection = "";
+    selectionCandidate = "";
   }
 
-  if (!selection) {
+  if (!selectionCandidate) {
     const anchorIndex = lines.findIndex((line) =>
       /\b(wager|odds|to win|total payout)\b/i.test(line)
     );
@@ -328,23 +338,25 @@ const betDate = toDateOnly(parsedBetDate) || parseFanDuelBetDate(text);
     if (anchorIndex > 0) {
       const candidate = cleanLine(lines[anchorIndex - 1]);
       if (candidate && !isLikelyEventLine(candidate) && !/\$/.test(candidate)) {
-        selection = candidate;
+        selectionCandidate = candidate;
       }
     }
   }
 
-  const { stake, toWin, payout, odds } = extractFanDuelFinancials(text, selection);
+  const splitSelection = splitTrailingOdds(selectionCandidate);
+  let selection = cleanFanDuelSelection(splitSelection.text || selectionCandidate);
 
-  let impliedOdds = odds;
+  const { stake, toWin, payout, odds } = extractFanDuelFinancials(
+    text,
+    selectionCandidate
+  );
 
-  const splitSelection = splitTrailingOdds(selection);
-  selection = splitSelection.text;
+  let impliedOdds = splitSelection.odds || odds;
 
-  if (!impliedOdds && splitSelection.odds) {
-    impliedOdds = splitSelection.odds;
+  if (!impliedOdds && stake && toWin) {
+    impliedOdds =
+      americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
   }
-
-  selection = cleanFanDuelSelection(selection);
 
   const marketDetail = selection;
   const betType = inferBetType(selection, marketDetail);
@@ -357,20 +369,15 @@ const betDate = toDateOnly(parsedBetDate) || parseFanDuelBetDate(text);
   if (!fixture) warnings.push("fixture_missing");
   if (!betDate) warnings.push("no_bet_date_detected");
 
-  if (!impliedOdds && stake && toWin) {
-    impliedOdds =
-      americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
-  }
-
   const oddsNote = impliedOdds
-  ? ""
-  : detectOddsMissingReason({
-      oddsUS: impliedOdds,
-      stake,
-      payout,
-      toWin,
-      screenType: "",
-    });
+    ? ""
+    : detectOddsMissingReason({
+        oddsUS: impliedOdds,
+        stake,
+        payout,
+        toWin,
+        screenType: "",
+      });
 
   const fallbackId = buildFallbackRowId({
     sourceFileName,

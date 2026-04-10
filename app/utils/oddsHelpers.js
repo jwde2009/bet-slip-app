@@ -4,13 +4,13 @@ function getMatch(text, regex) {
 }
 
 function isLikelyAmericanOddsToken(token) {
-  const num = parseInt(token, 10);
-  if (isNaN(num)) return false;
+  const s = String(token || "").trim();
+  if (!/^[+-]\d{3,5}$/.test(s)) return false;
 
-  return (
-    /^[+-]\d{3,5}$/.test(token) &&   // must be 3+ digits
-    Math.abs(num) >= 100            // eliminate -14, -13, etc
-  );
+  const num = Number(s);
+  if (!Number.isFinite(num)) return false;
+
+  return Math.abs(num) >= 100;
 }
 
 export function americanOddsFromStakeAndReturn(stakeValue, totalReturnValue) {
@@ -87,25 +87,35 @@ export function extractPayouts(text) {
 }
 
 export function extractBestOdds({ receiptText, rawSelection, payout, stake }) {
-  const inlineSelectionOdds = (rawSelection || "").match(/([+-]\d{2,5})\s*$/i)?.[1] || "";
+  const selectionText = String(rawSelection || "").trim();
+  const text = String(receiptText || "");
+
+  const inlineSelectionOdds =
+    selectionText.match(/([+-]\d{3,5})\)?\s*$/i)?.[1] || "";
   if (inlineSelectionOdds && isLikelyAmericanOddsToken(inlineSelectionOdds)) {
     return { oddsUS: inlineSelectionOdds, oddsSource: "OCR" };
   }
 
-  const oddsLabelMatch = getMatch(receiptText, /Odds:\s*([+-]\d{2,5})/i);
+  const oddsLabelMatch = getMatch(text, /Odds:\s*([+-]\d{3,5})/i);
   if (oddsLabelMatch && isLikelyAmericanOddsToken(oddsLabelMatch)) {
     return { oddsUS: oddsLabelMatch, oddsSource: "OCR" };
   }
 
-  const allCandidates = extractOddsCandidates(receiptText);
+  const allCandidates = extractOddsCandidates(text);
 
   const filtered = allCandidates.filter((c) => {
     const line = c.line || "";
     const token = c.token || "";
 
     if (!isLikelyAmericanOddsToken(token)) return false;
+    // Reject unrealistic odds
+    const numeric = parseInt(token, 10);
+    if (Math.abs(numeric) < 100) return false;   // kills -13, -14, etc
+    if (Math.abs(numeric) > 2000) return false;  // optional safety cap
     if (/[+-]\d+\.\d/.test(token)) return false;
     if (/Wager Amount|Wager:|Total Payout|To Pay|Paid:/i.test(line)) return false;
+    if (/^\d{1,2}:\d{2}/.test(line)) return false; // timestamps
+    if (/[@]/.test(line) && !/Moneyline|Spread|Total|O\/U/i.test(line)) return false; // junk event lines
     if (
       /Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat/i.test(line) &&
       !/Moneyline|Spread|Total|O\/U/i.test(line)
@@ -118,7 +128,9 @@ export function extractBestOdds({ receiptText, rawSelection, payout, stake }) {
 
   if (filtered.length > 0) {
     const best =
-      filtered.find((c) => /\b(CASH\s*OUT|ASH\s*OUT|Odds:)\b/i.test(c.line)) ||
+      filtered.find((c) =>
+    /\b(Odds|Moneyline|Spread|Total|To Win|Payout)\b/i.test(c.line)
+  ) ||
       filtered[filtered.length - 1];
 
     if (best?.token) {

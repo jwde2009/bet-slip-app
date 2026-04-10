@@ -160,12 +160,20 @@ function extractCaesarsFinancials(cleaned = "", rawSelection = "") {
     toMoneyNumber(getMatch(text, /\b(wager|stake|risk)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)) ||
     toMoneyNumber(getMatch(text, /\$([0-9]+(?:\.[0-9]{1,2})?)\s*(risk|stake|wager)\b/i, 1));
 
-  const toWin = toMoneyNumber(
+  const toWin =
+  toMoneyNumber(
     getMatch(text, /\bto win\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+  ) ||
+  toMoneyNumber(
+    getMatch(text, /\bwin\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
   );
 
-  const payout = toMoneyNumber(
+  const payout =
+  toMoneyNumber(
     getMatch(text, /\b(total payout|payout)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)
+  ) ||
+  toMoneyNumber(
+    getMatch(text, /\btotal return\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
   );
 
   const bestOdds = extractBestOdds({
@@ -240,7 +248,9 @@ export function parseCaesarsSlip({
   sourceFileName = "",
   sportsbook = "Caesars",
   shared,
+  debug = false,
 }) {
+  const debugTrace = [];
   const {
     detectStatus,
     detectLive,
@@ -270,7 +280,12 @@ export function parseCaesarsSlip({
       break;
     }
   }
-
+if (debug) {
+  debugTrace.push({
+    stage: "fixture",
+    fixture,
+  });
+}
   let selectionCandidate = "";
   let bestScore = -100;
 
@@ -285,6 +300,13 @@ export function parseCaesarsSlip({
   if (bestScore < 2) {
     selectionCandidate = "";
   }
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_candidate",
+    selectionCandidate,
+    bestScore,
+  });
+}
 
   if (!selectionCandidate) {
     const anchorIndex = lines.findIndex((line) =>
@@ -298,25 +320,67 @@ export function parseCaesarsSlip({
       }
     }
   }
-
+if (debug) {
+  debugTrace.push({
+    stage: "selection_after_fallback",
+    selectionCandidate,
+  });
+}
   const splitSelection = splitTrailingOdds(selectionCandidate);
-  let selection = cleanCaesarsSelection(splitSelection.text || selectionCandidate);
+let selection = cleanCaesarsSelection(splitSelection.text || selectionCandidate);
 
-  const { stake, toWin, payout, odds } = extractCaesarsFinancials(
-    text,
-    selectionCandidate
-  );
+if (debug) {
+  debugTrace.push({
+    stage: "selection_cleaned",
+    rawSelectionCandidate: selectionCandidate,
+    splitSelection,
+    cleanedSelection: selection,
+  });
+}
 
-  let impliedOdds = splitSelection.odds || odds;
+selection = selection
+  .replace(/[»›>]+$/g, "")
+  .replace(/\s+[+-]?\d{2,5}(\.\d+)?$/g, "")
+  .trim();
 
-  if (!impliedOdds && stake && toWin) {
-    impliedOdds =
-      americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
-  }
+const { stake, toWin, payout, odds } = extractCaesarsFinancials(
+  text,
+  selectionCandidate
+);
 
-  const marketDetail = selection;
-  const betType = inferBetType(selection, marketDetail);
-  const league = detectLeague(fixture, selection, marketDetail) || "";
+if (debug) {
+  debugTrace.push({
+    stage: "financials",
+    stake,
+    toWin,
+    payout,
+    odds,
+  });
+}
+
+let impliedOdds = splitSelection.odds || odds;
+if (!impliedOdds && stake && toWin) {
+  impliedOdds = americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "implied_odds",
+    splitOdds: splitSelection.odds,
+    extractedOdds: odds,
+    finalImpliedOdds: impliedOdds,
+  });
+}
+
+let marketDetail = selection;
+
+if (/^(over|under)\b/i.test(selection) && fixture && !selection.includes("(")) {
+  selection = `${selection} (${fixture})`;
+  marketDetail = selection;
+}
+
+const betType = inferBetType(selection, marketDetail);
+const league = detectLeague(fixture, selection, marketDetail) || "";
 
   const warnings = [];
   if (!stake) warnings.push("stake_missing");
@@ -353,29 +417,30 @@ export function parseCaesarsSlip({
         };
 
   const row = {
-    ...baseRow,
-    id: baseRow.id || fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
-    bookmaker: sportsbook,
-    betId,
-    eventDate: "",
-    betDate,
-    sportLeague: league,
-    selection,
-    betType,
-    betSourceTag: "",
-    fixtureEvent: fixture,
-    stake,
-    oddsUS: impliedOdds,
-    oddsMissingReason: oddsNote,
-    marketDetail,
-    live: isLive ? "Y" : "N",
-    bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
-    reviewLater: warnings.length >= 2 ? "Y" : "N",
-    warnings: warnings.join(" | "),
-    parseWarning: warnings.join(" | "),
-    rawText: originalText || cleaned,
-    status,
-  };
+  ...baseRow,
+  id: baseRow.id || fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
+  bookmaker: sportsbook,
+  betId,
+  eventDate: "",
+  betDate,
+  sportLeague: league,
+  selection,
+  betType,
+  betSourceTag: "",
+  fixtureEvent: fixture,
+  stake,
+  oddsUS: impliedOdds,
+  oddsMissingReason: oddsNote,
+  marketDetail,
+  live: isLive ? "Y" : "N",
+  bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
+  reviewLater: warnings.length >= 2 ? "Y" : "N",
+  warnings: warnings.join(" | "),
+  parseWarning: warnings.join(" | "),
+  rawText: originalText || cleaned,
+  status,
+  ...(debug ? { debugTrace } : {}),
+};
 
   return typeof enrichRow === "function" ? enrichRow(row) : row;
 }
