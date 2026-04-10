@@ -155,22 +155,40 @@ function splitTrailingOdds(text = "") {
 }
 
 function isLikelyEventLine(line = "") {
-  if (!line || line.length < 8) return false;
+  if (!line || line.length < 6) return false;
+
+  const cleaned = cleanLine(line);
+
+  // ❌ reject obvious non-event lines
   if (
-    /\b(wager|odds|to win|total payout|share bet|cash out|same game parlay|sgp)\b/i.test(
-      line
-    )
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp)\b/i.test(cleaned)
   ) {
     return false;
   }
-  if (/\$/.test(line)) return false;
 
-  return (
-    /\s@\s/.test(line) ||
-    /\bvs\.?\b/i.test(line) ||
-    /\bv\b/.test(line) ||
-    /\bat\b/i.test(line)
-  );
+  if (/\$/.test(cleaned)) return false;
+
+  // FanDuel often uses simpler matchup lines, so loosen requirements
+  const hasMatchupShape =
+    /\s@\s/.test(cleaned) ||
+    /\bvs\.?\b/i.test(cleaned) ||
+    /\bv\b/i.test(cleaned) ||
+    /\bat\b/i.test(cleaned);
+
+  if (!hasMatchupShape) return false;
+
+  // ❌ basic sanity checks (but looser than Caesars)
+  const parts = cleaned.split(/@|vs\.?|v|at/i).map((p) => p.trim());
+  if (parts.length < 2) return false;
+
+  const [left, right] = parts;
+
+  if (!left || !right) return false;
+
+  // much looser than Caesars
+  if (left.length < 2 || right.length < 2) return false;
+
+  return true;
 }
 
 function cleanEventLine(line = "") {
@@ -283,7 +301,9 @@ export function parseFanDuelSlip({
   sourceFileName = "",
   sportsbook = "FanDuel",
   shared,
+  debug = false,
 }) {
+  const debugTrace = [];
   const {
     detectStatus,
     detectLive,
@@ -297,7 +317,7 @@ export function parseFanDuelSlip({
 
   const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
   const status = typeof detectStatus === "function" ? detectStatus(text) : "";
-  const isLive = typeof detectLive === "function" ? detectLive(text) : false;
+  const liveFlag = typeof detectLive === "function" ? detectLive(text) : "N";
 
 const parsedBetDate =
   typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
@@ -315,6 +335,24 @@ const betDate =
     }
   }
 
+    if (!fixture) {
+    for (const line of lines) {
+      const cleaned = cleanLine(line);
+
+      if (/\s@\s/.test(cleaned) || /\bvs\b/i.test(cleaned)) {
+        fixture = cleaned;
+        break;
+      }
+    }
+  }
+
+  if (debug) {
+    debugTrace.push({
+      stage: "fixture",
+      fixture,
+    });
+  }
+  
   let selectionCandidate = "";
   let bestScore = -100;
 
@@ -329,27 +367,64 @@ const betDate =
   if (bestScore < 2) {
     selectionCandidate = "";
   }
+  
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_candidate",
+    selectionCandidate,
+    bestScore,
+  });
+}
 
   if (!selectionCandidate) {
-    const anchorIndex = lines.findIndex((line) =>
-      /\b(wager|odds|to win|total payout)\b/i.test(line)
-    );
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-    if (anchorIndex > 0) {
-      const candidate = cleanLine(lines[anchorIndex - 1]);
-      if (candidate && !isLikelyEventLine(candidate) && !/\$/.test(candidate)) {
-        selectionCandidate = candidate;
-      }
+    if (
+      line &&
+      !isLikelyEventLine(line) &&
+      !/\$/.test(line) &&
+      line.length > 3
+    ) {
+      selectionCandidate = line;
+      break;
     }
   }
-
+}
+  
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_after_fallback",
+    selectionCandidate,
+  });
+}
+  
   const splitSelection = splitTrailingOdds(selectionCandidate);
   let selection = cleanFanDuelSelection(splitSelection.text || selectionCandidate);
+  
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_cleaned",
+    rawSelectionCandidate: selectionCandidate,
+    splitSelection,
+    cleanedSelection: selection,
+  });
+}
 
   const { stake, toWin, payout, odds } = extractFanDuelFinancials(
     text,
     selectionCandidate
   );
+  
+  if (debug) {
+  debugTrace.push({
+    stage: "financials",
+    stake,
+    toWin,
+    payout,
+    odds,
+  });
+}
 
   let impliedOdds = splitSelection.odds || odds;
 
@@ -357,6 +432,15 @@ const betDate =
     impliedOdds =
       americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
   }
+  
+  if (debug) {
+  debugTrace.push({
+    stage: "implied_odds",
+    splitOdds: splitSelection.odds,
+    extractedOdds: odds,
+    finalImpliedOdds: impliedOdds,
+  });
+}
 
   const marketDetail = selection;
   const betType = inferBetType(selection, marketDetail);
@@ -388,14 +472,14 @@ const betDate =
     odds: impliedOdds,
   });
 
-  const baseRow =
-    typeof shared?.emptyParsed === "function"
-      ? shared.emptyParsed(sourceFileName)
+   const baseRow =
+    shared?.emptyParsed && typeof shared.emptyParsed === "object"
+      ? { ...shared.emptyParsed, sourceFileName }
       : {
           sourceFileName,
           id: fallbackId || `fanduel|${sourceFileName}|${Date.now()}`,
         };
-
+  
   const row = {
     ...baseRow,
     id: baseRow.id || fallbackId || `fanduel|${sourceFileName}|${Date.now()}`,
@@ -412,13 +496,14 @@ const betDate =
     oddsUS: impliedOdds,
     oddsMissingReason: oddsNote,
     marketDetail,
-    live: isLive ? "Y" : "N",
-    bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
-    reviewLater: warnings.length >= 2 ? "Y" : "N",
-    warnings: warnings.join(" | "),
-    parseWarning: warnings.join(" | "),
-    rawText: originalText || cleaned,
-    status,
+    live: liveFlag === "Y" ? "Y" : "N",
+bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
+reviewLater: warnings.length >= 2 ? "Y" : "N",
+warnings: warnings.join(" | "),
+parseWarning: warnings.join(" | "),
+rawText: originalText || cleaned,
+status,
+...(debug ? { debugTrace } : {}),
   };
 
   return typeof enrichRow === "function" ? enrichRow(row) : row;

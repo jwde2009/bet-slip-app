@@ -523,24 +523,26 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
   const forcedBook = String(uploadBookmaker || "").trim().toLowerCase();
 
   if (forcedBook === "fanduel") {
-    return parseFanDuelSlip({
-      cleaned,
-      originalText: text,
-      sourceFileName,
-      sportsbook: "FanDuel",
-      shared,
-    });
-  }
+  return parseFanDuelSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "FanDuel",
+    shared,
+    debug: true,
+  });
+}
 
   if (/\bfanduel\b/.test(lowerCleaned) || looksLikeFanDuelText(cleaned)) {
-    return parseFanDuelSlip({
-      cleaned,
-      originalText: text,
-      sourceFileName,
-      sportsbook: "FanDuel",
-      shared,
-    });
-  }
+  return parseFanDuelSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "FanDuel",
+    shared,
+    debug: true,
+  });
+}
 
   if (forcedBook === "caesars") {
     return parseCaesarsSlip({
