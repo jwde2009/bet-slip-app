@@ -1,6 +1,7 @@
 import { parseBetMgmSlip } from "./parseBetMgm";
 import { parseDraftKingsLikeSlip } from "./parseDraftKings";
 import { parseFanDuelSlip } from "./parseFanDuel";
+import { parseCaesarsSlip } from "./parseCaesars";
 const emptyParsed = {
   eventDate: "",
   betDate: "",
@@ -536,6 +537,26 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
       originalText: text,
       sourceFileName,
       sportsbook: "FanDuel",
+      shared,
+    });
+  }
+
+  if (forcedBook === "caesars") {
+    return parseCaesarsSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook: "Caesars",
+      shared,
+    });
+  }
+
+  if (/\bcaesars\b/i.test(lowerCleaned)) {
+    return parseCaesarsSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook: "Caesars",
       shared,
     });
   }
