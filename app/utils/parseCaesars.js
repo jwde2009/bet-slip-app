@@ -134,21 +134,55 @@ function cleanCaesarsSelection(text = "") {
 
 function isLikelyEventLine(line = "") {
   if (!line || line.length < 8) return false;
+
+  const cleaned = cleanLine(line);
+  const lower = cleaned.toLowerCase();
+
+  // ❌ reject betting/financial lines
   if (
-    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp)\b/i.test(
-      line
-    )
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp)\b/i.test(cleaned)
   ) {
     return false;
   }
-  if (/\$/.test(line)) return false;
 
-  return (
-    /\s@\s/.test(line) ||
-    /\bvs\.?\b/i.test(line) ||
-    /\bv\b/.test(line) ||
-    /\bat\b/i.test(line)
-  );
+  // ❌ reject player prop / market lines
+  if (
+    /-/.test(cleaned) &&
+    /\b(total|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(cleaned)
+  ) {
+    return false;
+  }
+
+  // ❌ reject currency lines
+  if (/\$/.test(cleaned)) return false;
+
+  // ❌ reject weak OCR (not enough real words)
+  if (!/[a-z]{3,}/i.test(cleaned)) return false;
+
+  // ❌ reject numeric-heavy junk
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount >= 4 && !/\s@\s/.test(cleaned)) return false;
+
+  // ❌ reject pure symbols
+  if (/^[^a-z0-9]+$/i.test(cleaned)) return false;
+
+  // ✅ must look like matchup
+  const hasMatchupShape =
+    /\s@\s/.test(cleaned) ||
+    /\bvs\.?\b/i.test(cleaned) ||
+    /\bv\b/i.test(cleaned) ||
+    /\bat\b/i.test(cleaned);
+
+  if (!hasMatchupShape) return false;
+
+  // ❌ final safeguard: reject very short sides
+  const parts = cleaned.split(/@|vs\.?|v|at/i);
+  if (parts.length >= 2) {
+    const [left, right] = parts.map((p) => p.trim());
+    if (left.length < 3 || right.length < 3) return false;
+  }
+
+  return true;
 }
 
 function cleanEventLine(line = "") {
@@ -280,16 +314,76 @@ export function parseCaesarsSlip({
     parseDateFromScreenshotFileName(sourceFileName);
 
   let fixture = "";
-  for (const line of lines) {
-    if (isLikelyEventLine(line)) {
-      fixture = cleanEventLine(line);
-      break;
-    }
+let bestFixtureScore = -1;
+
+for (const line of lines) {
+  if (!isLikelyEventLine(line)) continue;
+
+  const cleaned = cleanEventLine(line);
+  let score = 0;
+
+  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 3) score += 2;
+
+  if (/\s@\s/.test(cleaned)) score += 3;
+  if (/\bvs\.?\b/i.test(cleaned)) score += 2;
+  if (/\bv\b/i.test(cleaned)) score += 1;
+  if (/\bat\b/i.test(cleaned)) score += 1;
+
+  if (cleaned.length < 15) score -= 2;
+
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount > 2) score -= 2;
+
+  if (score > bestFixtureScore) {
+    bestFixtureScore = score;
+    fixture = cleaned;
   }
+}
+
+let usedFixtureFallback = false;
+
+if (!fixture) {
+  for (let i = 0; i < lines.length; i++) {
+    const cleaned = cleanEventLine(lines[i]);
+
+    const hasMatchupShape =
+      /\s@\s/.test(cleaned) ||
+      /\bvs\.?\b/i.test(cleaned) ||
+      /\bv\b/i.test(cleaned) ||
+      /\bat\b/i.test(cleaned);
+
+    if (!hasMatchupShape) continue;
+
+    const parts = cleaned.split(/@|vs\.?|v|at/i).map((p) => p.trim());
+    if (parts.length < 2) continue;
+
+    const [left, right] = parts;
+
+    if (!left || !right) continue;
+    if (left.length < 3 || right.length < 3) continue;
+    if (!/[a-z]{3,}/i.test(left) || !/[a-z]{3,}/i.test(right)) continue;
+
+    if (
+      /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(
+        cleaned
+      )
+    ) {
+      continue;
+    }
+
+    fixture = cleaned;
+    usedFixtureFallback = true;
+    break;
+  }
+}
+
 if (debug) {
   debugTrace.push({
     stage: "fixture",
     fixture,
+    bestFixtureScore,
+    usedFixtureFallback,
   });
 }
   let selectionCandidate = "";

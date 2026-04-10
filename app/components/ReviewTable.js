@@ -53,16 +53,18 @@ export default function ReviewTable({
   getRowAttentionLevel,
 }) {
   const [hoverPreview, setHoverPreview] = useState({
-    rowId: "",
-    src: "",
-    alt: "",
-    visible: false,
-    locked: false,
-    x: 0,
-    y: 0,
-  });
-  const [previewZoomed, setPreviewZoomed] = useState(false);
-  const closeHoverPreview = () => {
+  rowId: "",
+  src: "",
+  alt: "",
+  visible: false,
+  locked: false,
+  x: 0,
+  y: 0,
+});
+const [previewZoomed, setPreviewZoomed] = useState(false);
+const [previewZoomOrigin, setPreviewZoomOrigin] = useState({ x: "50%", y: "50%" });
+
+const closeHoverPreview = () => {
   setHoverPreview({
     rowId: "",
     src: "",
@@ -73,12 +75,14 @@ export default function ReviewTable({
     y: 0,
   });
   setPreviewZoomed(false);
+  setPreviewZoomOrigin({ x: "50%", y: "50%" });
 };
-    const [dragState, setDragState] = useState({
-    dragging: false,
-    offsetX: 0,
-    offsetY: 0,
-  });
+
+const [dragState, setDragState] = useState({
+  dragging: false,
+  offsetX: 0,
+  offsetY: 0,
+});
 
     const getPreviewPositionFromElement = (element) => {
     const rect = element.getBoundingClientRect();
@@ -225,6 +229,7 @@ export default function ReviewTable({
   onClick={(e) => {
   e.stopPropagation();
   setPreviewZoomed(false);
+  setPreviewZoomOrigin({ x: "50%", y: "50%" });
 
   const position = getPreviewPositionFromElement(e.currentTarget);
 
@@ -256,6 +261,7 @@ export default function ReviewTable({
   }}
   onMouseEnter={(e) => {
   setPreviewZoomed(false);
+  setPreviewZoomOrigin({ x: "50%", y: "50%" });
   const position = getPreviewPositionFromElement(e.currentTarget);
 
     setHoverPreview((prev) => {
@@ -549,15 +555,24 @@ return (
           <img
   src={hoverPreview.src}
   alt={hoverPreview.alt}
-  onClick={() => {
-    if (hoverPreview.locked) {
-      setPreviewZoomed((prev) => !prev);
-    }
+  onClick={(e) => {
+    if (!hoverPreview.locked) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    setPreviewZoomOrigin({
+      x: `${x}%`,
+      y: `${y}%`,
+    });
+
+    setPreviewZoomed((prev) => !prev);
   }}
   style={{
-    maxWidth: previewZoomed ? "none" : "100%",
-    width: previewZoomed ? "auto" : "100%",
-    maxHeight: previewZoomed ? "none" : "70vh",
+    width: "100%",
+    maxWidth: "100%",
+    maxHeight: "70vh",
     objectFit: "contain",
     display: "block",
     borderRadius: 6,
@@ -566,6 +581,9 @@ return (
         ? "zoom-out"
         : "zoom-in"
       : "default",
+    transform: previewZoomed ? "scale(1.35)" : "scale(1)",
+    transformOrigin: `${previewZoomOrigin.x} ${previewZoomOrigin.y}`,
+    transition: "transform 0.15s ease",
   }}
 />
         </div>

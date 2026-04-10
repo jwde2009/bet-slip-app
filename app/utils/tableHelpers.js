@@ -15,6 +15,9 @@ export function getDisplayedBookmaker(row) {
 
 export function computeConfidence(row) {
   let score = 0;
+
+  const parseWarning = String(row.parseWarning || "").toLowerCase();
+
   if (row.bookmaker) score += 1;
   if (row.selection) score += 1;
   if (row.betType) score += 1;
@@ -22,8 +25,36 @@ export function computeConfidence(row) {
   if (row.oddsUS) score += 1;
   if (row.fixtureEvent) score += 1;
   if (row.betDate || row.eventDate) score += 1;
-  if (row.parseWarning) score -= 2;
+
+  const hasCriticalWarning =
+    parseWarning.includes("stake_missing") ||
+    parseWarning.includes("selection_missing") ||
+    parseWarning.includes("fixture_missing") ||
+    parseWarning.includes("no_bet_date_detected") ||
+    parseWarning.includes("payout_mismatch");
+
+  const hasModerateWarning =
+    parseWarning.includes("payout_missing") ||
+    parseWarning.includes("odds_missing");
+
+  const hasEstimatedOnly =
+    parseWarning &&
+    !hasCriticalWarning &&
+    !hasModerateWarning &&
+    parseWarning.split("|").map((x) => x.trim()).every((x) => x === "payout_estimated");
+
+  if (hasCriticalWarning) {
+    score -= 3;
+  } else if (hasModerateWarning) {
+    score -= 2;
+  } else if (hasEstimatedOnly) {
+    score -= 0;
+  } else if (parseWarning) {
+    score -= 1;
+  }
+
   if (!row.selection || !row.bookmaker) score -= 1;
+
   if (score >= 6) return "High";
   if (score >= 3) return "Medium";
   return "Low";
