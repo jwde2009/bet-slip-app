@@ -264,7 +264,7 @@ export function parseCaesarsSlip({
 
   const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
   const status = typeof detectStatus === "function" ? detectStatus(text) : "";
-  const isLive = typeof detectLive === "function" ? detectLive(text) : false;
+  const liveFlag = typeof detectLive === "function" ? detectLive(text) : "N";
 
   const parsedBetDate =
     typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
@@ -329,6 +329,11 @@ if (debug) {
   const splitSelection = splitTrailingOdds(selectionCandidate);
 let selection = cleanCaesarsSelection(splitSelection.text || selectionCandidate);
 
+selection = selection
+  .replace(/[»›>]+$/g, "")
+  .replace(/\s+[+-]?\d{2,5}(\.\d+)?$/g, "")
+  .trim();
+
 if (debug) {
   debugTrace.push({
     stage: "selection_cleaned",
@@ -337,11 +342,6 @@ if (debug) {
     cleanedSelection: selection,
   });
 }
-
-selection = selection
-  .replace(/[»›>]+$/g, "")
-  .replace(/\s+[+-]?\d{2,5}(\.\d+)?$/g, "")
-  .trim();
 
 const { stake, toWin, payout, odds } = extractCaesarsFinancials(
   text,
@@ -409,8 +409,8 @@ const league = detectLeague(fixture, selection, marketDetail) || "";
   });
 
   const baseRow =
-    typeof shared?.emptyParsed === "function"
-      ? shared.emptyParsed(sourceFileName)
+    shared?.emptyParsed && typeof shared.emptyParsed === "object"
+      ? { ...shared.emptyParsed, sourceFileName }
       : {
           sourceFileName,
           id: fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
@@ -432,7 +432,7 @@ const league = detectLeague(fixture, selection, marketDetail) || "";
   oddsUS: impliedOdds,
   oddsMissingReason: oddsNote,
   marketDetail,
-  live: isLive ? "Y" : "N",
+  live: liveFlag === "Y" ? "Y" : "N",
   bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
   reviewLater: warnings.length >= 2 ? "Y" : "N",
   warnings: warnings.join(" | "),

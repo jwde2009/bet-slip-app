@@ -548,18 +548,20 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
       sourceFileName,
       sportsbook: "Caesars",
       shared,
+      debug: true,
     });
   }
 
   if (/\bcaesars\b/i.test(lowerCleaned)) {
-    return parseCaesarsSlip({
-      cleaned,
-      originalText: text,
-      sourceFileName,
-      sportsbook: "Caesars",
-      shared,
-    });
-  }
+  return parseCaesarsSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "Caesars",
+    shared,
+    debug: true,
+  });
+}
 
   if (sportsbook === "BetMGM") {
     return parseBetMgmSlip({
