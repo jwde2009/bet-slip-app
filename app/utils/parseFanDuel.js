@@ -74,37 +74,85 @@ function normalizeMoneySpacing(text = "") {
 function cleanFanDuelSelection(text = "") {
   let s = cleanLine(text);
 
+  // Normalize curly apostrophes first so names like De'Aaron survive cleanup
+  s = s.replace(/[‘’]/g, "'");
+
+  // Remove obvious leading junk
   s = s.replace(/^[^A-Za-z0-9]+/, "");
-  s = s.replace(/([A-Za-z])([+-]\d)/g, "$1 $2");
 
-  // 🔥 NEW — remove embedded odds early
-  s = s.replace(/\s+[+-]\d{2,5}(?=\s|$)/g, "");
-
+  // Remove short OCR prefix junk when followed by a likely real name/team phrase
   s = s.replace(
-    /\s+(Ice\)|RELY|TEE\]|\[P5\)|\|P5\)|P5\)|Er\]|EXE|BEX\)|BED\)|REE\)|SKE\]|x1e¥4|R1e14|R1eY|RIetd|cele\)|cele\]|sacieiel|sacs\]|ret|Sette\)|Se¥id|BFE\)|FEY|EN\)|EL\)|B39|BEY\)|ELE\]|Ee\]|SELEY|RETT|xieTeY)\s*$/i,
+    /^(?:[@£€¢%©®]+|\d{1,2}[A-Za-z]?|[a-z]{1,2}\.)\s+(?=[A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){0,4}\b)/u,
     ""
   );
 
+  s = s.replace(/([A-Za-z])([+-]\d)/g, "$1 $2");
+
+  // Remove embedded odds early
+  s = s.replace(/\s+[+-]\d{2,5}(?=\s|$)/g, "");
+
+  // Remove known trailing OCR junk
+  s = s.replace(
+  /\s+(Ice\)|RELY|TEE\]|\[P5\)|\|P5\)|P5\)|Er\]|EXE|BEX\)|BED\)|REE\)|SKE\]|x1e¥4|R1e14|R1eY|RIetd|cele\)|cele\]|sacieiel|sacs\]|ret|Sette\)|Se¥id|BFE\)|FEY|EN\)|EL\)|B39|BEY\)|ELE\]|Ee\]|SELEY|RETT|xieTeY|EXLTeY|gacieiel|sacieacd|EGE|CG|FT|EO|ill|wll|alll|Nall)\s*$/i,
+  ""
+);
+// Remove trailing junk tokens (catch-all)
+s = s.replace(/\s+[A-Za-z]{2,6}$/i, (match) => {
+  const token = match.trim();
+
+  // keep legit short words
+  if (/^(Over|Under)$/i.test(token)) return match;
+
+  // remove if it looks like OCR garbage (no vowels or weird pattern)
+  if (!/[aeiou]/i.test(token) || /[A-Z]{2,}/.test(token)) {
+    return "";
+  }
+
+  return match;
+});
   s = s.replace(/\s[+-]\d{2,5}\)?\s*$/i, "");
   s = s.replace(/\s["“”']?\d{3}\)?\s*$/i, "");
   s = s.replace(/\s+-\s+(Over|Under)\b/i, " $1");
   s = s.replace(/^\d+\s+(?=[A-Z][a-z])/, "");
 
-  // Remove trailing odds again (safe redundancy)
+  // Remove trailing odds again
   s = s.replace(/\s+[+-]\d{2,5}\s*$/i, "");
 
   // Remove bracket junk
   s = s.replace(/[\[\(\{].*?[\]\)\}]/g, "");
+  s = s.replace(/[\[\]]+/g, "");
 
   // Remove common OCR garbage tokens
   s = s.replace(/\b(Ele|RELI|SELEY|BFE|E24|ED|EE|GD|TF)\b/gi, "");
 
-  // Remove stray symbols / quotes
-  s = s.replace(/["'=~®©]/g, "");
+  // Remove stray quote marks, but keep apostrophes inside names
+  s = s.replace(/["=~®©]/g, "");
+  s = s.replace(/(^|[^A-Za-z])'|'([^A-Za-z]|$)/g, "$1$2");
 
-  // Final cleanup
   s = s.replace(/\s+/g, " ").trim();
+  // Final pass: remove trailing garbage tokens safely
+let tokens = s.split(" ");
 
+if (tokens.length > 1) {
+  const last = tokens[tokens.length - 1];
+
+  // If last token looks like OCR junk, remove it
+  if (
+    /^[A-Za-z]{3,8}$/.test(last) && // word-like
+    !/^(Over|Under)$/i.test(last) && // keep real keywords
+    !/[aeiou]{2,}/i.test(last) && // OCR junk often lacks real vowel structure
+    !/[A-Z][a-z]+/.test(last) // not a proper name word
+  ) {
+    tokens.pop();
+  }
+
+  // Remove tokens like B39, E24, etc.
+  if (/^[A-Za-z]\d{1,3}$/.test(last) || /^[A-Z]{2,3}$/.test(last)) {
+    tokens.pop();
+  }
+
+  s = tokens.join(" ");
+}
   return s;
 }
 
@@ -154,41 +202,140 @@ function splitTrailingOdds(text = "") {
   return { text: s, odds: "" };
 }
 
+function scoreEventLine(line = "") {
+  const cleaned = cleanLine(line);
+  if (!cleaned) return -100;
+
+  let score = 0;
+
+  if (/^\d{1,2}:\d{2}\b/.test(cleaned)) score -= 6;
+  if (/^\d+[%®©]/.test(cleaned)) score -= 6;
+  if (/\$/.test(cleaned)) score -= 8;
+
+  if (
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|share bet)\b/i.test(
+      cleaned
+    )
+  ) {
+    score -= 8;
+  }
+
+  if (/\s@\s/.test(cleaned)) score += 8;
+  if (/\bvs\.?\b/i.test(cleaned)) score += 7;
+  if (/\sv\s/i.test(cleaned)) score += 5;
+  if (/\sat\s/i.test(cleaned)) score += 4;
+
+  const parts = cleaned
+    .split(/\s+@\s+|\s+vs\.?\s+|\s+v\s+|\s+at\s+/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    const [left, right] = parts;
+    if (/[A-Za-z]{2,}/.test(left)) score += 3;
+    if (/[A-Za-z]{2,}/.test(right)) score += 3;
+    if (left.length >= 3 && right.length >= 3) score += 2;
+  } else {
+    score -= 6;
+  }
+
+  const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
+  if (letters < 6) score -= 5;
+
+  if (/\b(recent|shop|cash|will|all|gd|ed|e24|ege)\b/i.test(cleaned)) {
+    score -= 5;
+  }
+
+  const weirdChars = (cleaned.match(/[^A-Za-z0-9\s@.&'/-]/g) || []).length;
+  if (weirdChars >= 3) score -= 4;
+
+  return score;
+}
+
+function isLikelyGarbageSelection(text = "") {
+  const s = cleanLine(text);
+  if (!s) return true;
+
+  const letters = (s.match(/[A-Za-z]/g) || []).length;
+  const digits = (s.match(/\d/g) || []).length;
+  const weirdChars = (s.match(/[^A-Za-z0-9\s+.'’&/-]/g) || []).length;
+
+  if (letters < 3) return true;
+  if (/^[\[\]\)\(]+$/.test(s)) return true;
+  if (/[\[\]]/.test(s)) return true;
+
+  if (
+    /\b(EXLTeY|gacieiel|sacieacd|cele|SELEY|RELI|BFE|E24|GD|ED|EE|Nall|alll|wll|ill)\b/i.test(s)
+  ) {
+    return true;
+  }
+
+  if (/^\d{1,2}:\d{2}\b/.test(s)) return true;
+  if (/^\d+[%©®]/.test(s)) return true;
+
+  if (weirdChars >= 4) return true;
+
+  if (digits >= 3 && !/\b(over|under)\b/i.test(s) && !/[+-]\d+(\.\d+)?/.test(s)) {
+    return true;
+  }
+
+  if (/\b(Nall|alll|wll|ill|wor|mill|Jill|EO|EGE|FT|CG|TE)\b/i.test(s)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isWeakButUsableSelection(text = "") {
+  const s = cleanFanDuelSelection(splitTrailingOdds(text).text || text);
+  if (!s) return false;
+  if (isLikelyGarbageSelection(s)) return false;
+
+  if (/[+-]\d+(\.\d+)?/.test(text)) return true;
+
+  if (
+    /\b(over|under)\b/i.test(s) ||
+    /\b(points?|rebounds?|assists?|three-pointers?|threes?|hits?|rbis?|home runs?|shots?|shots on goal|strikeouts?|touchdowns?|goals?|made threes)\b/i.test(
+      s
+    )
+  ) {
+    return true;
+  }
+
+  if (/^[A-Za-z0-9'.&/-]+(?:\s+[A-Za-z0-9'.&/-]+){0,5}$/.test(s)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isLikelyEventLine(line = "") {
   if (!line || line.length < 6) return false;
-
   const cleaned = cleanLine(line);
 
-  // ❌ reject obvious non-event lines
+  // Hard rejects first — keep these explicit
   if (
-    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp)\b/i.test(cleaned)
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|share bet)\b/i.test(
+      cleaned
+    )
   ) {
     return false;
   }
 
   if (/\$/.test(cleaned)) return false;
 
-  // FanDuel often uses simpler matchup lines, so loosen requirements
-  const hasMatchupShape =
-    /\s@\s/.test(cleaned) ||
-    /\bvs\.?\b/i.test(cleaned) ||
-    /\bv\b/i.test(cleaned) ||
-    /\bat\b/i.test(cleaned);
+  // Reject obvious selection / market lines
+  if (
+    /\b(over|under)\b/i.test(cleaned) ||
+    /\b(points?|rebounds?|assists?|three-pointers?|threes?|hits?|rbis?|home runs?|shots?|shots on goal|strikeouts?|touchdowns?|goals?)\b/i.test(
+      cleaned
+    ) ||
+    /[+-]\d+(\.\d+)?/.test(cleaned)
+  ) {
+    return false;
+  }
 
-  if (!hasMatchupShape) return false;
-
-  // ❌ basic sanity checks (but looser than Caesars)
-  const parts = cleaned.split(/@|vs\.?|v|at/i).map((p) => p.trim());
-  if (parts.length < 2) return false;
-
-  const [left, right] = parts;
-
-  if (!left || !right) return false;
-
-  // much looser than Caesars
-  if (left.length < 2 || right.length < 2) return false;
-
-  return true;
+  return scoreEventLine(cleaned) >= 6;
 }
 
 function cleanEventLine(line = "") {
@@ -327,20 +474,27 @@ const betDate =
   parseFanDuelBetDate(text) ||
   parseDateFromScreenshotFileName(sourceFileName);
 
-  let fixture = "";
+    let fixture = "";
+  let bestFixtureScore = -100;
+
   for (const line of lines) {
-    if (isLikelyEventLine(line)) {
+    const score = scoreEventLine(line);
+    if (score > bestFixtureScore) {
+      bestFixtureScore = score;
       fixture = cleanEventLine(line);
-      break;
     }
   }
 
-    if (!fixture) {
+  if (bestFixtureScore < 6) {
+    fixture = "";
+  }
+
+  if (!fixture) {
     for (const line of lines) {
       const cleaned = cleanLine(line);
-
-      if (/\s@\s/.test(cleaned) || /\bvs\b/i.test(cleaned)) {
-        fixture = cleaned;
+      const score = scoreEventLine(cleaned);
+      if ((/\s@\s/.test(cleaned) || /\bvs\.?\b/i.test(cleaned)) && score >= 3) {
+        fixture = cleanEventLine(cleaned);
         break;
       }
     }
@@ -353,7 +507,7 @@ const betDate =
     });
   }
   
-  let selectionCandidate = "";
+    let selectionCandidate = "";
   let bestScore = -100;
 
   for (const line of lines) {
@@ -367,40 +521,57 @@ const betDate =
   if (bestScore < 2) {
     selectionCandidate = "";
   }
-  
-  if (debug) {
-  debugTrace.push({
-    stage: "selection_candidate",
-    selectionCandidate,
-    bestScore,
-  });
-}
 
-  if (!selectionCandidate) {
+  if (debug) {
+    debugTrace.push({
+      stage: "selection_candidate",
+      selectionCandidate,
+      bestScore,
+    });
+  }
+
+  const currentSelectionLooksUsable =
+  selectionCandidate && isWeakButUsableSelection(selectionCandidate);
+
+if (!selectionCandidate || (!currentSelectionLooksUsable && bestScore <= 3)) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const cleanedLine = cleanLine(line);
 
     if (
-      line &&
-      !isLikelyEventLine(line) &&
-      !/\$/.test(line) &&
-      line.length > 3
+      cleanedLine &&
+      !isLikelyEventLine(cleanedLine) &&
+      !/\$/.test(cleanedLine) &&
+      cleanedLine.length > 3
     ) {
-      selectionCandidate = line;
-      break;
+      const cleanedCandidate = cleanFanDuelSelection(
+        splitTrailingOdds(cleanedLine).text || cleanedLine
+      );
+
+      if (
+        !isLikelyGarbageSelection(cleanedCandidate) &&
+        isWeakButUsableSelection(cleanedLine)
+      ) {
+        selectionCandidate = cleanedLine;
+        break;
+      }
     }
   }
 }
-  
-  if (debug) {
-  debugTrace.push({
-    stage: "selection_after_fallback",
-    selectionCandidate,
-  });
-}
-  
+
+    if (debug) {
+    debugTrace.push({
+      stage: "selection_after_fallback",
+      selectionCandidate,
+    });
+  }
+
   const splitSelection = splitTrailingOdds(selectionCandidate);
   let selection = cleanFanDuelSelection(splitSelection.text || selectionCandidate);
+
+  if (isLikelyGarbageSelection(selection)) {
+    selection = "";
+  }
   
   if (debug) {
   debugTrace.push({
