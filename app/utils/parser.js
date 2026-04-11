@@ -478,11 +478,24 @@ export function enrichRow(row) {
   const normalizedSelection = normalizeTeamNames(row.selection);
   const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
 
+  const needsReview =
+    row.reviewResolved !== "Y" &&
+    (
+      row.likelyParserIssue === "Y" ||
+      !row.sportLeague ||
+      !row.oddsUS ||
+      row.oddsSource === "Calculated" ||
+      !!row.parseWarning
+    );
+
   return {
     ...row,
     bookmaker: normalizedBookmaker,
     fixtureEvent: normalizedFixture,
     selection: normalizedSelection,
+    reviewLater: needsReview ? "Y" : (row.reviewLater || "N"),
+    exported: row.exported || "N",
+    archived: row.archived || "N",
   };
 }
 

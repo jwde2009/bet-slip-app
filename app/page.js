@@ -76,6 +76,18 @@ function getRowAttentionLevel(row) {
   return "";
 }
 
+function cleanTextLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getMatch(text, regex, group = 1) {
+  const match = String(text || "").match(regex);
+  return match ? String(match[group] || "").trim() : "";
+}
+
+function detectLive(text) {
+  return /\blive\b/i.test(String(text || "")) ? "Y" : "N";
+}
 
 function parseVisibleTeamMatchup(lines) {
   const teamLines = [];
@@ -91,7 +103,9 @@ function parseVisibleTeamMatchup(lines) {
     }
   }
   const deduped = [];
-  for (const t of teamLines) if (!deduped.includes(t)) deduped.push(t);
+  for (const t of teamLines) {
+    if (!deduped.includes(t)) deduped.push(t);
+  }
   if (deduped.length >= 2) return `${deduped[0]} @ ${deduped[1]}`;
   return "";
 }
@@ -173,7 +187,6 @@ function parseMyBetsCards(lines) {
   }
   return unique;
 }
-
 
 function escapeCsv(value) {
   const str = String(value ?? "");
@@ -266,11 +279,12 @@ const cellStyle = {
   whiteSpace: "nowrap",
 };
 
-
 export default function Home() {
   const [rows, setRows] = useState([]);
   const [selectedRowId, setSelectedRowId] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [showArchivedRows, setShowArchivedRows] = useState(false);
+  const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
   const [processingMessage, setProcessingMessage] = useState("");
   const [saveNotice, setSaveNotice] = useState("");
   const [showReviewLaterOnly, setShowReviewLaterOnly] = useState(false);
@@ -322,39 +336,63 @@ export default function Home() {
   const noticeTimerRef = useRef(null);
 
   useEffect(() => {
-  try {
-    const raw = localStorage.getItem("betSlipAppStateV1");
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.rows)) setRows(parsed.rows);
-    if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
-    if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
-    if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
-  } catch (error) {
-    console.error("Could not load local app state", error);
-  }
-}, []);
+    try {
+      const raw = localStorage.getItem("betSlipAppStateV1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+    } catch (error) {
+      console.error("Could not load local app state", error);
+    }
+  }, []);
 
- useEffect(() => {
-  try {
-    localStorage.setItem(
-      "betSlipAppStateV1",
-      JSON.stringify({ rows, uploadOwner, uploadBookmaker, changelog })
-    );
-  } catch (error) {
-    console.error("Could not save local app state", error);
-  }
-}, [rows, uploadOwner, uploadBookmaker, changelog]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "betSlipAppStateV1",
+        JSON.stringify({ rows, uploadOwner, uploadBookmaker, changelog })
+      );
+    } catch (error) {
+      console.error("Could not save local app state", error);
+    }
+  }, [rows, uploadOwner, uploadBookmaker, changelog]);
 
   const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
 
+  function rowNeedsReview(row) {
+    return (
+      row.reviewResolved !== "Y" &&
+      (
+        row.likelyParserIssue === "Y" ||
+        !row.sportLeague ||
+        !row.oddsUS ||
+        row.oddsSource === "Calculated" ||
+        !!row.parseWarning
+      )
+    );
+  }
+
   const visibleRows = useMemo(() => {
     let next = rowsWithWarnings;
+
+    if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
     if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
     if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
     if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
+    if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
+
     return next;
-  }, [rowsWithWarnings, showReviewLaterOnly, showLowConfidenceOnly, showLikelyParserIssuesOnly]);
+  }, [
+    rowsWithWarnings,
+    showArchivedRows,
+    showReviewLaterOnly,
+    showLowConfidenceOnly,
+    showLikelyParserIssuesOnly,
+    showNeedsReviewOnly,
+  ]);
 
   const selectedRow = rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
 
@@ -386,7 +424,7 @@ export default function Home() {
     if (rowsWithWarnings.length === 0) setSelectedRowId("");
   }, [rowsWithWarnings, visibleRows, selectedRowId]);
 
-    const showNotice = (message) => {
+  const showNotice = (message) => {
     setSaveNotice(message);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => {
@@ -394,7 +432,6 @@ export default function Home() {
       noticeTimerRef.current = null;
     }, 2000);
   };
-
 
   const moveSelection = (delta) => {
     if (visibleRows.length === 0) return;
@@ -472,7 +509,9 @@ export default function Home() {
   };
 
   const handleRowFieldChange = (id, field, value) =>
-    setRows((prev) => prev.map((row) => (row.id === id ? enrichRow({ ...row, [field]: value }) : row)));
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? enrichRow({ ...row, [field]: value }) : row))
+    );
 
   const toggleSelected = (id) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -731,43 +770,43 @@ export default function Home() {
     }
   };
 
-const exportAppState = () => {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    rows,
-    uploadOwner,
-    uploadBookmaker,
-    changelog,
+  const exportAppState = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      rows,
+      uploadOwner,
+      uploadBookmaker,
+      changelog,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "bet-slip-app-state.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotice("App state exported");
   };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "bet-slip-app-state.json";
-  link.click();
-  URL.revokeObjectURL(url);
-  showNotice("App state exported");
-};
-
   const importAppState = async (fileList) => {
-  const file = fileList?.[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed.rows)) setRows(parsed.rows);
-    if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
-    if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
-    if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
-    showNotice("App state imported");
-  } catch (error) {
-    console.error(error);
-    showNotice("Could not import app state");
-  }
-};
+    const file = fileList?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+      showNotice("App state imported");
+    } catch (error) {
+      console.error(error);
+      showNotice("Could not import app state");
+    }
+  };
 
   const addChangelogEntry = () => {
     const entry = window.prompt("Add a changelog entry");
@@ -828,6 +867,80 @@ const exportAppState = () => {
     ["betId", "Bet ID (helper)"],
   ];
 
+  function archiveSelectedRows() {
+    if (!selectedIds.length) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedIds.includes(row.id)
+          ? { ...row, archived: "Y", exported: row.exported || "N" }
+          : row
+      )
+    );
+
+    setSelectedIds([]);
+    showNotice("Selected rows archived");
+  }
+
+  function markSelectedRowsExported() {
+    if (!selectedIds.length) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedIds.includes(row.id)
+          ? { ...row, exported: "Y" }
+          : row
+      )
+    );
+
+    showNotice("Selected rows marked exported");
+  }
+
+  function exportSelectedRowsToCsv() {
+    const selectedRows = rowsWithWarnings.filter(
+      (row) => selectedIds.includes(row.id) && row.archived !== "Y"
+    );
+
+    if (!selectedRows.length) return showNotice("No selected active rows to export");
+
+    const headers = [
+      "eventDate",
+      "betDate",
+      "bookmaker",
+      "sportLeague",
+      "selection",
+      "betType",
+      "fixtureEvent",
+      "stake",
+      "oddsUS",
+      "payout",
+      "toWin",
+      "betId",
+      "betSourceTag",
+      "accountOwner",
+    ];
+
+    const csv = [
+      headers.join(","),
+      ...selectedRows.map((row) =>
+        headers.map((header) => escapeCsv(row[header])).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `bet-slip-export-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    markSelectedRowsExported();
+    showNotice(`Exported ${selectedRows.length} row${selectedRows.length === 1 ? "" : "s"} in current batch`);
+  }
+
   return (
     <div
       style={{
@@ -863,21 +976,20 @@ const exportAppState = () => {
           </select>
         </label>
 
-
-  <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
-  Upload sportsbook
-  <select
-    value={uploadBookmaker}
-    onChange={(e) => setUploadBookmaker(e.target.value)}
-    style={{ ...selectStyle, width: 140, padding: "6px 8px" }}
-  >
-    {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
-      <option key={option} value={option}>
-        {option}
-      </option>
-    ))}
-  </select>
-</label>
+        <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
+          Upload sportsbook
+          <select
+            value={uploadBookmaker}
+            onChange={(e) => setUploadBookmaker(e.target.value)}
+            style={{ ...selectStyle, width: 140, padding: "6px 8px" }}
+          >
+            {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label
           style={{
@@ -982,6 +1094,24 @@ const exportAppState = () => {
         </label>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={showNeedsReviewOnly}
+            onChange={(e) => setShowNeedsReviewOnly(e.target.checked)}
+          />
+          Needs Review Only
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={showArchivedRows}
+            onChange={(e) => setShowArchivedRows(e.target.checked)}
+          />
+          Show Archived
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
           Table view
           <select
             value={tableMode}
@@ -1021,9 +1151,55 @@ const exportAppState = () => {
         </div>
       </div>
 
-      
+      {selectedIds.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 12,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: 12,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <strong style={{ alignSelf: "center" }}>
+            {selectedIds.length} selected
+          </strong>
 
-                {visibleRows.length > 0 && (
+          <button onClick={exportSelectedRowsToCsv} style={smallButtonStyle}>
+            Export Current Batch
+          </button>
+
+          <button onClick={markSelectedRowsExported} style={smallButtonStyle}>
+            Mark Exported
+          </button>
+
+          <button onClick={archiveSelectedRows} style={smallButtonStyle}>
+            Archive Selected
+          </button>
+
+          <button
+            onClick={() => {
+              setRows((prev) =>
+                prev.map((row) =>
+                  selectedIds.includes(row.id)
+                    ? { ...row, reviewResolved: "Y", reviewLater: "N" }
+                    : row
+                )
+              );
+              showNotice("Selected rows marked reviewed");
+            }}
+            style={smallButtonStyle}
+          >
+            Mark Reviewed
+          </button>
+        </div>
+      )}
+
+      {visibleRows.length > 0 && (
         <ReviewTable
           rows={visibleRows}
           selectedRowId={selectedRowId}
@@ -1041,6 +1217,7 @@ const exportAppState = () => {
           handleRowFieldChange={handleRowFieldChange}
           tableMode={tableMode}
           getRowAttentionLevel={getRowAttentionLevel}
+          isMobile={typeof window !== "undefined" && window.innerWidth < 768}
         />
       )}
 
@@ -1070,8 +1247,8 @@ const exportAppState = () => {
                 )
               }
               style={smallButtonStyle}
-          >
-            {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            >
+              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
             </button>
             <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
               Mark Win + Next
@@ -1225,7 +1402,7 @@ const exportAppState = () => {
               onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
               style={textAreaStyle}
             />
-            
+
             <label style={{ fontWeight: "bold" }}>Debug Trace</label>
             <textarea
               value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
