@@ -18,6 +18,11 @@ import {
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReviewTable from "./components/ReviewTable";
+import TopActionGrid from "./components/TopActionGrid";
+import FilterBar from "./components/FilterBar";
+import UploadDropZone from "./components/UploadDropZone";
+import UploadBatchStatus from "./components/UploadBatchStatus";
+import ReviewLegend from "./components/ReviewLegend";
 import Tesseract from "tesseract.js";
 
 import { detectLeague } from "./utils/detectLeague";
@@ -47,7 +52,19 @@ const BET_TYPE_OPTIONS = [
   "futures",
 ];
 
-const BET_SOURCE_OPTIONS = ["", "EV", "Promo", "Boost", "Arb/Hedge", "Fun"];
+const BET_SOURCE_OPTIONS = [
+  "",
+  "EV",
+  "Promo",
+  "Boost",
+  "Parlay",
+  "Hedge",
+  "Middle",
+  "Live",
+  "Fun",
+  "Manual Fix",
+  "Needs Check",
+];
 
 const ACCOUNT_OPTIONS = ["Me", "Wife"];
 
@@ -290,10 +307,12 @@ export default function Home() {
   const [showReviewLaterOnly, setShowReviewLaterOnly] = useState(false);
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
   const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
   const [tableMode, setTableMode] = useState("debug");
-
+  const [uploadBatches, setUploadBatches] = useState([]);
+  const [savedFilterView, setSavedFilterView] = useState("default");
   const [columnWidths, setColumnWidths] = useState({
     select: 52,
     edit: 84,
@@ -332,6 +351,8 @@ export default function Home() {
     "v4: local storage, app state import/export, changelog, improved league and prop classification",
     "v5: odds missing reason, stronger college/soccer league fallbacks, image thumbnails, improved upload button and review table",
     "v6: screen type classification, stronger odds/payout fallback, parlay summaries, improved DK hardening",
+    "v10: modular action grid + filter bar foundation",
+"v11: preview panel cleanup, review-mode UX, cleaner control layout",
   ]);
   const noticeTimerRef = useRef(null);
 
@@ -376,25 +397,52 @@ export default function Home() {
   }
 
   const visibleRows = useMemo(() => {
-    let next = rowsWithWarnings;
+  let next = rowsWithWarnings;
 
-    if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
-    if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
-    if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
-    if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
-    if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
+  if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
+  if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
+  if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
+  if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
+  if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
 
-    return next;
-  }, [
-    rowsWithWarnings,
-    showArchivedRows,
-    showReviewLaterOnly,
-    showLowConfidenceOnly,
-    showLikelyParserIssuesOnly,
-    showNeedsReviewOnly,
-  ]);
+  if (reviewMode) {
+    next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
+  }
 
-  const selectedRow = rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
+  return next;
+}, [
+  rowsWithWarnings,
+  showArchivedRows,
+  showReviewLaterOnly,
+  showLowConfidenceOnly,
+  showLikelyParserIssuesOnly,
+  showNeedsReviewOnly,
+  reviewMode,
+]);
+
+  const reviewedCount = rowsWithWarnings.filter(
+  (row) => row.reviewResolved === "Y"
+).length;
+
+const exportableCount = rowsWithWarnings.filter(
+  (row) => row.archived !== "Y"
+).length;
+
+const counts = {
+  total: rowsWithWarnings.length,
+  visible: visibleRows.length,
+  needsReview: rowsWithWarnings.filter((row) => rowNeedsReview(row)).length,
+  reviewLater: rowsWithWarnings.filter((row) => row.reviewLater === "Y").length,
+  lowConfidence: rowsWithWarnings.filter((row) => row.confidenceFlag === "Low").length,
+  parserIssues: rowsWithWarnings.filter((row) => row.likelyParserIssue === "Y").length,
+  archived: rowsWithWarnings.filter((row) => row.archived === "Y").length,
+  selected: selectedIds.length,
+  reviewed: reviewedCount,
+  exportable: exportableCount,
+};
+
+  const selectedRow =
+    rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
@@ -473,35 +521,195 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedRowId, visibleRows]);
 
-  const handleUpload = async (fileList) => {
-    const files = Array.from(fileList || []);
+  function createUploadBatch(files) {
+  const id = crypto.randomUUID();
+
+  let folder = "";
+  let parentFolder = "";
+
+  if (files[0]?.webkitRelativePath) {
+    const parts = files[0].webkitRelativePath.split("/");
+
+    if (parts.length >= 2) {
+      folder = parts[parts.length - 2];
+    }
+
+    if (parts.length >= 3) {
+      parentFolder = parts[parts.length - 3];
+    }
+  }
+
+  const batch = {
+    id,
+    label: `Batch ${uploadBatches.length + 1}`,
+    status: "queued",
+    fileCount: files.length,
+    processedCount: 0,
+    rowsCreated: 0,
+    errorCount: 0,
+    fileNames: files.map((file) => file.name),
+    folder,
+    parentFolder,
+    createdAt: Date.now(),
+  };
+
+  setUploadBatches((prev) => [batch, ...prev]);
+  return id;
+}
+
+  function updateUploadBatch(batchId, updates) {
+    setUploadBatches((prev) =>
+      prev.map((batch) =>
+        batch.id === batchId
+          ? { ...batch, ...updates }
+          : batch
+      )
+    );
+  }
+
+  function clearUploadHistory() {
+    setUploadBatches([]);
+  }
+
+  function applySavedFilterView(nextView) {
+    setSavedFilterView(nextView);
+
+    if (nextView === "default") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "review_queue") {
+      setReviewMode(true);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "needs_review") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(true);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "parser_issues") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(true);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "archived") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(true);
+    }
+  }
+
+    const handleUpload = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) =>
+      String(file.type || "").startsWith("image/")
+    );
     if (files.length === 0) return;
 
+    const batchId = createUploadBatch(files);
+    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+
     setProcessing(true);
+    updateUploadBatch(batchId, { status: "processing" });
+
     const newRows = [];
+    let processedCount = 0;
+    let errorCount = 0;
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        let folder = "";
+        let parentFolder = "";
+
+        if (file.webkitRelativePath) {
+          const parts = file.webkitRelativePath.split("/");
+
+          if (parts.length >= 2) {
+            folder = parts[parts.length - 2]; // sportsbook
+          }
+
+          if (parts.length >= 3) {
+            parentFolder = parts[parts.length - 3]; // month
+          }
+        }
         setProcessingMessage(`Reading ${i + 1} of ${files.length}: ${file.name}`);
-        const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
-        const extractedText = result.data.text || "";
-        const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
-        newRows.push({
-          ...parsed,
-          parserId: parsed.id || "",
-          id: crypto.randomUUID(),
-          accountOwner: uploadOwner,
-          sourceImageUrl: URL.createObjectURL(file),
+
+        try {
+          const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
+          const extractedText = result.data.text || "";
+          const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
+
+          newRows.push({
+  ...parsed,
+  folder,
+  parentFolder,
+            parserId: parsed.id || "",
+            id: crypto.randomUUID(),
+            accountOwner: uploadOwner,
+            sourceImageUrl: URL.createObjectURL(file),
+          });
+        } catch (error) {
+          console.error(error);
+          errorCount += 1;
+        }
+
+        processedCount += 1;
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount,
+          rowsCreated: newRows.length,
+          errorCount,
         });
       }
 
       setRows((prev) => [...prev, ...newRows]);
       if (newRows[0]) setSelectedRowId(newRows[0].id);
-      showNotice(`${newRows.length} row${newRows.length === 1 ? "" : "s"} added`);
+
+      updateUploadBatch(batchId, {
+        status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
+        processedCount,
+        rowsCreated: newRows.length,
+        errorCount,
+      });
+
+      showNotice(
+        `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
+      );
     } catch (error) {
       console.error(error);
-      showNotice("Could not read one or more images");
+      updateUploadBatch(batchId, {
+        status: "failed",
+        processedCount,
+        rowsCreated: newRows.length,
+        errorCount: errorCount + 1,
+      });
+      showNotice("Could not process upload batch");
     } finally {
       setProcessing(false);
       setProcessingMessage("");
@@ -903,6 +1111,14 @@ export default function Home() {
 
     if (!selectedRows.length) return showNotice("No selected active rows to export");
 
+    const unreviewed = selectedRows.filter(
+        (row) => row.reviewResolved !== "Y"
+      );
+
+      if (unreviewed.length > 0) {
+        showNotice(`⚠️ ${unreviewed.length} rows not reviewed`);
+      }
+
     const headers = [
       "eventDate",
       "betDate",
@@ -955,16 +1171,20 @@ export default function Home() {
     >
       <h1>Bet Slip Reader</h1>
 
-      <div
+            <div
         style={{
           display: "flex",
-          gap: 10,
+          gap: 12,
           flexWrap: "wrap",
-          marginBottom: 8,
           alignItems: "center",
+          marginBottom: 12,
+          padding: 12,
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          background: "#f9fafb",
         }}
       >
-        <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
           Upload owner
           <select
             value={uploadOwner}
@@ -976,13 +1196,14 @@ export default function Home() {
           </select>
         </label>
 
-        <label style={{ color: "#000", display: "flex", alignItems: "center", gap: 8 }}>
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
           Upload sportsbook
           <select
             value={uploadBookmaker}
             onChange={(e) => setUploadBookmaker(e.target.value)}
-            style={{ ...selectStyle, width: 140, padding: "6px 8px" }}
+            style={{ ...selectStyle, width: 150, padding: "6px 8px" }}
           >
+            
             {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -990,168 +1211,90 @@ export default function Home() {
             ))}
           </select>
         </label>
-
-        <label
-          style={{
-            ...buttonStyle,
-            backgroundColor: "#111827",
-            color: "#fff",
-            borderColor: "#111827",
-            fontWeight: 700,
-          }}
-        >
-          Upload Bet Slips
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => handleUpload(e.target.files)}
-            style={{ display: "none" }}
-          />
-        </label>
-
-        <button onClick={exportStandardCsv} style={buttonStyle} disabled={rowsWithWarnings.length === 0}>
-          Export CSV
-        </button>
-        <button onClick={exportDebugCsv} style={buttonStyle} disabled={rowsWithWarnings.length === 0}>
-          Export Debug CSV
-        </button>
-        <button onClick={() => exportSelectedCsv(false)} style={buttonStyle} disabled={selectedIds.length === 0}>
-          Export Selected CSV
-        </button>
-        <button onClick={() => exportSelectedCsv(true)} style={buttonStyle} disabled={selectedIds.length === 0}>
-          Export Selected Debug
-        </button>
-        <button onClick={exportAppState} style={buttonStyle}>
-          Export App State
-        </button>
-
-        <label style={{ ...buttonStyle, display: "inline-flex", alignItems: "center" }}>
-          Import App State
-          <input
-            type="file"
-            accept="application/json"
-            onChange={(e) => importAppState(e.target.files)}
-            style={{ display: "none" }}
-          />
-        </label>
-
-        <button onClick={addChangelogEntry} style={buttonStyle}>
-          Add Changelog Note
-        </button>
-
-        <button onClick={deleteSelected} style={buttonStyle} disabled={selectedIds.length === 0}>
-          Delete Selected
-        </button>
-
-        <button
-          onClick={() => setWinStatusForSelected("Y")}
-          style={buttonStyle}
-          disabled={selectedIds.length === 0}
-        >
-          Mark Selected Win
-        </button>
-
-        <button
-          onClick={() => setWinStatusForSelected("N")}
-          style={buttonStyle}
-          disabled={selectedIds.length === 0}
-        >
-          Mark Selected Loss
-        </button>
-
-        <button onClick={clearAll} style={buttonStyle} disabled={rowsWithWarnings.length === 0}>
-          Clear All
-        </button>
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+  Filter View
+  <select
+    value={savedFilterView}
+    onChange={(e) => applySavedFilterView(e.target.value)}
+    style={{ ...selectStyle, width: 160, padding: "6px 8px" }}
+  >
+    <option value="default">Default</option>
+    <option value="review_queue">Review Queue</option>
+    <option value="needs_review">Needs Review</option>
+    <option value="parser_issues">Parser Issues</option>
+    <option value="archived">Archived</option>
+  </select>
+</label>
       </div>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showReviewLaterOnly}
-            onChange={(e) => setShowReviewLaterOnly(e.target.checked)}
-          />
-          Show review-later only
-        </label>
+            <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(520px, 700px) minmax(340px, 1fr)",
+          gap: 16,
+          alignItems: "stretch",
+          marginBottom: 12,
+        }}
+      >
+  
+        <TopActionGrid
+          hasRows={rowsWithWarnings.length > 0}
+          hasSelectedRows={selectedIds.length > 0}
+          onUpload={handleUpload}
+          onExportCsv={exportStandardCsv}
+          onExportDebugCsv={exportDebugCsv}
+          onExportSelectedCsv={exportSelectedCsv}
+          onExportSelectedDebugCsv={exportSelectedCsv}
+          onExportAppState={exportAppState}
+          onImportAppState={importAppState}
+          onAddChangelogEntry={addChangelogEntry}
+          onDeleteSelected={deleteSelected}
+          onMarkSelectedWin={() => setWinStatusForSelected("Y")}
+          onMarkSelectedLoss={() => setWinStatusForSelected("N")}
+          onClearAll={clearAll}
+        />
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showLowConfidenceOnly}
-            onChange={(e) => setShowLowConfidenceOnly(e.target.checked)}
-          />
-          Show low confidence only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showLikelyParserIssuesOnly}
-            onChange={(e) => setShowLikelyParserIssuesOnly(e.target.checked)}
-          />
-          Show likely parser issues only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showNeedsReviewOnly}
-            onChange={(e) => setShowNeedsReviewOnly(e.target.checked)}
-          />
-          Needs Review Only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showArchivedRows}
-            onChange={(e) => setShowArchivedRows(e.target.checked)}
-          />
-          Show Archived
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          Table view
-          <select
-            value={tableMode}
-            onChange={(e) => setTableMode(e.target.value)}
-            style={{ ...selectStyle, width: 150, padding: "6px 8px" }}
-          >
-            <option value="debug">Debug</option>
-            <option value="simplified">Simplified</option>
-          </select>
-        </label>
-
-        <span>Keyboard: W = win, L = loss, ↑/↓ = move rows</span>
+        <FilterBar
+          tableMode={tableMode}
+          setTableMode={setTableMode}
+          showReviewLaterOnly={showReviewLaterOnly}
+          setShowReviewLaterOnly={setShowReviewLaterOnly}
+          showLowConfidenceOnly={showLowConfidenceOnly}
+          setShowLowConfidenceOnly={setShowLowConfidenceOnly}
+          showLikelyParserIssuesOnly={showLikelyParserIssuesOnly}
+          setShowLikelyParserIssuesOnly={setShowLikelyParserIssuesOnly}
+          showNeedsReviewOnly={showNeedsReviewOnly}
+          setShowNeedsReviewOnly={setShowNeedsReviewOnly}
+          showArchivedRows={showArchivedRows}
+          setShowArchivedRows={setShowArchivedRows}
+          reviewMode={reviewMode}
+          setReviewMode={setReviewMode}
+          counts={counts}
+        />
       </div>
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "minmax(420px, 1fr) 320px",
+    gap: 16,
+    alignItems: "stretch",
+    marginBottom: 12,
+  }}
+>
+  <UploadDropZone onFiles={handleUpload} />
+  <ReviewLegend />
+</div>
+
+<UploadBatchStatus
+  batches={uploadBatches}
+  onClearHistory={clearUploadHistory}
+/>
 
       {saveNotice && <div style={noticeStyle}>{saveNotice}</div>}
       {processing && <div style={noticeStyle}>{processingMessage || "Reading images..."}</div>}
 
-      <div style={{ marginTop: 18, marginBottom: 12, color: "#000" }}>
-        Rows in review: <strong>{rowsWithWarnings.length}</strong> | Visible: <strong>{visibleRows.length}</strong>
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          marginBottom: 16,
-          padding: 12,
-          border: "1px solid #ddd",
-          borderRadius: 6,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: "bold", marginBottom: 8 }}>Changelog</div>
-        <div style={{ display: "grid", gap: 4 }}>
-          {changelog.map((entry, index) => (
-            <div key={`${entry}-${index}`}>{entry}</div>
-          ))}
-        </div>
-      </div>
-
-      {selectedIds.length > 0 && (
+         {selectedIds.length > 0 && (
         <div
           style={{
             marginTop: 16,
@@ -1424,6 +1567,227 @@ export default function Home() {
           </div>
         </div>
       )}
+          {selectedRow && (
+        <div
+          style={{
+            marginTop: 24,
+            marginBottom: 0,
+            padding: 16,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
+
+          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
+          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewResolved",
+                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
+              Mark Win + Next
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
+              Mark Loss + Next
+            </button>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewLater",
+                  selectedRow.reviewLater === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
+            </button>
+            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
+              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
+            </button>
+            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
+              Merge Duplicates Into This Row
+            </button>
+            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
+              Prev Row
+            </button>
+            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
+              Next Row
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "240px 1fr",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontWeight: "bold" }}>Account Owner</label>
+            <select
+              value={selectedRow.accountOwner || "Me"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
+              style={selectStyle}
+            >
+              {ACCOUNT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Type</label>
+            <select
+              value={selectedRow.betType || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
+            <select
+              value={selectedRow.betSourceTag || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_SOURCE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Win</label>
+            <select
+              value={selectedRow.win || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">--</option>
+              <option value="Y">Y</option>
+              <option value="N">N</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
+            <select
+              value={selectedRow.bonusBet || "N"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="N">N</option>
+              <option value="Y">Y</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
+            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
+            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
+            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
+            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
+
+            {editorFields.map(([key, label]) => (
+              <div key={key} style={{ display: "contents" }}>
+                <label style={{ fontWeight: "bold" }}>{label}</label>
+                <input
+                  type="text"
+                  value={selectedRow[key] || ""}
+                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+
+            <label style={{ fontWeight: "bold" }}>Image</label>
+            <div>
+              {selectedRow.sourceImageUrl ? (
+                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={selectedRow.sourceImageUrl}
+                    alt={selectedRow.sourceFileName}
+                    style={{
+                      maxWidth: 260,
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      border: "1px solid #ccc",
+                      borderRadius: 6,
+                    }}
+                  />
+                </a>
+              ) : (
+                <div>No image in session</div>
+              )}
+            </div>
+
+            <label style={{ fontWeight: "bold" }}>Review Notes</label>
+            <textarea
+              value={selectedRow.reviewNotes || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
+              style={textAreaStyle}
+            />
+
+            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
+            <textarea
+              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
+              readOnly
+              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
+            />
+
+            <label style={{ fontWeight: "bold" }}>OCR Text</label>
+            <div>
+              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
+                Copy OCR
+              </button>
+              <textarea
+                value={selectedRow.sourceText || ""}
+                readOnly
+                style={{ ...textAreaStyle, minHeight: 220 }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          marginTop: 28,
+          marginBottom: 8,
+          padding: 12,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: "bold", marginBottom: 8 }}>Changelog</div>
+        <div style={{ display: "grid", gap: 4 }}>
+          {changelog.map((entry, index) => (
+            <div key={`${entry}-${index}`}>{entry}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

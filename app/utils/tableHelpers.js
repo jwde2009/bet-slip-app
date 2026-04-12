@@ -13,6 +13,13 @@ export function getDisplayedBookmaker(row) {
   return row.accountOwner === "Wife" ? `C-${base}` : base;
 }
 
+export function getSortableBookmaker(row) {
+  return String(getDisplayedBookmaker(row) || "")
+    .replace(/^C-/, "")
+    .trim()
+    .toLowerCase();
+}
+
 export function computeConfidence(row) {
   let score = 0;
 
@@ -71,17 +78,28 @@ export function makeDuplicateKey(row) {
   ].join("|");
 }
 
+function isNumericLike(value) {
+  const str = String(value ?? "").trim();
+  if (!str) return false;
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) return false;
+  const cleaned = str.replace(/[,%$]/g, "");
+  return /^[-+]?\d*\.?\d+$/.test(cleaned);
+}
+
 export function compareValues(a, b, direction = "asc") {
   const dir = direction === "desc" ? -1 : 1;
-  const aNum = Number(String(a).replace(/[^\d.-]/g, ""));
-  const bNum = Number(String(b).replace(/[^\d.-]/g, ""));
-  const aIsNum = String(a).trim() !== "" && Number.isFinite(aNum);
-  const bIsNum = String(b).trim() !== "" && Number.isFinite(bNum);
 
-  if (aIsNum && bIsNum) return (aNum - bNum) * dir;
+  const aStr = String(a ?? "").trim();
+  const bStr = String(b ?? "").trim();
+
+  if (isNumericLike(aStr) && isNumericLike(bStr)) {
+    const aNum = Number(aStr.replace(/[,%$]/g, ""));
+    const bNum = Number(bStr.replace(/[,%$]/g, ""));
+    return (aNum - bNum) * dir;
+  }
 
   return (
-    String(a || "").localeCompare(String(b || ""), undefined, {
+    aStr.localeCompare(bStr, undefined, {
       numeric: true,
       sensitivity: "base",
     }) * dir
@@ -91,15 +109,22 @@ export function compareValues(a, b, direction = "asc") {
 export function getSortableValue(row, key) {
   switch (key) {
     case "bookmaker":
-      return getDisplayedBookmaker(row);
+      return getSortableBookmaker(row);
+    case "accountOwner":
     case "owner":
-      return row.accountOwner;
+      return String(row.accountOwner || "").trim().toLowerCase();
     case "qa":
-      return row.likelyParserIssue === "Y" ? "Check" : "";
+    case "likelyParserIssue":
+      return row.likelyParserIssue === "Y" ? "check" : "";
     case "warnings":
-      return [row.parseWarning || "", row.duplicateWarning || ""].join(" ");
+      return [row.parseWarning || "", row.duplicateWarning || ""]
+        .join(" ")
+        .trim()
+        .toLowerCase();
+    case "confidenceFlag":
+      return String(row.confidenceFlag || "").trim().toLowerCase();
     default:
-      return row[key] || "";
+      return String(row[key] || "").trim().toLowerCase();
   }
 }
 

@@ -65,7 +65,20 @@ function getLeagueOptionsForRow(row) {
     return ["", "Tennis"];
   }
 
-  return ["", "NBA", "NCAAM", "NCAAW", "NFL", "MLB", "NHL", "Soccer", "MMA", "Tennis", "Baseball", "Multi"];
+  return [
+    "",
+    "NBA",
+    "NCAAM",
+    "NCAAW",
+    "NFL",
+    "MLB",
+    "NHL",
+    "Soccer",
+    "MMA",
+    "Tennis",
+    "Baseball",
+    "Multi",
+  ];
 }
 
 export default function ReviewTable({
@@ -85,7 +98,6 @@ export default function ReviewTable({
   handleRowFieldChange,
   tableMode = "debug",
   getRowAttentionLevel,
-  isMobile = false,
 }) {
   const [hoverPreview, setHoverPreview] = useState({
     rowId: "",
@@ -96,11 +108,9 @@ export default function ReviewTable({
     x: 0,
     y: 0,
   });
-
-    const [previewZoomed, setPreviewZoomed] = useState(false);
-  const [previewZoomOrigin, setPreviewZoomOrigin] = useState({ x: "50%", y: "50%" });
-  const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
-
+  const [pulseRowId, setPulseRowId] = useState(null);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
+  const [previewZoomOrigin, setPreviewZoomOrigin] = useState({ x: "50%", y: "0%" });
   const [dragState, setDragState] = useState({
     dragging: false,
     offsetX: 0,
@@ -108,7 +118,17 @@ export default function ReviewTable({
   });
 
   const imageScrollRef = useRef(null);
+useEffect(() => {
+  if (!selectedRowId) return;
 
+  setPulseRowId(selectedRowId);
+
+  const timeout = setTimeout(() => {
+    setPulseRowId(null);
+  }, 450);
+
+  return () => clearTimeout(timeout);
+}, [selectedRowId]);
   const closeHoverPreview = () => {
     setHoverPreview({
       rowId: "",
@@ -120,25 +140,20 @@ export default function ReviewTable({
       y: 0,
     });
     setPreviewZoomed(false);
-    setPreviewZoomOrigin({ x: "50%", y: "50%" });
+    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+    if (imageScrollRef.current) {
+      imageScrollRef.current.scrollTop = 0;
+    }
   };
 
-const getPreviewPositionFromElement = () => {
-  const margin = 20;
-  const previewWidth = Math.min(1120, window.innerWidth - margin * 2);
-
-  // Position preview ~30% from left edge (works across laptop + desktop)
-  const desiredX = Math.floor(window.innerWidth * 0.3);
-
-  const x = Math.max(
-    margin,
-    Math.min(desiredX, window.innerWidth - previewWidth - margin)
-  );
-
-  const y = 20;
-
-  return { x, y };
-};
+  const getPreviewPosition = () => {
+    const margin = 20;
+    const previewWidth = Math.min(1120, window.innerWidth - margin * 2);
+    const desiredX = 500;
+    const x = Math.max(margin, Math.min(desiredX, window.innerWidth - previewWidth - margin));
+    const y = 20;
+    return { x, y };
+  };
 
   useEffect(() => {
     if (!dragState.dragging) return;
@@ -167,7 +182,7 @@ const getPreviewPositionFromElement = () => {
     };
   }, [dragState]);
 
-    function beginPreviewDrag(e) {
+  function beginPreviewDrag(e) {
     if (!hoverPreview.locked) return;
 
     const interactive = e.target.closest("button, input, select, textarea, label");
@@ -175,16 +190,12 @@ const getPreviewPositionFromElement = () => {
 
     e.preventDefault();
 
-    setDragState((prev) => ({
-      ...prev,
+    setDragState({
       dragging: true,
-      resizing: false,
       offsetX: e.clientX - hoverPreview.x,
       offsetY: e.clientY - hoverPreview.y,
-    }));
+    });
   }
-
-
 
   const simplifiedColumns = [
     { key: "select", label: "", sortable: false },
@@ -252,7 +263,7 @@ const getPreviewPositionFromElement = () => {
 
   const previewRow = rows.find((row) => row.id === hoverPreview.rowId) || null;
 
-    const previewNeedsReview =
+  const previewNeedsReview =
     !!previewRow &&
     (
       previewRow.likelyParserIssue === "Y" ||
@@ -346,9 +357,12 @@ const getPreviewPositionFromElement = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 setPreviewZoomed(false);
-                setPreviewZoomOrigin({ x: "50%", y: "50%" });
+                setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                if (imageScrollRef.current) {
+                  imageScrollRef.current.scrollTop = 0;
+                }
 
-                const position = getPreviewPositionFromElement();
+                const position = getPreviewPosition();
 
                 setHoverPreview((prev) => {
                   const sameRow = prev.rowId === row.id;
@@ -408,7 +422,48 @@ const getPreviewPositionFromElement = () => {
         </td>
       );
     }
+    if (colKey === "confidenceFlag") {
+      const confidence = String(row.confidenceFlag || "").trim().toLowerCase();
 
+      let bg = "#e5e7eb";
+      let color = "#374151";
+
+      if (confidence === "high") {
+        bg = "#166534";
+        color = "#ecfdf5";
+      } else if (confidence === "medium") {
+        bg = "#ca8a04";
+        color = "#fefce8";
+      } else if (confidence === "low") {
+        bg = "#dc2626";
+        color = "#fef2f2";
+      }
+
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.confidenceFlag ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 68,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontWeight: 800,
+                fontSize: 12,
+                background: bg,
+                color,
+              }}
+            >
+              {row.confidenceFlag}
+            </span>
+          ) : (
+            ""
+          )}
+        </td>
+      );
+    }
     if (colKey === "likelyParserIssue") {
       return (
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
@@ -470,455 +525,462 @@ const getPreviewPositionFromElement = () => {
   };
 
   return (
-  <div style={{ marginTop: 20 }}>
-    {hoverPreview.visible && hoverPreview.src && (
-      <div
-        onMouseDown={beginPreviewDrag}
-        style={{
-          position: "fixed",
-          left: hoverPreview.x,
-          top: hoverPreview.y,
-          zIndex: 9999,
-          pointerEvents: hoverPreview.locked ? "auto" : "none",
-          background: "#fff",
-          border: "1px solid #ccc",
-          borderRadius: 12,
-          boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
-          padding: 12,
-          width: 1120,
-          maxWidth: "92vw",
-          maxHeight: "85vh",
-          overflow: "hidden",
-        }}
-      >
-        {/* HEADER */}
+    <div style={{ marginTop: 20 }}>
+      {hoverPreview.visible && hoverPreview.src && (
         <div
+          onMouseDown={beginPreviewDrag}
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 10,
-            gap: 12,
-            cursor: hoverPreview.locked ? "move" : "default",
-            userSelect: "none",
+            position: "fixed",
+            left: hoverPreview.x,
+            top: hoverPreview.y,
+            zIndex: 9999,
+            pointerEvents: hoverPreview.locked ? "auto" : "none",
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
+            padding: 12,
+            width: 1120,
+            maxWidth: "92vw",
+            maxHeight: "85vh",
+            overflow: "hidden",
           }}
         >
-          <div style={{ fontWeight: 700 }}>
-            {hoverPreview.locked ? "Review Panel" : "Preview"}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+              gap: 12,
+              cursor: hoverPreview.locked ? "move" : "default",
+              userSelect: "none",
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>
+              {hoverPreview.locked ? "Review Panel" : "Preview"}
+            </div>
+
+            {hoverPreview.locked && (
+              <button onClick={closeHoverPreview} style={smallButtonStyle}>
+                Close
+              </button>
+            )}
           </div>
 
-          {hoverPreview.locked && (
-            <button onClick={closeHoverPreview} style={smallButtonStyle}>
-              Close
-            </button>
-          )}
-        </div>
-
-                <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "360px minmax(0, 1fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          {/* LEFT SIDE: EDITABLE REVIEW PANEL */}
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <strong>Selection:</strong>{" "}
-              <input
-                value={previewRow?.selection || ""}
-                onChange={(e) =>
-                  previewRow &&
-                  handleRowFieldChange(previewRow.id, "selection", e.target.value)
-                }
-                style={{
-                  marginLeft: 8,
-                  width: "70%",
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                }}
-              />
-            </div>
-
-            <div>
-              <strong>League:</strong>{" "}
-              <select
-                value={previewRow?.sportLeague || ""}
-                onChange={(e) =>
-                  previewRow &&
-                  handleRowFieldChange(previewRow.id, "sportLeague", e.target.value)
-                }
-                style={{
-                  marginLeft: 8,
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                }}
-              >
-                {getLeagueOptionsForRow(previewRow || {}).map((league) => (
-                  <option key={league || "blank"} value={league}>
-                    {league || "Select league"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <strong>Stake:</strong>{" "}
-              <input
-                value={previewRow?.stake || ""}
-                onChange={(e) =>
-                  previewRow &&
-                  handleRowFieldChange(previewRow.id, "stake", e.target.value)
-                }
-                style={{
-                  marginLeft: 8,
-                  width: 120,
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                }}
-              />
-            </div>
-
-            <div>
-              <strong>Odds:</strong>{" "}
-              <input
-                value={previewRow?.oddsUS || ""}
-                onChange={(e) =>
-                  previewRow &&
-                  handleRowFieldChange(previewRow.id, "oddsUS", e.target.value)
-                }
-                style={{
-                  marginLeft: 8,
-                  width: 120,
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                  background:
-                    previewRow?.oddsSource === "Calculated" ? "#fee2e2" : "#fff",
-                  color:
-                    previewRow?.oddsSource === "Calculated" ? "#991b1b" : "#111827",
-                  fontWeight:
-                    previewRow?.oddsSource === "Calculated" ? 700 : 400,
-                }}
-              />
-            </div>
-
-            <div>
-              <strong>Payout:</strong>{" "}
-              <input
-                value={previewRow?.payout || ""}
-                onChange={(e) =>
-                  previewRow &&
-                  handleRowFieldChange(previewRow.id, "payout", e.target.value)
-                }
-                style={{
-                  marginLeft: 8,
-                  width: 120,
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                  background:
-                    !previewRow?.payout && previewRow?.oddsUS
-                      ? "#fee2e2"
-                      : "#fff",
-                }}
-              />
-            </div>
-
-            {previewNeedsReview && (
-              <div
-                style={{
-                  padding: "8px 10px",
-                  border: "1px solid #fecaca",
-                  borderRadius: 6,
-                  background: "#fee2e2",
-                  color: "#991b1b",
-                  fontWeight: 700,
-                }}
-              >
-                Needs Review
-              </div>
-            )}
-
-            {hoverPreview.locked && previewRow && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-                <button
-                  onClick={() =>
-                    handleRowFieldChange(
-                      previewRow.id,
-                      "reviewLater",
-                      previewRow.reviewLater === "Y" ? "N" : "Y"
-                    )
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "360px minmax(0, 1fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <strong>Selection:</strong>{" "}
+                <input
+                  value={previewRow?.selection || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "selection", e.target.value)
                   }
-                  style={smallButtonStyle}
-                >
-                  Review Later
-                </button>
-
-                <button
-                  onClick={() => autoFillCalculatedFields(previewRow)}
-                  style={smallButtonStyle}
-                >
-                  Auto Fill Odds / Payout
-                </button>
-
-                <button
-                  onClick={() => {
-                    handleRowFieldChange(previewRow.id, "reviewResolved", "Y");
-                    handleRowFieldChange(previewRow.id, "reviewLater", "N");
+                  style={{
+                    marginLeft: 8,
+                    width: "70%",
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
                   }}
-                  style={smallButtonStyle}
-                >
-                  Mark Complete
-                </button>
-
-                <button
-                  onClick={() => setWinStatusForRow(previewRow.id, "Y", false)}
-                  style={smallButtonStyle}
-                >
-                  Win
-                </button>
-
-                <button
-                  onClick={() => setWinStatusForRow(previewRow.id, "N", false)}
-                  style={smallButtonStyle}
-                >
-                  Loss
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeHoverPreview();
-                    deleteRow(previewRow.id);
-                  }}
-                  style={smallButtonStyle}
-                >
-                  Delete
-                </button>
+                />
               </div>
-            )}
-          </div>
 
-          {/* RIGHT SIDE: IMAGE VIEWER */}
-        <div
-  ref={imageScrollRef}
-  style={{
-    maxHeight: "80vh",
-    height: previewZoomed ? "70vh" : "auto",
-    overflowY: previewZoomed ? "auto" : "hidden",
-    overflowX: "hidden",
-    border: "1px solid #e5e7eb",
-    borderRadius: 6,
-    background: "#fff",
-  }}
->
-            <img
-              src={hoverPreview.src}
-              alt={hoverPreview.alt}
-              onClick={(e) => {
-  if (!hoverPreview.locked) return;
+              <div>
+                <strong>League:</strong>{" "}
+                <select
+                  value={previewRow?.sportLeague || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "sportLeague", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                >
+                  {getLeagueOptionsForRow(previewRow || {}).map((league) => (
+                    <option key={league || "blank"} value={league}>
+                      {league || "Select league"}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-  // 🔥 ZOOM OUT
-  if (previewZoomed) {
-    setPreviewZoomed(false);
-    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+              <div>
+                <strong>Stake:</strong>{" "}
+                <input
+                  value={previewRow?.stake || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "stake", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+              </div>
 
-    // 🔥 SCROLL RESET (THIS IS THE PART YOU ASKED ABOUT)
-    if (imageScrollRef.current) {
-      imageScrollRef.current.scrollTop = 0;
-    }
+              <div>
+                <strong>Odds:</strong>{" "}
+                <input
+                  value={previewRow?.oddsUS || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "oddsUS", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      previewRow?.oddsSource === "Calculated" ? "#fee2e2" : "#fff",
+                    color:
+                      previewRow?.oddsSource === "Calculated" ? "#991b1b" : "#111827",
+                    fontWeight:
+                      previewRow?.oddsSource === "Calculated" ? 700 : 400,
+                  }}
+                />
+              </div>
 
-    return;
-  }
+              <div>
+                <strong>Payout:</strong>{" "}
+                <input
+                  value={previewRow?.payout || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "payout", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      !previewRow?.payout && previewRow?.oddsUS ? "#fee2e2" : "#fff",
+                  }}
+                />
+              </div>
 
-  // 🔥 ZOOM IN
-  const rect = e.currentTarget.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width) * 100;
-  const y = ((e.clientY - rect.top) / rect.height) * 100;
+              {previewNeedsReview && (
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    border: "1px solid #fecaca",
+                    borderRadius: 6,
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                    fontWeight: 700,
+                  }}
+                >
+                  Needs Review
+                </div>
+              )}
 
-  setPreviewZoomOrigin({
-    x: `${x}%`,
-    y: `${y}%`,
-  });
+              {hoverPreview.locked && previewRow && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                  <button
+                    onClick={() =>
+                      handleRowFieldChange(
+                        previewRow.id,
+                        "reviewLater",
+                        previewRow.reviewLater === "Y" ? "N" : "Y"
+                      )
+                    }
+                    style={smallButtonStyle}
+                  >
+                    Review Later
+                  </button>
 
-  setPreviewZoomed(true);
-}}
+                  <button
+                    onClick={() => autoFillCalculatedFields(previewRow)}
+                    style={smallButtonStyle}
+                  >
+                    Auto Fill Odds / Payout
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleRowFieldChange(previewRow.id, "reviewResolved", "Y");
+                      handleRowFieldChange(previewRow.id, "reviewLater", "N");
+                    }}
+                    style={smallButtonStyle}
+                  >
+                    Mark Reviewed
+                  </button>
+
+                  <button
+                    onClick={() => setWinStatusForRow(previewRow.id, "Y", false)}
+                    style={smallButtonStyle}
+                  >
+                    Win
+                  </button>
+
+                  <button
+                    onClick={() => setWinStatusForRow(previewRow.id, "N", false)}
+                    style={smallButtonStyle}
+                  >
+                    Loss
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      closeHoverPreview();
+                      deleteRow(previewRow.id);
+                    }}
+                    style={smallButtonStyle}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              ref={imageScrollRef}
               style={{
-  width: "100%",
-  height: "auto",
-  display: "block",
-  borderRadius: 6,
-  cursor: hoverPreview.locked
-    ? previewZoomed
-      ? "zoom-out"
-      : "zoom-in"
-    : "default",
+                maxHeight: "80vh",
+                height: previewZoomed ? "70vh" : "auto",
+                overflowY: previewZoomed ? "auto" : "hidden",
+                overflowX: "hidden",
+                border: "1px solid #e5e7eb",
+                borderRadius: 6,
+                background: "#fff",
+              }}
+            >
+              <img
+                src={hoverPreview.src}
+                alt={hoverPreview.alt}
+                onClick={(e) => {
+                  if (!hoverPreview.locked) return;
 
-  // 🔥 NEW BEHAVIOR
-  transform: previewZoomed ? "scale(1)" : "scale(0.45)",
-  transformOrigin: previewZoomed
-  ? `${previewZoomOrigin.x} ${previewZoomOrigin.y}`
-  : "50% 0%",
+                  if (previewZoomed) {
+                    setPreviewZoomed(false);
+                    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                    if (imageScrollRef.current) {
+                      imageScrollRef.current.scrollTop = 0;
+                    }
+                    return;
+                  }
 
-  transition: "transform 0.15s ease",
-}}
-            />
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+                  setPreviewZoomOrigin({
+                    x: `${x}%`,
+                    y: `${y}%`,
+                  });
+
+                  setPreviewZoomed(true);
+                }}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                  borderRadius: 6,
+                  cursor: hoverPreview.locked
+                    ? previewZoomed
+                      ? "zoom-out"
+                      : "zoom-in"
+                    : "default",
+                  transform: previewZoomed ? "scale(1)" : "scale(0.45)",
+                  transformOrigin: previewZoomed
+                    ? `${previewZoomOrigin.x} ${previewZoomOrigin.y}`
+                    : "50% 0%",
+                  transition: "transform 0.15s ease",
+                }}
+              />
+            </div>
           </div>
         </div>
-        
-      </div>
-    )}
+      )}
 
-    <h3 style={{ color: "#000" }}>Review Queue</h3>
+      <h3 style={{ color: "#000" }}>Review Queue</h3>
 
-    <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
-      <table
-        style={{
-          borderCollapse: "separate",
-          borderSpacing: 0,
-          width: "100%",
-          backgroundColor: "#fff",
-          tableLayout: "fixed",
-        }}
-      >
-        <colgroup>
-          {reviewColumns.map((col) => (
-            <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
-          ))}
-        </colgroup>
+      <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
+        <table
+          style={{
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            width: "100%",
+            backgroundColor: "#fff",
+            tableLayout: "fixed",
+          }}
+        >
+          <colgroup>
+            {reviewColumns.map((col) => (
+              <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
+            ))}
+          </colgroup>
 
-        <thead>
-          <tr>
-            {reviewColumns.map((col, idx) => {
-              const isSorted = sortConfig.key === col.key;
-              const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
+          <thead>
+            <tr>
+              {reviewColumns.map((col, idx) => {
+                const isSorted = sortConfig.key === col.key;
+                const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
 
-              return (
-                <th
-                  key={col.key}
-                  style={{
-                    borderRight: "1px solid #d1d5db",
-                    borderBottom: "2px solid #9ca3af",
-                    padding: 0,
-                    background: "#e5e7eb",
-                    color: "#111827",
-                    textAlign: "left",
-                    whiteSpace: "nowrap",
-                    fontWeight: 700,
-                    position: "relative",
-                  }}
-                >
-                  <div
+                return (
+                  <th
+                    key={col.key}
                     style={{
+                      borderRight: "1px solid #d1d5db",
+                      borderBottom: "2px solid #9ca3af",
+                      padding: 0,
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      textAlign: "left",
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
                       position: "relative",
-                      minHeight: 42,
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (col.sortable) handleSort(col.key);
-                      }}
+                    <div
                       style={{
-                        width: "100%",
-                        border: "none",
-                        background: "transparent",
-                        textAlign: "left",
-                        padding: "10px 18px 10px 12px",
-                        fontWeight: 700,
-                        color: "#111827",
-                        cursor: col.sortable ? "pointer" : "default",
+                        position: "relative",
+                        minHeight: 42,
                       }}
                     >
-                      {idx === 0 ? (
-                        <input
-                          type="checkbox"
-                          checked={allVisibleSelected}
-                          onChange={toggleSelectAllVisible}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        `${col.label}${sortArrow}`
-                      )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (col.sortable) handleSort(col.key);
+                        }}
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          background: "transparent",
+                          textAlign: "left",
+                          padding: "10px 18px 10px 12px",
+                          fontWeight: 700,
+                          color: "#111827",
+                          cursor: col.sortable ? "pointer" : "default",
+                        }}
+                      >
+                        {idx === 0 ? (
+                          <input
+                            type="checkbox"
+                            checked={allVisibleSelected}
+                            onChange={toggleSelectAllVisible}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          `${col.label}${sortArrow}`
+                        )}
+                      </button>
 
-                    <div
-                      onMouseDown={(e) => startResize(e, col.key)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        right: 0,
-                        width: 14,
-                        height: "100%",
-                        cursor: "col-resize",
-                        zIndex: 2,
-                        background: "transparent",
-                      }}
-                    />
-                  </div>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
+                      <div
+                        onMouseDown={(e) => startResize(e, col.key)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 14,
+                          height: "100%",
+                          cursor: "col-resize",
+                          zIndex: 2,
+                          background: "transparent",
+                        }}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
 
-        <tbody>
-          {sortedRows.map((row, index) => {
-            const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
-            const attentionLevel = getRowAttentionLevel ? getRowAttentionLevel(row) : "";
-            const isResolved = row.reviewResolved === "Y";
+          <tbody>
+            {sortedRows.map((row, index) => {
+              const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
+              const attentionLevel = getRowAttentionLevel ? getRowAttentionLevel(row) : "";
+              const isResolved = row.reviewResolved === "Y";
 
-            const needsReview =
-              row.likelyParserIssue === "Y" ||
-              !row.sportLeague ||
-              !row.oddsUS ||
-              row.oddsSource === "Calculated";
+              const needsReview =
+                row.likelyParserIssue === "Y" ||
+                !row.sportLeague ||
+                !row.oddsUS ||
+                row.oddsSource === "Calculated";
 
-            const rowBg =
-              row.id === selectedRowId
-                ? "#f7fbff"
-                : isResolved
-                ? "#f1f8e9"
-                : attentionLevel === "duplicate"
-                ? "#fdecea"
-                : needsReview
-                ? "#fff8e1"
-                : zebra;
+              const isSelected = row.id === selectedRowId;
 
-            return (
-              <tr
-                key={row.id}
-                onClick={() => setSelectedRowId(row.id)}
-                style={{
+              const rowBg =
+                isSelected
+                  ? "#e0f2fe" // stronger blue
+                  : isResolved
+                  ? "#f1f8e9"
+                  : attentionLevel === "duplicate"
+                  ? "#fdecea"
+                  : needsReview
+                  ? "#fff8e1"
+                  : zebra;
+
+              return (
+                <tr
+                  key={row.id}
+                  onClick={() => setSelectedRowId(row.id)}
+                  style={{
                   backgroundColor: rowBg,
                   cursor: "pointer",
-                  outline:
-                    row.id === selectedRowId
-                      ? "2px solid #93c5fd"
-                      : isResolved
-                      ? "2px solid #a3d9a5"
-                      : attentionLevel === "duplicate"
-                      ? "2px solid #dc2626"
-                      : needsReview
-                      ? "2px solid #f0b429"
-                      : "none",
+
+                  outline: isSelected
+                    ? "3px solid #0284c7"
+                    : isResolved
+                    ? "2px solid #a3d9a5"
+                    : attentionLevel === "duplicate"
+                    ? "2px solid #dc2626"
+                    : needsReview
+                    ? "2px solid #f0b429"
+                    : "none",
+
                   outlineOffset: "-2px",
+
+                  borderLeft: isSelected
+                    ? "6px solid #0284c7"
+                    : needsReview
+                    ? "6px solid #f0b429"
+                    : attentionLevel === "duplicate"
+                    ? "6px solid #dc2626"
+                    : "none",
+
+                  // 🔥 Glow pulse effect
+                  boxShadow:
+                    pulseRowId === row.id
+                      ? "0 0 0 6px rgba(2,132,199,0.45)"
+                      : isSelected
+                      ? "0 0 0 2px rgba(2,132,199,0.2)"
+                      : "none",
+
+                  transition: "box-shadow 0.25s ease",
                 }}
-              >
-                {reviewColumns.map((col) => (
-                  renderCell(row, rowBg, col.key, col.key)
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                >
+                  {reviewColumns.map((col) => (
+                    renderCell(row, rowBg, col.key, col.key)
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
-);
+  );
 }
