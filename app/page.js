@@ -69,18 +69,28 @@ const BET_SOURCE_OPTIONS = [
 const ACCOUNT_OPTIONS = ["Me", "Wife"];
 
 function getRowAttentionLevel(row) {
-  if (!row || row.reviewResolved === "Y") return "";
+  if (!row) return "";
 
   const parseWarningText = String(row.parseWarning || "").toLowerCase();
   const duplicateWarningText = String(row.duplicateWarning || "").toLowerCase();
   const confidence = String(row.confidenceFlag || "").toLowerCase();
 
+  const hasCriticalMoneyIssue =
+    !row.stake ||
+    !row.oddsUS ||
+    parseWarningText.includes("stake_missing") ||
+    parseWarningText.includes("odds_missing") ||
+    parseWarningText.includes("payout_missing");
+
+  if (row.reviewResolved === "Y") {
+    return hasCriticalMoneyIssue ? "resolved-critical" : "resolved";
+  }
+
   if (duplicateWarningText.includes("duplicate")) return "duplicate";
 
   if (
     confidence === "low" ||
-    parseWarningText.includes("stake_missing") ||
-    parseWarningText.includes("payout_missing") ||
+    hasCriticalMoneyIssue ||
     parseWarningText.includes("selection_missing") ||
     parseWarningText.includes("fixture_missing") ||
     parseWarningText.includes("no_bet_date_detected") ||
@@ -308,11 +318,13 @@ export default function Home() {
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
   const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
+  const [showLegacySelectedRowEditor, setShowLegacySelectedRowEditor] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
   const [tableMode, setTableMode] = useState("debug");
   const [uploadBatches, setUploadBatches] = useState([]);
   const [savedFilterView, setSavedFilterView] = useState("default");
+  const [showHedgesOnly, setShowHedgesOnly] = useState(false);
   const [columnWidths, setColumnWidths] = useState({
     select: 52,
     edit: 84,
@@ -388,14 +400,20 @@ export default function Home() {
   }, [rows]);
   
   function rowNeedsReview(row) {
+    const parseWarningText = String(row?.parseWarning || "").toLowerCase();
+
     return (
       row.reviewResolved !== "Y" &&
       (
         row.likelyParserIssue === "Y" ||
         !row.sportLeague ||
         !row.oddsUS ||
+        !row.stake ||
         row.oddsSource === "Calculated" ||
-        !!row.parseWarning
+        !!row.parseWarning ||
+        parseWarningText.includes("stake_missing") ||
+        parseWarningText.includes("selection_missing") ||
+        parseWarningText.includes("fixture_missing")
       )
     );
   }
@@ -421,6 +439,7 @@ export default function Home() {
   showLowConfidenceOnly,
   showLikelyParserIssuesOnly,
   showNeedsReviewOnly,
+  showHedgesOnly,
   reviewMode,
 ]);
 
@@ -683,7 +702,7 @@ function addLikelyHedgeFlags(rowsInput) {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedRowId, visibleRows]);
 
-  function createUploadBatch(files) {
+ function createUploadBatch(files, batchBookmaker) {
   const id = crypto.randomUUID();
 
   let folder = "";
@@ -712,6 +731,7 @@ function addLikelyHedgeFlags(rowsInput) {
     fileNames: files.map((file) => file.name),
     folder,
     parentFolder,
+    uploadBookmaker: batchBookmaker,
     createdAt: Date.now(),
   };
 
@@ -787,88 +807,120 @@ function addLikelyHedgeFlags(rowsInput) {
   }
 
   const handleUpload = async (fileList) => {
-  const files = Array.from(fileList || []).filter((file) =>
-    String(file.type || "").startsWith("image/")
-  );
-  if (files.length === 0) return;
+    const files = Array.from(fileList || []).filter((file) =>
+      String(file.type || "").startsWith("image/")
+    );
+    if (files.length === 0) return;
 
-  const batchId = createUploadBatch(files);
-  showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+    const batchBookmaker = uploadBookmaker;
+    const batchOwner = uploadOwner;
 
-  setProcessing(true);
-  updateUploadBatch(batchId, { status: "processing" });
+    const batchId = createUploadBatch(files, batchBookmaker);
+    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
 
-  let errorCount = 0;
+    setProcessing(true);
+    setProcessingMessage(`Processing 0 of ${files.length}...`);
+    updateUploadBatch(batchId, { status: "processing" });
 
-  try {
-    const results = await Promise.all(
-      files.map(async (file) => {
-        let folder = "";
-        let parentFolder = "";
+    let errorCount = 0;
+    const newRows = [];
+    const concurrency = 3;
 
-        if (file.webkitRelativePath) {
-          const parts = file.webkitRelativePath.split("/");
+    async function processOneFile(file, index) {
+      let folder = "";
+      let parentFolder = "";
 
-          if (parts.length >= 2) {
-            folder = parts[parts.length - 2];
-          }
+      if (file.webkitRelativePath) {
+        const parts = file.webkitRelativePath.split("/");
 
-          if (parts.length >= 3) {
-            parentFolder = parts[parts.length - 3];
-          }
+        if (parts.length >= 2) {
+          folder = parts[parts.length - 2];
         }
 
-        try {
-          const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
-          const extractedText = result.data.text || "";
-          const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
-
-          return {
-            ...parsed,
-            folder,
-            parentFolder,
-            parserId: parsed.id || "",
-            id: crypto.randomUUID(),
-            accountOwner: uploadOwner,
-            sourceImageUrl: URL.createObjectURL(file),
-          };
-        } catch (error) {
-          console.error(error);
-          errorCount += 1;
-          return null;
+        if (parts.length >= 3) {
+          parentFolder = parts[parts.length - 3];
         }
-      })
-    );
+      }
 
-    const newRows = results.filter(Boolean);
+      try {
+        setProcessingMessage(`Processing ${index + 1} of ${files.length}: ${file.name}`);
 
-    setRows((prev) => [...prev, ...newRows]);
-    if (newRows[0]) setSelectedRowId(newRows[0].id);
+        const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
+        const extractedText = result.data.text || "";
+        const parsed = parseBetSlip(extractedText, file.name, batchBookmaker);
 
-    updateUploadBatch(batchId, {
-      status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
-      processedCount: files.length,
-      rowsCreated: newRows.length,
-      errorCount,
-    });
+        const forcedBookmaker =
+          batchBookmaker && batchBookmaker !== "Auto"
+            ? batchBookmaker
+            : parsed.bookmaker;
 
-    showNotice(
-      `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
-    );
-  } catch (error) {
-    console.error(error);
-    updateUploadBatch(batchId, {
-      status: "failed",
-      processedCount: files.length,
-      rowsCreated: 0,
-      errorCount: errorCount + 1,
-    });
-    showNotice("Could not process upload batch");
-  } finally {
-    setProcessing(false);
-    setProcessingMessage("");
-  }
-};
+        const row = enrichRow({
+          ...parsed,
+          bookmaker: forcedBookmaker,
+          folder,
+          parentFolder,
+          parserId: parsed.id || "",
+          id: crypto.randomUUID(),
+          accountOwner: batchOwner,
+          sourceImageUrl: URL.createObjectURL(file),
+        });
+
+        newRows.push(row);
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount: index + 1,
+          rowsCreated: newRows.length,
+          errorCount,
+        });
+      } catch (error) {
+        console.error(error);
+        errorCount += 1;
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount: index + 1,
+          rowsCreated: newRows.length,
+          errorCount,
+        });
+      }
+    }
+
+    try {
+      for (let i = 0; i < files.length; i += concurrency) {
+        const chunk = files.slice(i, i + concurrency);
+        await Promise.all(
+          chunk.map((file, offset) => processOneFile(file, i + offset))
+        );
+      }
+
+      setRows((prev) => [...prev, ...newRows]);
+      if (newRows[0]) setSelectedRowId(newRows[0].id);
+
+      updateUploadBatch(batchId, {
+        status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
+        processedCount: files.length,
+        rowsCreated: newRows.length,
+        errorCount,
+      });
+
+      showNotice(
+        `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
+      );
+    } catch (error) {
+      console.error(error);
+      updateUploadBatch(batchId, {
+        status: "failed",
+        processedCount: files.length,
+        rowsCreated: newRows.length,
+        errorCount: errorCount + 1,
+      });
+      showNotice("Could not process upload batch");
+    } finally {
+      setProcessing(false);
+      setProcessingMessage("");
+    }
+  };
 
   const handleRowFieldChange = (id, field, value) =>
     setRows((prev) =>
@@ -1007,6 +1059,14 @@ function addLikelyHedgeFlags(rowsInput) {
         "Bonus Bet",
         "Win",
         "Review Later",
+        "Likely Hedge",
+        "Auto Likely Hedge",
+        "Hedge Override",
+        "Hedge Quality",
+        "Hedge Partner Bookmaker",
+        "Hedge Stake",
+        "Hedge Profit Low",
+        "Hedge Profit High",
         "Market Detail",
         "Payout",
         "To Win",
@@ -1042,6 +1102,14 @@ function addLikelyHedgeFlags(rowsInput) {
         escapeCsv(row.bonusBet),
         escapeCsv(row.win),
         escapeCsv(row.reviewLater),
+        escapeCsv(row.likelyHedge),
+        escapeCsv(row.autoLikelyHedge),
+        escapeCsv(row.hedgeOverride),
+        escapeCsv(row.hedgeQuality),
+        escapeCsv(row.hedgePartnerBookmaker),
+        escapeCsv(row.hedgeStake),
+        escapeCsv(row.hedgeProfitLow),
+        escapeCsv(row.hedgeProfitHigh),
         escapeCsv(row.marketDetail),
         escapeCsv(row.payout),
         escapeCsv(row.toWin),
@@ -1430,6 +1498,8 @@ function addLikelyHedgeFlags(rowsInput) {
           setShowLikelyParserIssuesOnly={setShowLikelyParserIssuesOnly}
           showNeedsReviewOnly={showNeedsReviewOnly}
           setShowNeedsReviewOnly={setShowNeedsReviewOnly}
+          showHedgesOnly={showHedgesOnly}
+          setShowHedgesOnly={setShowHedgesOnly}
           showArchivedRows={showArchivedRows}
           setShowArchivedRows={setShowArchivedRows}
           reviewMode={reviewMode}
@@ -1494,7 +1564,7 @@ function addLikelyHedgeFlags(rowsInput) {
               setRows((prev) =>
                 prev.map((row) =>
                   selectedIds.includes(row.id)
-                    ? { ...row, reviewResolved: "Y", reviewLater: "N" }
+                    ? enrichRow({ ...row, reviewResolved: "Y", reviewLater: "N" })
                     : row
                 )
               );
@@ -1503,6 +1573,20 @@ function addLikelyHedgeFlags(rowsInput) {
             style={smallButtonStyle}
           >
             Mark Reviewed
+          </button>
+        </div>
+      )}
+
+      {selectedRow && (
+        <div style={{ marginTop: 12, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setShowLegacySelectedRowEditor((prev) => !prev)}
+            style={smallButtonStyle}
+          >
+            {showLegacySelectedRowEditor
+              ? "Hide Legacy Bottom Editor"
+              : "Show Legacy Bottom Editor"}
           </button>
         </div>
       )}
@@ -1525,11 +1609,11 @@ function addLikelyHedgeFlags(rowsInput) {
           handleRowFieldChange={handleRowFieldChange}
           tableMode={tableMode}
           getRowAttentionLevel={getRowAttentionLevel}
-          isMobile={typeof window !== "undefined" && window.innerWidth < 768}
+          rowNeedsReview={rowNeedsReview}
         />
       )}
 
-            {selectedRow && (
+            {showLegacySelectedRowEditor && selectedRow && (
         <div
           style={{
             marginTop: 24,

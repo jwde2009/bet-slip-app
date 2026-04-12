@@ -13,13 +13,15 @@ import {
 
 const cellStyle = {
   border: "1px solid #ccc",
-  padding: 8,
+  padding: "6px 8px",
   verticalAlign: "top",
   background: "#fff",
   color: "#000",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  fontSize: 13,
+  lineHeight: 1.25,
 };
 
 const smallButtonStyle = {
@@ -98,6 +100,7 @@ export default function ReviewTable({
   handleRowFieldChange,
   tableMode = "debug",
   getRowAttentionLevel,
+  rowNeedsReview,
 }) {
   const [hoverPreview, setHoverPreview] = useState({
     rowId: "",
@@ -115,6 +118,10 @@ export default function ReviewTable({
     dragging: false,
     offsetX: 0,
     offsetY: 0,
+  });
+  const [editingCell, setEditingCell] = useState({
+    rowId: "",
+    key: "",
   });
 
   const imageScrollRef = useRef(null);
@@ -210,6 +217,7 @@ useEffect(() => {
     { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
     { key: "stake", label: "Stake", sortable: true },
     { key: "oddsUS", label: "Odds", sortable: true },
+    { key: "likelyHedge", label: "Hedge", sortable: true },
   ];
 
   const debugColumns = [
@@ -236,6 +244,7 @@ useEffect(() => {
     { key: "live", label: "Live", sortable: true },
     { key: "bonusBet", label: "Bonus", sortable: true },
     { key: "reviewLater", label: "Review", sortable: true },
+    { key: "likelyHedge", label: "Hedge", sortable: true },
     { key: "warnings", label: "Warnings", sortable: true },
     { key: "actions", label: "Actions", sortable: false },
   ];
@@ -263,17 +272,60 @@ useEffect(() => {
 
   const previewRow = rows.find((row) => row.id === hoverPreview.rowId) || null;
 
-  const previewNeedsReview =
-    !!previewRow &&
+  const fallbackRowNeedsReview = (row) =>
+    !!row &&
     (
-      previewRow.likelyParserIssue === "Y" ||
-      !previewRow.sportLeague ||
-      !previewRow.oddsUS ||
-      previewRow.oddsSource === "Calculated" ||
-      String(previewRow.parseWarning || "").includes("stake_missing") ||
-      String(previewRow.parseWarning || "").includes("selection_missing") ||
-      String(previewRow.parseWarning || "").includes("fixture_missing")
+      row.reviewResolved !== "Y" &&
+      (
+        row.likelyParserIssue === "Y" ||
+        !row.sportLeague ||
+        !row.oddsUS ||
+        row.oddsSource === "Calculated" ||
+        String(row.parseWarning || "").includes("stake_missing") ||
+        String(row.parseWarning || "").includes("selection_missing") ||
+        String(row.parseWarning || "").includes("fixture_missing") ||
+        row.reviewLater === "Y"
+      )
     );
+
+  const reviewCheck = rowNeedsReview || fallbackRowNeedsReview;
+
+  const previewNeedsReview = !!previewRow && reviewCheck(previewRow);
+
+  function jumpToNextReviewRow(currentRowId) {
+    if (!rows?.length) return;
+
+    const currentIndex = rows.findIndex((row) => row.id === currentRowId);
+    if (currentIndex === -1) return;
+
+    let nextRowId = currentRowId;
+
+    for (let i = currentIndex + 1; i < rows.length; i += 1) {
+      if (reviewCheck(rows[i])) {
+        nextRowId = rows[i].id;
+        break;
+      }
+    }
+
+    if (nextRowId === currentRowId) {
+      for (let i = 0; i < currentIndex; i += 1) {
+        if (reviewCheck(rows[i])) {
+          nextRowId = rows[i].id;
+          break;
+        }
+      }
+    }
+
+    setSelectedRowId(nextRowId);
+
+    setHoverPreview((prev) => {
+      if (!prev.locked) return prev;
+      return {
+        ...prev,
+        rowId: nextRowId,
+      };
+    });
+  }
 
   function getNumericMoney(value) {
     const n = Number(String(value || "").replace(/,/g, "").replace(/[^0-9.-]/g, ""));
@@ -319,6 +371,113 @@ useEffect(() => {
     }
   }
 
+    const inlineEditableKeys = new Set([
+    "selection",
+    "fixtureEvent",
+    "stake",
+    "oddsUS",
+    "betDate",
+    "eventDate",
+    "sportLeague",
+    "betType",
+    "toWin",
+    "payout",
+  ]);
+
+  function beginInlineEdit(rowId, key) {
+    setEditingCell({ rowId, key });
+  }
+
+  function stopInlineEdit() {
+    setEditingCell({ rowId: "", key: "" });
+  }
+
+  function renderInlineEditor(row, rowBg, colKey, reactKey) {
+    const value = row[colKey] || "";
+    const isEditing = editingCell.rowId === row.id && editingCell.key === colKey;
+
+    if (!inlineEditableKeys.has(colKey)) {
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {value}
+        </td>
+      );
+    }
+
+    if (!isEditing) {
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg, cursor: "text" }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            beginInlineEdit(row.id, colKey);
+          }}
+          title="Double-click to edit"
+        >
+          {value}
+        </td>
+      );
+    }
+
+    if (colKey === "sportLeague") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <select
+            autoFocus
+            value={value}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => handleRowFieldChange(row.id, colKey, e.target.value)}
+            onBlur={stopInlineEdit}
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              border: "1px solid #2563eb",
+              borderRadius: 4,
+              background: "#fff",
+              color: "#000",
+            }}
+          >
+            {getLeagueOptionsForRow(row).map((league) => (
+              <option key={league || "blank"} value={league}>
+                {league || "Select league"}
+              </option>
+            ))}
+          </select>
+        </td>
+      );
+    }
+
+    return (
+      <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+        <input
+          autoFocus
+          value={value}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => handleRowFieldChange(row.id, colKey, e.target.value)}
+          onBlur={stopInlineEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") stopInlineEdit();
+            if (e.key === "Escape") stopInlineEdit();
+          }}
+          style={{
+            width: "100%",
+            padding: "6px 8px",
+            border: "1px solid #2563eb",
+            borderRadius: 4,
+            background: "#fff",
+            color: "#000",
+            boxSizing: "border-box",
+          }}
+        />
+      </td>
+    );
+  }
+
   const renderCell = (row, rowBg, colKey, reactKey) => {
     if (colKey === "select") {
       return (
@@ -340,6 +499,17 @@ useEffect(() => {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedRowId(row.id);
+
+              setHoverPreview((prev) => {
+                if (!prev.locked) return prev;
+                return {
+                  ...prev,
+                  rowId: row.id,
+                  src: row.sourceImageUrl || "",
+                  alt: row.sourceFileName || "",
+                  visible: !!row.sourceImageUrl,
+                };
+              });
             }}
             style={smallButtonStyle}
           >
@@ -472,6 +642,105 @@ useEffect(() => {
       );
     }
 
+        if (colKey === "likelyHedge") {
+      const override = String(row.hedgeOverride || "").toUpperCase();
+      const isLikely = row.likelyHedge === "Y";
+      const isAuto = row.autoLikelyHedge === "Y";
+
+      let badgeBg = "#e5e7eb";
+      let badgeColor = "#374151";
+      let badgeText = "";
+
+      if (override === "Y") {
+        badgeBg = "#166534";
+        badgeColor = "#ecfdf5";
+        badgeText = "Confirmed";
+      } else if (override === "N") {
+        badgeBg = "#9a3412";
+        badgeColor = "#fff7ed";
+        badgeText = "Denied";
+      } else if (isLikely) {
+        badgeBg = "#2563eb";
+        badgeColor = "#eff6ff";
+        badgeText = row.hedgeQuality ? `Likely • ${row.hedgeQuality}` : "Likely";
+      }
+
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}
+        >
+          {badgeText ? (
+            <div style={{ marginBottom: 8 }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 88,
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontWeight: 800,
+                  fontSize: 12,
+                  background: badgeBg,
+                  color: badgeColor,
+                }}
+              >
+                {badgeText}
+              </span>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8, color: "#6b7280" }}>—</div>
+          )}
+
+          {row.hedgePartnerBookmaker && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Pair:</strong> {row.hedgePartnerBookmaker}
+            </div>
+          )}
+
+          {(row.hedgeProfitLow || row.hedgeProfitHigh) && (
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              <strong>P/L:</strong> ${row.hedgeProfitLow || "0.00"} → ${row.hedgeProfitHigh || "0.00"}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "Y");
+                handleRowFieldChange(row.id, "betSourceTag", "Hedge");
+              }}
+              style={smallButtonStyle}
+            >
+              Confirm
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "N");
+              }}
+              style={smallButtonStyle}
+            >
+              Deny
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "");
+              }}
+              style={smallButtonStyle}
+            >
+              Reset
+            </button>
+          </div>
+        </td>
+      );
+    }
+
     if (colKey === "warnings") {
       return (
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
@@ -517,11 +786,7 @@ useEffect(() => {
       );
     }
 
-    return (
-      <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
-        {row[colKey] || ""}
-      </td>
-    );
+    return renderInlineEditor(row, rowBg, colKey, reactKey);
   };
 
   return (
@@ -578,22 +843,50 @@ useEffect(() => {
           >
             <div style={{ display: "grid", gap: 10 }}>
               <div>
-                <strong>Selection:</strong>{" "}
-                <input
-                  value={previewRow?.selection || ""}
-                  onChange={(e) =>
-                    previewRow &&
-                    handleRowFieldChange(previewRow.id, "selection", e.target.value)
-                  }
-                  style={{
-                    marginLeft: 8,
-                    width: "70%",
-                    padding: "6px 8px",
-                    border: "1px solid #ccc",
-                    borderRadius: 6,
-                  }}
-                />
-              </div>
+            <strong>Bookmaker:</strong>{" "}
+            <select
+              value={previewRow?.bookmaker || ""}
+              onChange={(e) =>
+                previewRow &&
+                handleRowFieldChange(previewRow.id, "bookmaker", e.target.value)
+              }
+              style={{
+                marginLeft: 8,
+                padding: "6px 8px",
+                border: "1px solid #ccc",
+                borderRadius: 6,
+              }}
+            >
+              <option value="">Select</option>
+              <option value="DraftKings">DraftKings</option>
+              <option value="BetMGM">BetMGM</option>
+              <option value="FanDuel">FanDuel</option>
+              <option value="Caesars">Caesars</option>
+              <option value="Fanatics">Fanatics</option>
+              <option value="theScore">theScore</option>
+              <option value="bet365">bet365</option>
+              <option value="Circa">Circa</option>
+              <option value="Kalshi">Kalshi</option>
+            </select>
+          </div>
+
+          <div>
+            <strong>Selection:</strong>{" "}
+            <input
+              value={previewRow?.selection || ""}
+              onChange={(e) =>
+                previewRow &&
+                handleRowFieldChange(previewRow.id, "selection", e.target.value)
+              }
+              style={{
+                marginLeft: 8,
+                width: "70%",
+                padding: "6px 8px",
+                border: "1px solid #ccc",
+                borderRadius: 6,
+              }}
+            />
+          </div>
 
               <div>
                 <strong>League:</strong>{" "}
@@ -680,6 +973,30 @@ useEffect(() => {
                 />
               </div>
 
+              <div style={{ display: "grid", gap: 6 }}>
+                <strong>Notes:</strong>
+                <textarea
+                  value={previewRow?.reviewNotes || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "reviewNotes", e.target.value)
+                  }
+                  placeholder="Add parser/debug notes here"
+                  style={{
+                    width: "100%",
+                    minHeight: 110,
+                    padding: "8px 10px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background: "#fff",
+                    color: "#000",
+                    resize: "vertical",
+                    fontFamily: "Arial, sans-serif",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
               {previewNeedsReview && (
                 <div
                   style={{
@@ -721,6 +1038,10 @@ useEffect(() => {
                     onClick={() => {
                       handleRowFieldChange(previewRow.id, "reviewResolved", "Y");
                       handleRowFieldChange(previewRow.id, "reviewLater", "N");
+
+                      setTimeout(() => {
+                        jumpToNextReviewRow(previewRow.id);
+                      }, 0);
                     }}
                     style={smallButtonStyle}
                   >
@@ -816,7 +1137,16 @@ useEffect(() => {
 
       <h3 style={{ color: "#000" }}>Review Queue</h3>
 
-      <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
+      <div
+        style={{
+          overflowX: "auto",
+          overflowY: "auto",
+          maxHeight: "74vh",
+          minHeight: "58vh",
+          border: "1px solid #ddd",
+          borderRadius: 6,
+        }}
+      >
         <table
           style={{
             borderCollapse: "separate",
@@ -850,7 +1180,9 @@ useEffect(() => {
                       textAlign: "left",
                       whiteSpace: "nowrap",
                       fontWeight: 700,
-                      position: "relative",
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 3,
                     }}
                   >
                     <div
@@ -924,8 +1256,10 @@ useEffect(() => {
 
               const rowBg =
                 isSelected
-                  ? "#e0f2fe" // stronger blue
-                  : isResolved
+                  ? "#e0f2fe"
+                  : attentionLevel === "resolved-critical"
+                  ? "#fff7ed"
+                  : attentionLevel === "resolved"
                   ? "#f1f8e9"
                   : attentionLevel === "duplicate"
                   ? "#fdecea"
@@ -936,14 +1270,29 @@ useEffect(() => {
               return (
                 <tr
                   key={row.id}
-                  onClick={() => setSelectedRowId(row.id)}
+                  onClick={() => {
+                    setSelectedRowId(row.id);
+
+                    setHoverPreview((prev) => {
+                      if (!prev.locked) return prev;
+                      return {
+                        ...prev,
+                        rowId: row.id,
+                        src: row.sourceImageUrl || "",
+                        alt: row.sourceFileName || "",
+                        visible: !!row.sourceImageUrl,
+                      };
+                    });
+                  }}
                   style={{
                   backgroundColor: rowBg,
                   cursor: "pointer",
 
                   outline: isSelected
                     ? "3px solid #0284c7"
-                    : isResolved
+                    : attentionLevel === "resolved-critical"
+                    ? "2px solid #ea580c"
+                    : attentionLevel === "resolved"
                     ? "2px solid #a3d9a5"
                     : attentionLevel === "duplicate"
                     ? "2px solid #dc2626"
@@ -955,6 +1304,10 @@ useEffect(() => {
 
                   borderLeft: isSelected
                     ? "6px solid #0284c7"
+                    : attentionLevel === "resolved-critical"
+                    ? "6px solid #ea580c"
+                    : attentionLevel === "resolved"
+                    ? "6px solid #65a30d"
                     : needsReview
                     ? "6px solid #f0b429"
                     : attentionLevel === "duplicate"

@@ -105,6 +105,8 @@ export default function FilterBar({
   setShowLikelyParserIssuesOnly,
   showNeedsReviewOnly,
   setShowNeedsReviewOnly,
+  showHedgesOnly,
+  setShowHedgesOnly,
   showArchivedRows,
   setShowArchivedRows,
   reviewMode,

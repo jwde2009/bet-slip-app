@@ -59,6 +59,7 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
       <div style={{ display: "grid", gap: 8 }}>
         {batches.map((batch) => {
           const colors = getStatusColor(batch.status);
+
           return (
             <div
               key={batch.id}
@@ -71,9 +72,7 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ fontWeight: 800 }}>
-                  {batch.label}
-                </div>
+                <div style={{ fontWeight: 800 }}>{batch.label}</div>
                 <div style={{ fontWeight: 800, textTransform: "capitalize" }}>
                   {batch.status}
                 </div>
@@ -85,15 +84,23 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
                 <strong>{batch.rowsCreated}</strong> · Errors: <strong>{batch.errorCount}</strong>
               </div>
 
+              <div style={{ fontSize: 12, marginTop: 6 }}>
+                <strong>Upload Bookmaker:</strong> {batch.uploadBookmaker || "Auto"}
+              </div>
+
               <div style={{ fontSize: 12, marginTop: 4 }}>
-              {batch.parentFolder && <span>{batch.parentFolder} / </span>}
-              {batch.folder}
-            </div>
+                <strong>Path:</strong>{" "}
+                {batch.parentFolder && batch.folder
+                  ? `${batch.parentFolder} / ${batch.folder}`
+                  : batch.folder || batch.parentFolder || "—"}
+              </div>
 
               {batch.fileNames?.length > 0 && (
                 <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
                   {batch.fileNames.slice(0, 4).join(" · ")}
-                  {batch.fileNames.length > 4 ? ` +${batch.fileNames.length - 4} more` : ""}
+                  {batch.fileNames.length > 4
+                    ? ` · +${batch.fileNames.length - 4} more`
+                    : ""}
                 </div>
               )}
             </div>
