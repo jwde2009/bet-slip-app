@@ -90,13 +90,11 @@ export default function TopActionGrid({
 }) {
   return (
     <div style={gridWrapStyle}>
-      <GridButton label="Upload Bet Slips" variant="dark" asLabel>
+            <GridButton label="Upload Bet Slips" variant="dark" asLabel>
         <input
-  type="file"
-  accept="image/*"
-  multiple
-  webkitdirectory="true"
-  directory=""
+          type="file"
+          accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
+          multiple
           onChange={(e) => onUpload(e.target.files)}
           style={{ display: "none" }}
         />

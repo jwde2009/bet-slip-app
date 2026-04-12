@@ -1,0 +1,3742 @@
+===== app\utils\parser.js =====
+import { parseBetMgmSlip } from "./parseBetMgm";
+import { parseDraftKingsLikeSlip } from "./parseDraftKings";
+import { parseFanDuelSlip } from "./parseFanDuel";
+import { parseCaesarsSlip } from "./parseCaesars";
+import { parseKalshiSlip } from "./parseKalshi";
+const emptyParsed = {
+  eventDate: "",
+  betDate: "",
+  bookmaker: "",
+  sportLeague: "",
+  selection: "",
+  betType: "",
+  fixtureEvent: "",
+  stake: "",
+  oddsUS: "",
+  oddsSource: "",
+  oddsMissingReason: "",
+  live: "",
+  bonusBet: "",
+  win: "",
+  marketDetail: "",
+  payout: "",
+  toWin: "",
+  rawPlacedDate: "",
+  status: "",
+  parseWarning: "",
+  duplicateWarning: "",
+  sourceFileName: "",
+  sourceText: "",
+  sourceImageUrl: "",
+  reviewNotes: "",
+  betId: "",
+  accountOwner: "Me",
+  betSourceTag: "",
+  impliedProbability: "",
+  confidenceFlag: "",
+  likelyParserIssue: "N",
+  reviewLater: "N",
+  duplicateIgnored: "N",
+  reviewResolved: "N",
+};
+
+function cleanTextLine(value) {
+  return String(value || "")
+    .replace(/\bCASH\s*OUT\b/gi, "")
+    .replace(/\bASH\s*OUT\b/gi, "")
+    .replace(/\bASHOUT\b/gi, "")
+    .replace(/\bCASHOUT\b/gi, "")
+    .replace(/[®™«»©]/g, "")
+    .replace(/[()\[\]{}]/g, "")
+    .replace(/[|]/g, " ")
+    .replace(/[^\w\s@.+\-/:&'#,]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function normalizeOcrText(text) {
+  return String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/O\/\s*U/gi, "O/U")
+    .replace(/([+-])\s+(\d{2,5})\b/g, "$1$2")
+    .replace(/\bCASH\s+OUT\b/gi, "CASH OUT")
+    .replace(/\bASH\s+OUT\b/gi, "ASH OUT")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatDateMMDDYYYY(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const y = String(dateObj.getFullYear());
+  return `${m}/${d}/${y}`;
+}
+
+function normalizeDateString(raw) {
+  if (!raw) return "";
+  return raw
+    .replace(/,\s*/g, ", ")
+    .replace(/(\d)(AM|PM)$/i, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function nextWeekdayFromDate(baseDate, weekdayIndex) {
+  const result = new Date(baseDate);
+  result.setHours(0, 0, 0, 0);
+  const current = result.getDay();
+  let diff = weekdayIndex - current;
+  if (diff < 0) diff += 7;
+  result.setDate(result.getDate() + diff);
+  return result;
+}
+
+function getMatch(text, regex) {
+  const match = String(text || "").match(regex);
+  return match ? (match[1] || "").trim() : "";
+}
+
+function parsePlacedDate(cleaned) {
+  const raw =
+    getMatch(
+      cleaned,
+      /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4},\s*\d{1,2}:\d{2}:\d{2}(?:AM|PM))/i
+    ) ||
+    getMatch(
+      cleaned,
+      /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4},\s*\d{1,2}:\d{2}(?:AM|PM))/i
+    ) ||
+    getMatch(cleaned, /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4})/i) ||
+    "";
+
+  if (!raw) return { raw: "", normalized: "", dateObj: null, dateOnly: "" };
+
+  const normalized = normalizeDateString(raw);
+  const parsed = new Date(normalized);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return { raw, normalized, dateObj: null, dateOnly: "" };
+  }
+
+  return {
+    raw,
+    normalized,
+    dateObj: parsed,
+    dateOnly: formatDateMMDDYYYY(parsed),
+  };
+}
+
+function parseMonthDayEventDate(cleaned, placedDateObj) {
+  if (!placedDateObj) return "";
+  const monthDayMatch = cleaned.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
+  );
+  if (!monthDayMatch) return "";
+  const parsed = new Date(
+    `${monthDayMatch[1]} ${monthDayMatch[2]} ${placedDateObj.getFullYear()}`
+  );
+  if (Number.isNaN(parsed.getTime())) return "";
+  return formatDateMMDDYYYY(parsed);
+}
+
+function inferEventDate(cleaned, placedDateObj) {
+  if (!placedDateObj) return "";
+  const monthDay = parseMonthDayEventDate(cleaned, placedDateObj);
+  if (monthDay) return monthDay;
+  if (/\bToday\b/i.test(cleaned)) return formatDateMMDDYYYY(placedDateObj);
+  if (/\bTomorrow\b/i.test(cleaned)) {
+    const next = new Date(placedDateObj);
+    next.setDate(next.getDate() + 1);
+    return formatDateMMDDYYYY(next);
+  }
+  const weekdayMatch = cleaned.match(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i);
+  if (weekdayMatch) {
+    const map = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const idx = map[weekdayMatch[1].toLowerCase()];
+    if (idx !== undefined) {
+      return formatDateMMDDYYYY(nextWeekdayFromDate(placedDateObj, idx));
+    }
+  }
+  return "";
+}
+
+function detectSportsbook(cleaned) {
+  const containsAny = (patterns) => patterns.some((pattern) => pattern.test(cleaned));
+  return containsAny([
+    /draftkings/i,
+    /braftkings/i,
+    /dk\d+/i,
+    /\bmy bets\b/i,
+    /\bmybets\b/i,
+    /the crown is yours/i,
+  ])
+    ? "DraftKings"
+    : /betmgm/i.test(cleaned)
+    ? "BetMGM"
+    : /caesars/i.test(cleaned)
+    ? "Caesars"
+    : /fanduel/i.test(cleaned)
+    ? "FanDuel"
+    : /fanatics/i.test(cleaned)
+    ? "Fanatics"
+    : /thescore|score bet/i.test(cleaned)
+    ? "theScore"
+    : /bet365/i.test(cleaned)
+    ? "bet365"
+    : /circa/i.test(cleaned)
+    ? "Circa"
+    : /kalshi/i.test(cleaned)
+    ? "Kalshi"
+    : "";
+}
+function looksLikeFanDuelText(text = "") {
+  const t = String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/[|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  let score = 0;
+
+  // Direct brand hit
+  if (/\bfanduel\b/.test(t)) score += 10;
+
+  // Strong FanDuel receipt-shape markers
+  if (/\bshare bet\b/.test(t)) score += 4;
+  if (/\bwager\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\bodds\s*[+-]\s*\d{2,4}\b/.test(t)) score += 3;
+  if (/\bto win\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\btotal payout\s*\$?\s*\d/.test(t)) score += 3;
+
+  // Common UI text seen in FanDuel screenshots
+  if (/\bbetslip close\b/.test(t)) score += 1;
+  if (/\bbalance\s*:/.test(t)) score += 1;
+  if (/\bremove all selections\b/.test(t)) score += 1;
+  if (/\baccept odds movements\b/.test(t)) score += 1;
+
+  // Event line shape: Team A @ Team B 8:10PM CT
+  if (/@/.test(t) && /\b\d{1,2}:\d{2}\s*(am|pm)\s*(ct|et|mt|pt)?\b/i.test(t)) {
+    score += 2;
+  }
+
+  // Require multiple FanDuel-style anchors so we do not over-route
+  const hasCoreReceiptShape =
+    /\bwager\s*\$?\s*\d/i.test(t) &&
+    /\bodds\s*[+-]\s*\d{2,4}\b/i.test(t) &&
+    /\bto win\s*\$?\s*\d/i.test(t);
+
+  if (hasCoreReceiptShape) score += 2;
+
+  return score >= 8;
+}
+function singularizeStat(label) {
+  const lower = label.toLowerCase();
+  if (lower === "home runs") return "home run";
+  if (lower === "three pointers made") return "threes";
+  return label;
+}
+
+function buildPlayerPropSelection(rawSelection, marketDetail) {
+  const cleanedSelection = cleanTextLine(rawSelection);
+  const cleanedMarket = cleanTextLine(marketDetail);
+  const overUnderMatch = cleanedSelection.match(/\b(Over|Under)\s*([\d.]+)/i);
+
+  if (overUnderMatch) {
+    const direction = overUnderMatch[1].toLowerCase();
+    const line = overUnderMatch[2];
+    const propPatterns = [
+      { regex: /^(.*)\s+Rebounds O\/U$/i, label: "rebounds" },
+      { regex: /^(.*)\s+Points O\/U$/i, label: "points" },
+      { regex: /^(.*)\s+Assists O\/U$/i, label: "assists" },
+      {
+        regex: /^(.*)\s+Three Pointers(?: Made)?(?: O\/U| Made O\/U)?$/i,
+        label: "threes",
+      },
+      {
+        regex: /^(.*)\s+Points \+ Rebounds \+ Assists(?: O\/U)?$/i,
+        label: "points + rebounds + assists",
+      },
+      { regex: /^(.*)\s+Passing Yards$/i, label: "passing yards" },
+      { regex: /^(.*)\s+Rushing Yards$/i, label: "rushing yards" },
+      { regex: /^(.*)\s+Receiving Yards$/i, label: "receiving yards" },
+      { regex: /^(.*)\s+Shots on Goal$/i, label: "shots on goal" },
+      { regex: /^(.*)\s+Strikeouts(?: Thrown)?$/i, label: "strikeouts" },
+      { regex: /^(.*)\s+Hits(?: O\/U)?$/i, label: "hits" },
+      { regex: /^(.*)\s+RBIs$/i, label: "RBIs" },
+      { regex: /^(.*)\s+Earned Runs(?: Allowed)?(?: O\/U)?$/i, label: "earned runs" },
+    ];
+
+    for (const item of propPatterns) {
+      const m = cleanedMarket.match(item.regex);
+      if (m) return `${m[1]} ${direction} ${line} ${item.label}`.trim();
+    }
+  }
+
+  if (/triple-double/i.test(cleanedMarket)) return `${cleanedSelection} triple-double`.trim();
+  if (/double-double/i.test(cleanedMarket)) return `${cleanedSelection} double-double`.trim();
+  if (/ko\/tko\/dq/i.test(cleanedMarket)) return `${cleanedSelection} by KO/TKO/DQ`.trim();
+  if (/submission/i.test(cleanedMarket)) return `${cleanedSelection} by submission`.trim();
+  if (/decision/i.test(cleanedMarket)) return `${cleanedSelection} by decision`.trim();
+
+  const plusMatch = cleanedSelection.match(/^(\d+)\+$/i);
+  if (plusMatch) {
+    const n = plusMatch[1];
+    const propPatterns = [
+      { regex: /^(.*)\s+Three Pointers(?: Made)?(?: O\/U| Made O\/U)?$/i, label: "three pointers made" },
+      { regex: /^(.*)\s+Home Runs$/i, label: "home runs" },
+      { regex: /^(.*)\s+Hits$/i, label: "hits" },
+      { regex: /^(.*)\s+RBIs$/i, label: "RBIs" },
+      { regex: /^(.*)\s+Strikeouts(?: Thrown)?$/i, label: "strikeouts" },
+      { regex: /^(.*)\s+Shots on Goal$/i, label: "shots on goal" },
+      { regex: /^(.*)\s+Assists$/i, label: "assists" },
+    ];
+
+    for (const item of propPatterns) {
+      const m = cleanedMarket.match(item.regex);
+      if (m) return `${m[1]} ${n}+ ${singularizeStat(item.label)}`.trim();
+    }
+  }
+
+  if (/Anytime Goalscorer/i.test(cleanedMarket) && cleanedSelection)
+    return `${cleanedSelection} anytime goal`;
+  if (/First Goalscorer/i.test(cleanedMarket) && cleanedSelection)
+    return `${cleanedSelection} first goal`;
+  if (/Last Goalscorer/i.test(cleanedMarket) && cleanedSelection)
+    return `${cleanedSelection} last goal`;
+  if (/Anytime Touchdown Scorer/i.test(cleanedMarket) && cleanedSelection)
+    return `${cleanedSelection} anytime touchdown`;
+  if (/First Touchdown Scorer/i.test(cleanedMarket) && cleanedSelection)
+    return `${cleanedSelection} first touchdown`;
+
+  if (/^yes$/i.test(cleanedSelection) && /double-double/i.test(cleanedMarket))
+    return `Yes double-double`;
+  if (/^no$/i.test(cleanedSelection) && /double-double/i.test(cleanedMarket))
+    return `No double-double`;
+
+  if (cleanedMarket && !cleanedSelection) return cleanedMarket;
+  return cleanedSelection;
+}
+
+function detectStatus(cleaned, receiptWindowText) {
+  const windowText = receiptWindowText || cleaned;
+  if (/\bCashed Out\b/i.test(windowText) || /\bPaid:\s*\$/i.test(windowText))
+    return "Cashed Out";
+  if (/Bet Settled/i.test(windowText)) {
+    if (/\bWon\b/i.test(windowText)) return "Won";
+    if (/\bLost\b/i.test(windowText)) return "Lost";
+  }
+  if (/\bOpen\b/i.test(windowText) && !/Bet Settled/i.test(windowText)) return "Open";
+  return "";
+}
+
+function detectLive(text) {
+  const livePatterns = [
+    /\bLive\b/i,
+    /\bLive Moneyline\b/i,
+    /\b1st Quarter\b/i,
+    /\b2nd Quarter\b/i,
+    /\b3rd Quarter\b/i,
+    /\b4th Quarter\b/i,
+    /\bQ1\b/i,
+    /\bQ2\b/i,
+    /\bQ3\b/i,
+    /\bQ4\b/i,
+    /\b1st Period\b/i,
+    /\b2nd Period\b/i,
+    /\b3rd Period\b/i,
+    /\b1st Inning\b/i,
+    /\b2nd Inning\b/i,
+    /\b3rd Inning\b/i,
+    /\b4th Inning\b/i,
+    /\b5th Inning\b/i,
+    /\b6th Inning\b/i,
+    /\b7th Inning\b/i,
+    /\b8th Inning\b/i,
+    /\b9th Inning\b/i,
+    /\bSet 1\b/i,
+    /\bSet 2\b/i,
+    /\bSet 3\b/i,
+    /\bQuarter\b/i,
+    /\bPeriod\b/i,
+    /\binnings?\b/i,
+  ];
+  return livePatterns.some((re) => re.test(text)) ? "Y" : "N";
+}
+
+function extractBetId(text) {
+  return (
+    getMatch(text, /\b(DK\d{12,})\b/i) ||
+    getMatch(text, /\b(ID:?\s*[A-Z0-9\-]{8,})\b/i) ||
+    ""
+  );
+}
+
+function classifyScreenType(cleaned) {
+  const hasReceipt =
+    /\bBet Placed\b/i.test(cleaned) ||
+    /\bBet Settled\b/i.test(cleaned) ||
+    /\bReceipt\b/i.test(cleaned);
+
+  const hasMyBets = /\bMy Bets\b/i.test(cleaned);
+  const hasAddMore = /\bAdd More\b/i.test(cleaned);
+  const hasBetSlip = /\bBet Slip\b/i.test(cleaned);
+  const wagerCount =
+    (cleaned.match(/\bWager Amount:/gi) || []).length +
+    (cleaned.match(/\bWager:/gi) || []).length;
+
+  if (hasBetSlip && hasAddMore && !hasReceipt) return "active_bet_slip";
+  if (wagerCount > 1 && hasMyBets) return "multi_bet_screenshot";
+  if (hasReceipt) return "receipt";
+  if (hasMyBets) return "my_bets_card";
+  if (/\bCash Out\b/i.test(cleaned) && /\bOpen\b|\bCashed Out\b|\bPaid:\b/i.test(cleaned))
+    return "live_open_card";
+  return "unknown";
+}
+
+function extractReceiptWindow(lines) {
+  const receiptIndex = lines.findIndex((line) => /^Bet Placed$|^Bet Settled$/i.test(line));
+  if (receiptIndex !== -1) {
+    return {
+      receiptIndex,
+      receiptBlock: lines.slice(receiptIndex, Math.min(lines.length, receiptIndex + 30)),
+    };
+  }
+  return {
+    receiptIndex: -1,
+    receiptBlock: lines,
+  };
+}
+
+function normalizeTeamNames(text) {
+  const replacements = [
+    [/\bLA Clippers\b/gi, "Los Angeles Clippers"],
+    [/\bLA Lakers\b/gi, "Los Angeles Lakers"],
+    [/\bGS Warriors\b|\bGolden St Warriors\b/gi, "Golden State Warriors"],
+    [/\bNY Knicks\b/gi, "New York Knicks"],
+    [/\bOKC Thunder\b/gi, "Oklahoma City Thunder"],
+    [/\bMavs\b/gi, "Mavericks"],
+    [/\bT-Wolves\b|\bTWolves\b/gi, "Timberwolves"],
+  ];
+  let result = String(text || "");
+  for (const [regex, replacement] of replacements) {
+    result = result.replace(regex, replacement);
+  }
+  return result.replace(/\s{2,}/g, " ").trim();
+}
+
+function extractParlayInfo(afterLines) {
+  const cleanedLines = afterLines.map(cleanTextLine).filter(Boolean);
+  const legCountText = cleanedLines.find((line) => /^\d+\s*Pick Parlay$/i.test(line)) || "";
+  const legCount = Number((legCountText.match(/^(\d+)/)?.[1] || "").trim()) || 0;
+
+  const legs = [];
+  for (let i = 0; i < cleanedLines.length; i++) {
+    const line = cleanedLines[i];
+    const next = cleanedLines[i + 1] || "";
+
+    if (/^(Over|Under)\s+\d+(\.\d+)?$/i.test(line) && next) {
+      legs.push(`${line} ${next}`.trim());
+      continue;
+    }
+
+    if (/^(Yes|No)$/i.test(line) && next) {
+      legs.push(`${line} ${next}`.trim());
+      continue;
+    }
+
+    if (
+      /Moneyline|Spread|Run Line|Puck Line|Total|Points O\/U|Rebounds O\/U|Assists O\/U|Three Pointers(?: Made)?(?: O\/U| Made O\/U)?|Double-Double|Triple-Double|Anytime Goalscorer/i.test(
+        next
+      )
+    ) {
+      legs.push(`${line} ${next}`.trim());
+    }
+  }
+
+  const dedupedLegs = Array.from(new Set(legs)).filter(
+    (x) =>
+      x &&
+      !/Bet With Friends|Create Group|Keep Picks|Wager Amount|Total Payout|Mar \d|Apr \d/i.test(x)
+  );
+
+  return {
+    parlayLegCount: legCount || dedupedLegs.length || 0,
+    legsRawText: dedupedLegs.join(" | "),
+    selectionSummary: legCount
+      ? `${legCount} Pick Parlay`
+      : dedupedLegs.length
+      ? `${dedupedLegs.length} Leg Parlay`
+      : "Parlay",
+  };
+}
+
+export function enrichRow(row) {
+  const normalizedFixture = normalizeTeamNames(row.fixtureEvent);
+  const normalizedSelection = normalizeTeamNames(row.selection);
+  const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
+
+  const needsReview =
+    row.reviewResolved !== "Y" &&
+    (
+      row.likelyParserIssue === "Y" ||
+      !row.sportLeague ||
+      !row.oddsUS ||
+      row.oddsSource === "Calculated" ||
+      !!row.parseWarning
+    );
+
+  return {
+    ...row,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+    reviewLater: needsReview ? "Y" : (row.reviewLater || "N"),
+    exported: row.exported || "N",
+    archived: row.archived || "N",
+  };
+}
+
+const shared = {
+  emptyParsed,
+  cleanTextLine,
+  normalizeOcrText,
+  formatDateMMDDYYYY,
+  normalizeDateString,
+  nextWeekdayFromDate,
+  getMatch,
+  parsePlacedDate,
+  parseMonthDayEventDate,
+  inferEventDate,
+  detectSportsbook,
+  singularizeStat,
+  buildPlayerPropSelection,
+  detectStatus,
+  detectLive,
+  extractBetId,
+  classifyScreenType,
+  extractReceiptWindow,
+  normalizeTeamNames,
+  extractParlayInfo,
+  enrichRow,
+};
+
+export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto") {
+  const cleaned = normalizeOcrText(text);
+  const lowerCleaned = String(cleaned || "").toLowerCase();
+
+  const detectedSportsbook = detectSportsbook(cleaned);
+  const sportsbook =
+    uploadBookmaker && uploadBookmaker !== "Auto"
+      ? uploadBookmaker
+      : detectedSportsbook;
+
+  const forcedBook = String(uploadBookmaker || "").trim().toLowerCase();
+
+  if (forcedBook === "fanduel") {
+  return parseFanDuelSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "FanDuel",
+    shared,
+    debug: true,
+  });
+}
+
+  if (/\bfanduel\b/.test(lowerCleaned) || looksLikeFanDuelText(cleaned)) {
+  return parseFanDuelSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "FanDuel",
+    shared,
+    debug: true,
+  });
+}
+
+if (/kalshi/i.test(lowerCleaned)) {
+  return parseKalshiSlip(cleaned, shared);
+}
+
+  if (forcedBook === "caesars") {
+    return parseCaesarsSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook: "Caesars",
+      shared,
+      debug: true,
+    });
+  }
+
+  if (/\bcaesars\b/i.test(lowerCleaned)) {
+  return parseCaesarsSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook: "Caesars",
+    shared,
+    debug: true,
+  });
+}
+
+  if (sportsbook === "BetMGM") {
+    return parseBetMgmSlip({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook,
+      shared,
+    });
+  }
+
+  return parseDraftKingsLikeSlip({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    forcedSportsbook: sportsbook,
+    shared,
+  });
+}
+
+
+
+===== app\utils\parseKalshi.js =====
+// app/utils/parseKalshi.js
+
+import { detectLeague } from "./detectLeague";
+
+function pushTrace(debugTrace, stage, data = {}) {
+  if (!Array.isArray(debugTrace)) return;
+  debugTrace.push({ stage, ...data });
+}
+
+function cleanLine(value = "") {
+  return String(value)
+    .replace(/\u00A0/g, " ")
+    .replace(/[|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeText(text = "") {
+  return String(text)
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .trim();
+}
+
+function getLines(text = "") {
+  return normalizeText(text)
+    .split("\n")
+    .map(cleanLine)
+    .filter(Boolean);
+}
+
+function getMatch(text, regex) {
+  const match = String(text || "").match(regex);
+  return match ? match[1] || match[0] : "";
+}
+
+function extractStake(text) {
+  const raw = getMatch(text, /\bCost:\s*\$?([\d,]+(?:\.\d{2})?)/i);
+  return raw ? raw.replace(/,/g, "") : "";
+}
+
+function extractRawPlacedDate(text) {
+  return getMatch(text, /\bBought:\s*([^\n|]+(?:\|\s*[^\n]+)?)/i);
+}
+
+function extractBetDate(rawPlacedDate, parsePlacedDate) {
+  if (!rawPlacedDate || typeof parsePlacedDate !== "function") return "";
+  return parsePlacedDate(rawPlacedDate);
+}
+
+function extractLegCount(text) {
+  const raw = getMatch(text, /\b(\d+)\s+markets?\s+pay\b/i);
+  return raw ? Number(raw) : 0;
+}
+
+function isFixtureLine(line) {
+  const s = String(line || "");
+  return /\bat\b/i.test(s) && !/to win|points scored|over|under|[+-]\d+(\.\d+)?/i.test(s);
+}
+
+function classifyLeg(line) {
+  const value = cleanLine(line);
+
+  if (!value) return null;
+
+  if (/^(yes|no)\b/i.test(value)) {
+    return {
+      raw: value,
+      selection: value.toUpperCase(),
+      betType: "moneyline",
+      marketDetail: value,
+    };
+  }
+
+  if (/^over\s+\d+(\.\d+)?\s+/i.test(value) || /^under\s+\d+(\.\d+)?\s+/i.test(value)) {
+    const side = /^over/i.test(value) ? "Over" : "Under";
+    const number = getMatch(value, /^(?:over|under)\s+(\d+(?:\.\d+)?)/i);
+    return {
+      raw: value,
+      selection: `${side} ${number}`,
+      betType: "total",
+      marketDetail: value,
+    };
+  }
+
+  if (/\bto win\b/i.test(value)) {
+    const team = value.replace(/\bto win\b/i, "").trim();
+    return {
+      raw: value,
+      selection: team,
+      betType: "moneyline",
+      marketDetail: value,
+    };
+  }
+
+  if (/[A-Za-z].*[+-]\d+(\.\d+)?\b/.test(value)) {
+    return {
+      raw: value,
+      selection: value,
+      betType: "spread",
+      marketDetail: value,
+    };
+  }
+
+  return null;
+}
+
+function buildLegs(lines, debugTrace) {
+  const legs = [];
+  let currentFixture = "";
+
+  for (const line of lines) {
+    if (isFixtureLine(line)) {
+      currentFixture = line;
+      continue;
+    }
+
+    const leg = classifyLeg(line);
+    if (!leg) continue;
+
+    legs.push({
+      ...leg,
+      fixtureEvent: currentFixture,
+    });
+  }
+
+  pushTrace(debugTrace, "kalshi_legs_built", {
+    legCount: legs.length,
+    legs,
+  });
+
+  return legs;
+}
+
+function summarizeParlayLegs(legs) {
+  return legs.map((leg) => leg.raw).join(" | ");
+}
+
+function summarizeFixtures(legs) {
+  const fixtures = [];
+  for (const leg of legs) {
+    if (leg.fixtureEvent && !fixtures.includes(leg.fixtureEvent)) {
+      fixtures.push(leg.fixtureEvent);
+    }
+  }
+  return fixtures.join(" | ");
+}
+
+function getPrimaryBetType(legs, legCountFromTicket) {
+  if ((legCountFromTicket || 0) > 1 || legs.length > 1) return "parlay";
+  return legs[0]?.betType || "";
+}
+
+function getConfidence(legs, stake) {
+  if (legs.length >= 1 && stake) return "Medium";
+  if (legs.length >= 1) return "Low";
+  return "Low";
+}
+
+export function parseKalshiSlip(text, shared = {}) {
+  const {
+    detectStatus,
+    extractBetId,
+    enrichRow,
+    parsePlacedDate,
+    debugTrace,
+  } = shared || {};
+
+  const sourceText = normalizeText(text || "");
+  const lines = getLines(sourceText);
+
+  pushTrace(debugTrace, "kalshi_start", {
+    lineCount: lines.length,
+    preview: lines.slice(0, 20),
+  });
+
+  const bookmaker = /kalshi/i.test(sourceText) ? "Kalshi" : "";
+
+  const sportLeagueLine =
+    lines.find((line) => /pro basketball|nba|ncaam|ncaab|baseball|mlb|nhl|soccer|football|nfl/i.test(line)) || "";
+
+  
+
+  const stake = extractStake(sourceText);
+  const rawPlacedDate = extractRawPlacedDate(sourceText);
+  const betDate = extractBetDate(rawPlacedDate, parsePlacedDate);
+  const status = typeof detectStatus === "function" ? detectStatus(sourceText) : "";
+  const betId = typeof extractBetId === "function" ? extractBetId(sourceText) : "";
+  const legCountFromTicket = extractLegCount(sourceText);
+
+  const legs = buildLegs(lines, debugTrace);
+
+  let selection = "";
+  let marketDetail = "";
+  let fixtureEvent = "";
+  let betType = "";
+
+  if (legs.length === 1) {
+    selection = legs[0].selection || "";
+    marketDetail = legs[0].marketDetail || "";
+    fixtureEvent = legs[0].fixtureEvent || "";
+    betType = legs[0].betType || "";
+  } else if (legs.length > 1) {
+    selection = summarizeParlayLegs(legs);
+    marketDetail = legs.map((leg) => `${leg.betType}: ${leg.raw}`).join(" | ");
+    fixtureEvent = summarizeFixtures(legs);
+    betType = getPrimaryBetType(legs, legCountFromTicket);
+  }
+
+    const sportLeague =
+    detectLeague({
+        cleaned: sourceText,
+        marketDetail,
+        fixtureEvent,
+        selection,
+        isParlay: betType === "parlay",
+    }) || "";
+
+  const confidenceFlag = getConfidence(legs, stake);
+  const reviewLater = legs.length === 0 ? "Y" : "N";
+
+  const row = {
+    eventDate: "",
+    betDate: betDate || "",
+    bookmaker: bookmaker || "Kalshi",
+    sportLeague: sportLeague || "",
+    selection,
+    betType,
+    fixtureEvent,
+    stake,
+    oddsUS: "",
+    oddsSource: "",
+    oddsMissingReason: "kalshi_no_american_odds_detected",
+    live: "N",
+    bonusBet: "N",
+    win: "",
+    marketDetail,
+    payout: "",
+    toWin: "",
+    rawPlacedDate,
+    status,
+    parseWarning: reviewLater === "Y" ? "kalshi_no_normalized_legs_found" : "",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText,
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId,
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag,
+    likelyParserIssue: reviewLater === "Y" ? "Y" : "N",
+    reviewLater,
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+  };
+
+  pushTrace(debugTrace, "kalshi_result", {
+    bookmaker: row.bookmaker,
+    selection: row.selection,
+    betType: row.betType,
+    fixtureEvent: row.fixtureEvent,
+    stake: row.stake,
+    sportLeague: row.sportLeague,
+    reviewLater: row.reviewLater,
+  });
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}
+
+
+
+===== app\utils\detectLeague.js =====
+export function detectLeague({ cleaned, marketDetail, fixtureEvent, selection, isParlay }) {
+  const text = [cleaned, marketDetail, fixtureEvent, selection]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const hasBaseball =
+    /\bmlb\b|baseball|world baseball|wbc|run line|batter props|pitcher props|home runs|rbis|hits|strikeouts|earned runs|braves|twins|yankees|mets|dodgers|padres|guardians|astros|mariners|cardinals|cubs|giants|phillies|diamondbacks|tigers|orioles|red sox|blue jays|rays|brewers|pirates|reds|angels|rockies|marlins|nationals|athletics|a's/.test(
+      text
+    );
+
+  const hasNBA =
+    /\bnba\b|player threes|player rebounds|player assists|double-double|triple-double|points o\/u|rebounds o\/u|assists o\/u|three pointers|combos|points - 1st|moneyline 1st half|celtics|cavaliers|bulls|hawks|bucks|clippers|pacers|thunder|spurs|rockets|trail blazers|warriors|lakers|kings|suns|mavericks|timberwolves|nuggets|grizzlies|pelicans|jazz|heat|knicks|nets|hornets|magic|raptors|pistons|wizards|76ers/.test(
+      text
+    );
+
+  const hasNCAAM =
+    /\bncaam\b|college basketball|cbb \(m\)|men'?s college basketball|march madness|top 25/.test(
+      text
+    );
+
+  const hasNCAAW =
+    /college basketball \(w\)|cbb \(w\)|\bncaaw\b|women'?s college basketball/.test(
+      text
+    );
+
+  const hasNHL =
+    /\bnhl\b|hockey|goalscorer|shots on goal|puck line|blues|wild|canucks|flames|flyers|blackhawks|kings|ducks|jets|stars|sharks|capitals|canadiens|sabres|penguins|hurricanes|oilers|mammoth|maple leafs|senators|rangers|islanders|devils|bruins|kraken|predators|panthers|avalanche|lightning/.test(
+      text
+    );
+
+  const hasTennis =
+    /\btennis\b|\batp\b|\bwta\b|total games|games spread|match lines|doubles/.test(
+      text
+    ) ||
+    (/\bvs\b/.test(text) && /\//.test(text));
+
+  const hasSoccer =
+    /\bsoccer\b|\bmls\b|\bucl\b|featured soccer|champions league|premier league|la liga|serie a|bundesliga|ligue 1|concacaf|orlando city|inter miami|lafc|chelsea|barcelona|club america|whitecaps|timbers|union/.test(
+      text
+    );
+
+  const hasMMA =
+    /\bufc\b|\bmma\b|fight lines|ko\/tko\/dq|submission|decision/.test(text);
+
+  const hits = [
+    hasBaseball,
+    hasNBA,
+    hasNCAAM,
+    hasNCAAW,
+    hasNHL,
+    hasTennis,
+    hasSoccer,
+    hasMMA,
+  ].filter(Boolean).length;
+
+  if (isParlay && hits > 1) return "Multi";
+  if (hasNCAAW) return "NCAAW";
+  if (hasNCAAM) return "NCAAM";
+  if (hasNBA) return "NBA";
+  if (hasNHL) return "NHL";
+  if (hasBaseball) return "Baseball";
+  if (hasMMA) return "MMA";
+  if (hasTennis) return "Tennis";
+  if (hasSoccer) return "Soccer";
+  return "";
+}
+
+
+
+===== app\components\ReviewTable.js =====
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  compareValues,
+  getDisplayedBookmaker,
+  getSortableValue,
+} from "../utils/tableHelpers";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+} from "../utils/oddsHelpers";
+
+const cellStyle = {
+  border: "1px solid #ccc",
+  padding: 8,
+  verticalAlign: "top",
+  background: "#fff",
+  color: "#000",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+function getConfidenceSortValue(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "high") return 3;
+  if (v === "medium") return 2;
+  if (v === "low") return 1;
+  return 0;
+}
+
+function getLeagueOptionsForRow(row) {
+  const text = `${row?.selection || ""} ${row?.marketDetail || ""} ${row?.fixtureEvent || ""}`.toLowerCase();
+
+  if (/nba|points|rebounds|assists|double-double|triple-double/.test(text)) {
+    return ["", "NBA", "NCAAM", "NCAAW"];
+  }
+
+  if (/mlb|baseball|strikeouts|rbis|home runs|hits|earned runs/.test(text)) {
+    return ["", "MLB", "Baseball"];
+  }
+
+  if (/nhl|hockey|shots on goal|puck line|goalscorer/.test(text)) {
+    return ["", "NHL"];
+  }
+
+  if (/ufc|mma|submission|ko\/tko|decision/.test(text)) {
+    return ["", "MMA"];
+  }
+
+  if (/soccer|mls|ucl|premier league|la liga|serie a|bundesliga/.test(text)) {
+    return ["", "Soccer"];
+  }
+
+  if (/tennis|atp|wta|total games|games spread/.test(text)) {
+    return ["", "Tennis"];
+  }
+
+  return [
+    "",
+    "NBA",
+    "NCAAM",
+    "NCAAW",
+    "NFL",
+    "MLB",
+    "NHL",
+    "Soccer",
+    "MMA",
+    "Tennis",
+    "Baseball",
+    "Multi",
+  ];
+}
+
+export default function ReviewTable({
+  rows,
+  selectedRowId,
+  setSelectedRowId,
+  selectedIds,
+  toggleSelected,
+  toggleSelectAllVisible,
+  allVisibleSelected,
+  sortConfig,
+  handleSort,
+  columnWidths,
+  startResize,
+  setWinStatusForRow,
+  deleteRow,
+  handleRowFieldChange,
+  tableMode = "debug",
+  getRowAttentionLevel,
+}) {
+  const [hoverPreview, setHoverPreview] = useState({
+    rowId: "",
+    src: "",
+    alt: "",
+    visible: false,
+    locked: false,
+    x: 0,
+    y: 0,
+  });
+  const [pulseRowId, setPulseRowId] = useState(null);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
+  const [previewZoomOrigin, setPreviewZoomOrigin] = useState({ x: "50%", y: "0%" });
+  const [dragState, setDragState] = useState({
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
+  });
+
+  const imageScrollRef = useRef(null);
+useEffect(() => {
+  if (!selectedRowId) return;
+
+  setPulseRowId(selectedRowId);
+
+  const timeout = setTimeout(() => {
+    setPulseRowId(null);
+  }, 450);
+
+  return () => clearTimeout(timeout);
+}, [selectedRowId]);
+  const closeHoverPreview = () => {
+    setHoverPreview({
+      rowId: "",
+      src: "",
+      alt: "",
+      visible: false,
+      locked: false,
+      x: 0,
+      y: 0,
+    });
+    setPreviewZoomed(false);
+    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+    if (imageScrollRef.current) {
+      imageScrollRef.current.scrollTop = 0;
+    }
+  };
+
+  const getPreviewPosition = () => {
+    const margin = 20;
+    const previewWidth = Math.min(1120, window.innerWidth - margin * 2);
+    const desiredX = 500;
+    const x = Math.max(margin, Math.min(desiredX, window.innerWidth - previewWidth - margin));
+    const y = 20;
+    return { x, y };
+  };
+
+  useEffect(() => {
+    if (!dragState.dragging) return;
+
+    const handleMouseMove = (e) => {
+      setHoverPreview((prev) => ({
+        ...prev,
+        x: Math.max(20, e.clientX - dragState.offsetX),
+        y: Math.max(20, e.clientY - dragState.offsetY),
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDragState((prev) => ({
+        ...prev,
+        dragging: false,
+      }));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [dragState]);
+
+  function beginPreviewDrag(e) {
+    if (!hoverPreview.locked) return;
+
+    const interactive = e.target.closest("button, input, select, textarea, label");
+    if (interactive) return;
+
+    e.preventDefault();
+
+    setDragState({
+      dragging: true,
+      offsetX: e.clientX - hoverPreview.x,
+      offsetY: e.clientY - hoverPreview.y,
+    });
+  }
+
+  const simplifiedColumns = [
+    { key: "select", label: "", sortable: false },
+    { key: "edit", label: "Select", sortable: false },
+    { key: "image", label: "Image", sortable: false },
+    { key: "bookmaker", label: "Bookmaker", sortable: true },
+    { key: "eventDate", label: "Event Date", sortable: true },
+    { key: "betDate", label: "Bet Date", sortable: true },
+    { key: "sportLeague", label: "Sport / League", sortable: true },
+    { key: "selection", label: "Selection", sortable: true },
+    { key: "betType", label: "Bet Type", sortable: true },
+    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
+    { key: "stake", label: "Stake", sortable: true },
+    { key: "oddsUS", label: "Odds", sortable: true },
+  ];
+
+  const debugColumns = [
+    { key: "select", label: "", sortable: false },
+    { key: "edit", label: "Select", sortable: false },
+    { key: "image", label: "Image", sortable: false },
+    { key: "sourceFileName", label: "Source File", sortable: true },
+    { key: "accountOwner", label: "Owner", sortable: true },
+    { key: "bookmaker", label: "Bookmaker", sortable: true },
+    { key: "betId", label: "Bet ID", sortable: true },
+    { key: "eventDate", label: "Event Date", sortable: true },
+    { key: "betDate", label: "Bet Date", sortable: true },
+    { key: "sportLeague", label: "Sport / League", sortable: true },
+    { key: "selection", label: "Selection", sortable: true },
+    { key: "betType", label: "Bet Type", sortable: true },
+    { key: "betSourceTag", label: "Source Tag", sortable: true },
+    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
+    { key: "stake", label: "Stake", sortable: true },
+    { key: "oddsUS", label: "Odds", sortable: true },
+    { key: "oddsMissingReason", label: "Odds Note", sortable: true },
+    { key: "impliedProbability", label: "Imp Prob", sortable: true },
+    { key: "confidenceFlag", label: "Confidence", sortable: true },
+    { key: "likelyParserIssue", label: "QA", sortable: true },
+    { key: "live", label: "Live", sortable: true },
+    { key: "bonusBet", label: "Bonus", sortable: true },
+    { key: "reviewLater", label: "Review", sortable: true },
+    { key: "warnings", label: "Warnings", sortable: true },
+    { key: "actions", label: "Actions", sortable: false },
+  ];
+
+  const reviewColumns = tableMode === "simplified" ? simplifiedColumns : debugColumns;
+
+  const sortedRows = useMemo(() => {
+    if (!sortConfig?.key) return rows;
+
+    return [...rows].sort((a, b) => {
+      let aValue;
+      let bValue;
+
+      if (sortConfig.key === "confidenceFlag") {
+        aValue = getConfidenceSortValue(a.confidenceFlag);
+        bValue = getConfidenceSortValue(b.confidenceFlag);
+      } else {
+        aValue = getSortableValue(a, sortConfig.key);
+        bValue = getSortableValue(b, sortConfig.key);
+      }
+
+      return compareValues(aValue, bValue, sortConfig.direction);
+    });
+  }, [rows, sortConfig]);
+
+  const previewRow = rows.find((row) => row.id === hoverPreview.rowId) || null;
+
+  const previewNeedsReview =
+    !!previewRow &&
+    (
+      previewRow.likelyParserIssue === "Y" ||
+      !previewRow.sportLeague ||
+      !previewRow.oddsUS ||
+      previewRow.oddsSource === "Calculated" ||
+      String(previewRow.parseWarning || "").includes("stake_missing") ||
+      String(previewRow.parseWarning || "").includes("selection_missing") ||
+      String(previewRow.parseWarning || "").includes("fixture_missing")
+    );
+
+  function getNumericMoney(value) {
+    const n = Number(String(value || "").replace(/,/g, "").replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  function autoFillCalculatedFields(row) {
+    if (!row) return;
+
+    const stake = getNumericMoney(row.stake);
+    const payout = getNumericMoney(row.payout);
+    const toWin = getNumericMoney(row.toWin);
+
+    if (!row.oddsUS) {
+      let calculatedOdds = "";
+
+      if (Number.isFinite(stake) && Number.isFinite(payout) && payout > stake) {
+        calculatedOdds = americanOddsFromStakeAndReturn(stake, payout);
+      } else if (Number.isFinite(stake) && Number.isFinite(toWin) && toWin > 0) {
+        calculatedOdds = americanOddsFromStakeAndProfit(stake, toWin);
+      }
+
+      if (calculatedOdds) {
+        handleRowFieldChange(row.id, "oddsUS", calculatedOdds);
+        handleRowFieldChange(row.id, "oddsSource", "Calculated");
+        handleRowFieldChange(row.id, "reviewLater", "Y");
+      }
+    }
+
+    if (!row.payout && Number.isFinite(stake) && row.oddsUS) {
+      const oddsNum = Number(String(row.oddsUS).replace(/[^0-9+-]/g, ""));
+      if (Number.isFinite(oddsNum) && stake > 0) {
+        let toWinCalc = 0;
+        if (oddsNum > 0) toWinCalc = (stake * oddsNum) / 100;
+        if (oddsNum < 0) toWinCalc = (stake * 100) / Math.abs(oddsNum);
+
+        if (toWinCalc > 0) {
+          const payoutCalc = (stake + toWinCalc).toFixed(2);
+          handleRowFieldChange(row.id, "payout", payoutCalc);
+          handleRowFieldChange(row.id, "reviewLater", "Y");
+        }
+      }
+    }
+  }
+
+  const renderCell = (row, rowBg, colKey, reactKey) => {
+    if (colKey === "select") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(row.id)}
+            onChange={() => toggleSelected(row.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </td>
+      );
+    }
+
+    if (colKey === "edit") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedRowId(row.id);
+            }}
+            style={smallButtonStyle}
+          >
+            {row.id === selectedRowId ? "Selected" : "Edit"}
+          </button>
+        </td>
+      );
+    }
+
+    if (colKey === "image") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, overflow: "visible" }}>
+          {row.sourceImageUrl ? (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewZoomed(false);
+                setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                if (imageScrollRef.current) {
+                  imageScrollRef.current.scrollTop = 0;
+                }
+
+                const position = getPreviewPosition();
+
+                setHoverPreview((prev) => {
+                  const sameRow = prev.rowId === row.id;
+
+                  if (sameRow && prev.locked) {
+                    return {
+                      rowId: "",
+                      src: "",
+                      alt: "",
+                      visible: false,
+                      locked: false,
+                      x: 0,
+                      y: 0,
+                    };
+                  }
+
+                  return {
+                    rowId: row.id,
+                    src: row.sourceImageUrl,
+                    alt: row.sourceFileName,
+                    visible: true,
+                    locked: true,
+                    x: position.x,
+                    y: position.y,
+                  };
+                });
+              }}
+              style={{
+                display: "inline-block",
+                cursor: "pointer",
+              }}
+              title="Click to open preview"
+            >
+              <img
+                src={row.sourceImageUrl}
+                alt={row.sourceFileName}
+                style={{
+                  width: 84,
+                  height: 84,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                  border: "1px solid #ccc",
+                }}
+              />
+            </div>
+          ) : (
+            ""
+          )}
+        </td>
+      );
+    }
+
+    if (colKey === "bookmaker") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {getDisplayedBookmaker(row)}
+        </td>
+      );
+    }
+    if (colKey === "confidenceFlag") {
+      const confidence = String(row.confidenceFlag || "").trim().toLowerCase();
+
+      let bg = "#e5e7eb";
+      let color = "#374151";
+
+      if (confidence === "high") {
+        bg = "#166534";
+        color = "#ecfdf5";
+      } else if (confidence === "medium") {
+        bg = "#ca8a04";
+        color = "#fefce8";
+      } else if (confidence === "low") {
+        bg = "#dc2626";
+        color = "#fef2f2";
+      }
+
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.confidenceFlag ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 68,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontWeight: 800,
+                fontSize: 12,
+                background: bg,
+                color,
+              }}
+            >
+              {row.confidenceFlag}
+            </span>
+          ) : (
+            ""
+          )}
+        </td>
+      );
+    }
+    if (colKey === "likelyParserIssue") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.likelyParserIssue === "Y" ? "Check" : ""}
+        </td>
+      );
+    }
+
+    if (colKey === "warnings") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          {row.parseWarning && <div>{row.parseWarning}</div>}
+          {row.duplicateWarning && <div>{row.duplicateWarning}</div>}
+        </td>
+      );
+    }
+
+    if (colKey === "actions") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setWinStatusForRow(row.id, "Y", true);
+              }}
+              style={smallButtonStyle}
+            >
+              Win
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setWinStatusForRow(row.id, "N", true);
+              }}
+              style={smallButtonStyle}
+            >
+              Loss
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteRow(row.id);
+              }}
+              style={smallButtonStyle}
+            >
+              Delete
+            </button>
+          </div>
+        </td>
+      );
+    }
+
+    return (
+      <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+        {row[colKey] || ""}
+      </td>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      {hoverPreview.visible && hoverPreview.src && (
+        <div
+          onMouseDown={beginPreviewDrag}
+          style={{
+            position: "fixed",
+            left: hoverPreview.x,
+            top: hoverPreview.y,
+            zIndex: 9999,
+            pointerEvents: hoverPreview.locked ? "auto" : "none",
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
+            padding: 12,
+            width: 1120,
+            maxWidth: "92vw",
+            maxHeight: "85vh",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+              gap: 12,
+              cursor: hoverPreview.locked ? "move" : "default",
+              userSelect: "none",
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>
+              {hoverPreview.locked ? "Review Panel" : "Preview"}
+            </div>
+
+            {hoverPreview.locked && (
+              <button onClick={closeHoverPreview} style={smallButtonStyle}>
+                Close
+              </button>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "360px minmax(0, 1fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <strong>Selection:</strong>{" "}
+                <input
+                  value={previewRow?.selection || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "selection", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: "70%",
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+              </div>
+
+              <div>
+                <strong>League:</strong>{" "}
+                <select
+                  value={previewRow?.sportLeague || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "sportLeague", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                >
+                  {getLeagueOptionsForRow(previewRow || {}).map((league) => (
+                    <option key={league || "blank"} value={league}>
+                      {league || "Select league"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <strong>Stake:</strong>{" "}
+                <input
+                  value={previewRow?.stake || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "stake", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+              </div>
+
+              <div>
+                <strong>Odds:</strong>{" "}
+                <input
+                  value={previewRow?.oddsUS || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "oddsUS", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      previewRow?.oddsSource === "Calculated" ? "#fee2e2" : "#fff",
+                    color:
+                      previewRow?.oddsSource === "Calculated" ? "#991b1b" : "#111827",
+                    fontWeight:
+                      previewRow?.oddsSource === "Calculated" ? 700 : 400,
+                  }}
+                />
+              </div>
+
+              <div>
+                <strong>Payout:</strong>{" "}
+                <input
+                  value={previewRow?.payout || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "payout", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      !previewRow?.payout && previewRow?.oddsUS ? "#fee2e2" : "#fff",
+                  }}
+                />
+              </div>
+
+              {previewNeedsReview && (
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    border: "1px solid #fecaca",
+                    borderRadius: 6,
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                    fontWeight: 700,
+                  }}
+                >
+                  Needs Review
+                </div>
+              )}
+
+              {hoverPreview.locked && previewRow && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                  <button
+                    onClick={() =>
+                      handleRowFieldChange(
+                        previewRow.id,
+                        "reviewLater",
+                        previewRow.reviewLater === "Y" ? "N" : "Y"
+                      )
+                    }
+                    style={smallButtonStyle}
+                  >
+                    Review Later
+                  </button>
+
+                  <button
+                    onClick={() => autoFillCalculatedFields(previewRow)}
+                    style={smallButtonStyle}
+                  >
+                    Auto Fill Odds / Payout
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleRowFieldChange(previewRow.id, "reviewResolved", "Y");
+                      handleRowFieldChange(previewRow.id, "reviewLater", "N");
+                    }}
+                    style={smallButtonStyle}
+                  >
+                    Mark Reviewed
+                  </button>
+
+                  <button
+                    onClick={() => setWinStatusForRow(previewRow.id, "Y", false)}
+                    style={smallButtonStyle}
+                  >
+                    Win
+                  </button>
+
+                  <button
+                    onClick={() => setWinStatusForRow(previewRow.id, "N", false)}
+                    style={smallButtonStyle}
+                  >
+                    Loss
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      closeHoverPreview();
+                      deleteRow(previewRow.id);
+                    }}
+                    style={smallButtonStyle}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              ref={imageScrollRef}
+              style={{
+                maxHeight: "80vh",
+                height: previewZoomed ? "70vh" : "auto",
+                overflowY: previewZoomed ? "auto" : "hidden",
+                overflowX: "hidden",
+                border: "1px solid #e5e7eb",
+                borderRadius: 6,
+                background: "#fff",
+              }}
+            >
+              <img
+                src={hoverPreview.src}
+                alt={hoverPreview.alt}
+                onClick={(e) => {
+                  if (!hoverPreview.locked) return;
+
+                  if (previewZoomed) {
+                    setPreviewZoomed(false);
+                    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                    if (imageScrollRef.current) {
+                      imageScrollRef.current.scrollTop = 0;
+                    }
+                    return;
+                  }
+
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+                  setPreviewZoomOrigin({
+                    x: `${x}%`,
+                    y: `${y}%`,
+                  });
+
+                  setPreviewZoomed(true);
+                }}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                  borderRadius: 6,
+                  cursor: hoverPreview.locked
+                    ? previewZoomed
+                      ? "zoom-out"
+                      : "zoom-in"
+                    : "default",
+                  transform: previewZoomed ? "scale(1)" : "scale(0.45)",
+                  transformOrigin: previewZoomed
+                    ? `${previewZoomOrigin.x} ${previewZoomOrigin.y}`
+                    : "50% 0%",
+                  transition: "transform 0.15s ease",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ color: "#000" }}>Review Queue</h3>
+
+      <div style={{ overflowX: "auto", maxHeight: 520, border: "1px solid #ddd", borderRadius: 6 }}>
+        <table
+          style={{
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            width: "100%",
+            backgroundColor: "#fff",
+            tableLayout: "fixed",
+          }}
+        >
+          <colgroup>
+            {reviewColumns.map((col) => (
+              <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
+            ))}
+          </colgroup>
+
+          <thead>
+            <tr>
+              {reviewColumns.map((col, idx) => {
+                const isSorted = sortConfig.key === col.key;
+                const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
+
+                return (
+                  <th
+                    key={col.key}
+                    style={{
+                      borderRight: "1px solid #d1d5db",
+                      borderBottom: "2px solid #9ca3af",
+                      padding: 0,
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      textAlign: "left",
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
+                      position: "relative",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "relative",
+                        minHeight: 42,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (col.sortable) handleSort(col.key);
+                        }}
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          background: "transparent",
+                          textAlign: "left",
+                          padding: "10px 18px 10px 12px",
+                          fontWeight: 700,
+                          color: "#111827",
+                          cursor: col.sortable ? "pointer" : "default",
+                        }}
+                      >
+                        {idx === 0 ? (
+                          <input
+                            type="checkbox"
+                            checked={allVisibleSelected}
+                            onChange={toggleSelectAllVisible}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          `${col.label}${sortArrow}`
+                        )}
+                      </button>
+
+                      <div
+                        onMouseDown={(e) => startResize(e, col.key)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 14,
+                          height: "100%",
+                          cursor: "col-resize",
+                          zIndex: 2,
+                          background: "transparent",
+                        }}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+
+          <tbody>
+            {sortedRows.map((row, index) => {
+              const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
+              const attentionLevel = getRowAttentionLevel ? getRowAttentionLevel(row) : "";
+              const isResolved = row.reviewResolved === "Y";
+
+              const needsReview =
+                row.likelyParserIssue === "Y" ||
+                !row.sportLeague ||
+                !row.oddsUS ||
+                row.oddsSource === "Calculated";
+
+              const isSelected = row.id === selectedRowId;
+
+              const rowBg =
+                isSelected
+                  ? "#e0f2fe" // stronger blue
+                  : isResolved
+                  ? "#f1f8e9"
+                  : attentionLevel === "duplicate"
+                  ? "#fdecea"
+                  : needsReview
+                  ? "#fff8e1"
+                  : zebra;
+
+              return (
+                <tr
+                  key={row.id}
+                  onClick={() => setSelectedRowId(row.id)}
+                  style={{
+                  backgroundColor: rowBg,
+                  cursor: "pointer",
+
+                  outline: isSelected
+                    ? "3px solid #0284c7"
+                    : isResolved
+                    ? "2px solid #a3d9a5"
+                    : attentionLevel === "duplicate"
+                    ? "2px solid #dc2626"
+                    : needsReview
+                    ? "2px solid #f0b429"
+                    : "none",
+
+                  outlineOffset: "-2px",
+
+                  borderLeft: isSelected
+                    ? "6px solid #0284c7"
+                    : needsReview
+                    ? "6px solid #f0b429"
+                    : attentionLevel === "duplicate"
+                    ? "6px solid #dc2626"
+                    : "none",
+
+                  // 🔥 Glow pulse effect
+                  boxShadow:
+                    pulseRowId === row.id
+                      ? "0 0 0 6px rgba(2,132,199,0.45)"
+                      : isSelected
+                      ? "0 0 0 2px rgba(2,132,199,0.2)"
+                      : "none",
+
+                  transition: "box-shadow 0.25s ease",
+                }}
+                >
+                  {reviewColumns.map((col) => (
+                    renderCell(row, rowBg, col.key, col.key)
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+
+
+===== app\page.js =====
+"use client";
+import { parseBetSlip, enrichRow } from "./utils/parser";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+  detectOddsMissingReason,
+  extractBestOdds,
+  extractPayouts,
+} from "./utils/oddsHelpers";
+
+import {
+  addDuplicateWarnings,
+  computeConfidence,
+  getDisplayedBookmaker,
+  impliedProbabilityFromAmericanOdds,
+  makeDuplicateKey,
+} from "./utils/tableHelpers";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReviewTable from "./components/ReviewTable";
+import TopActionGrid from "./components/TopActionGrid";
+import FilterBar from "./components/FilterBar";
+import UploadDropZone from "./components/UploadDropZone";
+import UploadBatchStatus from "./components/UploadBatchStatus";
+import ReviewLegend from "./components/ReviewLegend";
+import Tesseract from "tesseract.js";
+
+import { detectLeague } from "./utils/detectLeague";
+
+const BOOKMAKER_UPLOAD_OPTIONS = [
+  "Auto",
+  "DraftKings",
+  "BetMGM",
+  "FanDuel",
+  "Caesars",
+  "Fanatics",
+  "theScore",
+  "bet365",
+  "Circa",
+  "Kalshi",
+];
+
+const BET_TYPE_OPTIONS = [
+  "",
+  "straight",
+  "moneyline",
+  "spread",
+  "total",
+  "player prop",
+  "game prop",
+  "parlay",
+  "futures",
+];
+
+const BET_SOURCE_OPTIONS = [
+  "",
+  "EV",
+  "Promo",
+  "Boost",
+  "Parlay",
+  "Hedge",
+  "Middle",
+  "Live",
+  "Fun",
+  "Manual Fix",
+  "Needs Check",
+];
+
+const ACCOUNT_OPTIONS = ["Me", "Wife"];
+
+function getRowAttentionLevel(row) {
+  if (!row || row.reviewResolved === "Y") return "";
+
+  const parseWarningText = String(row.parseWarning || "").toLowerCase();
+  const duplicateWarningText = String(row.duplicateWarning || "").toLowerCase();
+  const confidence = String(row.confidenceFlag || "").toLowerCase();
+
+  if (duplicateWarningText.includes("duplicate")) return "duplicate";
+
+  if (
+    confidence === "low" ||
+    parseWarningText.includes("stake_missing") ||
+    parseWarningText.includes("payout_missing") ||
+    parseWarningText.includes("selection_missing") ||
+    parseWarningText.includes("fixture_missing") ||
+    parseWarningText.includes("no_bet_date_detected") ||
+    parseWarningText.includes("payout_estimated") ||
+    parseWarningText.includes("payout_mismatch")
+  ) {
+    return "warning";
+  }
+
+  return "";
+}
+
+function cleanTextLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getMatch(text, regex, group = 1) {
+  const match = String(text || "").match(regex);
+  return match ? String(match[group] || "").trim() : "";
+}
+
+function detectLive(text) {
+  return /\blive\b/i.test(String(text || "")) ? "Y" : "N";
+}
+
+function parseVisibleTeamMatchup(lines) {
+  const teamLines = [];
+  for (const line of lines) {
+    const cleaned = cleanTextLine(line);
+    if (!cleaned) continue;
+    if (
+      /\bTrail Blazers\b|\bNuggets\b|\bBucks\b|\bClippers\b|\bHornets\b|\bCeltics\b|\bPacers\b|\bBulls\b|\bMIL\b|\bPOR\b|\bDEN\b|\bIND\b|\bLA Clippers\b/i.test(
+        cleaned
+      )
+    ) {
+      teamLines.push(cleaned.replace(/\s+\d+.*$/, "").trim());
+    }
+  }
+  const deduped = [];
+  for (const t of teamLines) {
+    if (!deduped.includes(t)) deduped.push(t);
+  }
+  if (deduped.length >= 2) return `${deduped[0]} @ ${deduped[1]}`;
+  return "";
+}
+
+function parseMyBetsCards(lines) {
+  const cards = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/\b(Wager:|Wager Amount:)\s*\$?/i.test(line)) continue;
+
+    const windowStart = Math.max(0, i - 4);
+    const windowEnd = Math.min(lines.length, i + 8);
+    const cardLines = lines.slice(windowStart, windowEnd);
+    const cardText = cardLines.join("\n");
+
+    const selectionLine =
+      cardLines.find((l) => /[+-]\d{2,5}.*(?:Open|Cashed Out|Won|Lost|Paid)?/i.test(l)) || "";
+    const marketLine =
+      cardLines.find((l) =>
+        /\b(Moneyline|Live Moneyline|Points O\/U|Assists O\/U|Rebounds O\/U|Three Pointers(?: Made)?(?: O\/U| Made O\/U)?|Total Games|Games Spread|Triple-Double|Double-Double|Earned Runs(?: Allowed)?(?: O\/U)?|Anytime Goalscorer)\b/i.test(
+          l
+        )
+      ) || "";
+    const wagerLine = cardLines.find((l) => /\bWager:\s*\$?|\bWager Amount:\s*\$?/i.test(l)) || "";
+    const payoutLine = cardLines.find((l) => /\b(To Pay:|Paid:|Total Payout:)\s*\$?/i.test(l)) || "";
+    const eventLine =
+      cardLines.find((l) => /\b(Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i.test(l)) || "";
+    const visibleMatchup = parseVisibleTeamMatchup(cardLines);
+
+    const rawSelection = cleanTextLine(selectionLine)
+      .replace(/\b(?:Open|Cashed Out|Won|Lost)\b/gi, "")
+      .replace(/[+-]\d{2,5}.*$/i, "")
+      .trim();
+
+    const extractedPayouts = extractPayouts(cardText);
+
+    cards.push({
+      rawSelection,
+      marketDetail: cleanTextLine(marketLine),
+      fixtureEvent: cleanTextLine(eventLine || visibleMatchup),
+      stake:
+        getMatch(wagerLine, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+        getMatch(cardText, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+      payout: extractedPayouts.payout,
+      oddsUS:
+        getMatch(selectionLine, /([+-]\d{2,5})/) ||
+        getMatch(cardText, /([+-]\d{2,5})\s+(?:Open|Cashed Out|Won|Lost)\b/i) ||
+        "",
+      status: /\bCashed Out\b/i.test(cardText)
+        ? "Cashed Out"
+        : /\bOpen\b/i.test(cardText)
+        ? "Open"
+        : /\bWon\b/i.test(cardText)
+        ? "Won"
+        : /\bLost\b/i.test(cardText)
+        ? "Lost"
+        : "",
+      live: detectLive(cardText),
+      sourceText: cardText,
+      screenType: "my_bets_card",
+    });
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const card of cards) {
+    const key = [
+      card.rawSelection,
+      card.marketDetail,
+      card.stake,
+      card.payout,
+      card.oddsUS,
+      card.status,
+    ].join("|");
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(card);
+    }
+  }
+  return unique;
+}
+
+function escapeCsv(value) {
+  const str = String(value ?? "");
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+};
+
+const selectStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+};
+
+const textAreaStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+  minHeight: 90,
+  resize: "vertical",
+};
+
+const buttonStyle = {
+  padding: "8px 12px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+const noticeStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #c8e6c9",
+  borderRadius: 4,
+  backgroundColor: "#e8f5e9",
+  color: "#1b5e20",
+  display: "inline-block",
+};
+
+const warningStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #ffe082",
+  borderRadius: 4,
+  backgroundColor: "#fff8e1",
+  color: "#7a5a00",
+  display: "inline-block",
+};
+
+const duplicateStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #ffccbc",
+  borderRadius: 4,
+  backgroundColor: "#fff3e0",
+  color: "#a84300",
+  display: "inline-block",
+};
+
+const cellStyle = {
+  border: "1px solid #ccc",
+  padding: 8,
+  verticalAlign: "top",
+  background: "#fff",
+  color: "#000",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+export default function Home() {
+  const [rows, setRows] = useState([]);
+  const [selectedRowId, setSelectedRowId] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [showArchivedRows, setShowArchivedRows] = useState(false);
+  const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState("");
+  const [saveNotice, setSaveNotice] = useState("");
+  const [showReviewLaterOnly, setShowReviewLaterOnly] = useState(false);
+  const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
+  const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
+  const [tableMode, setTableMode] = useState("debug");
+  const [uploadBatches, setUploadBatches] = useState([]);
+  const [savedFilterView, setSavedFilterView] = useState("default");
+  const [columnWidths, setColumnWidths] = useState({
+    select: 52,
+    edit: 84,
+    image: 96,
+    sourceFileName: 180,
+    accountOwner: 90,
+    bookmaker: 110,
+    betId: 150,
+    eventDate: 105,
+    betDate: 105,
+    sportLeague: 110,
+    selection: 220,
+    betType: 110,
+    betSourceTag: 110,
+    fixtureEvent: 220,
+    stake: 90,
+    oddsUS: 90,
+    oddsMissingReason: 150,
+    impliedProbability: 90,
+    confidenceFlag: 95,
+    likelyParserIssue: 80,
+    live: 70,
+    bonusBet: 75,
+    reviewLater: 75,
+    warnings: 220,
+    actions: 170,
+  });
+
+  const resizeStateRef = useRef(null);
+  const [uploadOwner, setUploadOwner] = useState("Me");
+  const [uploadBookmaker, setUploadBookmaker] = useState("Auto");
+  const [changelog, setChangelog] = useState([
+    "v1: initial OCR parser and CSV export",
+    "v2: editor, duplicate handling, account owner, source tags, implied probability, confidence",
+    "v3: upload owner toggle, editor above table, league and prop detection expanded, QA helpers",
+    "v4: local storage, app state import/export, changelog, improved league and prop classification",
+    "v5: odds missing reason, stronger college/soccer league fallbacks, image thumbnails, improved upload button and review table",
+    "v6: screen type classification, stronger odds/payout fallback, parlay summaries, improved DK hardening",
+    "v10: modular action grid + filter bar foundation",
+"v11: preview panel cleanup, review-mode UX, cleaner control layout",
+  ]);
+  const noticeTimerRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("betSlipAppStateV1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+    } catch (error) {
+      console.error("Could not load local app state", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "betSlipAppStateV1",
+        JSON.stringify({ rows, uploadOwner, uploadBookmaker, changelog })
+      );
+    } catch (error) {
+      console.error("Could not save local app state", error);
+    }
+  }, [rows, uploadOwner, uploadBookmaker, changelog]);
+
+  const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
+
+  function rowNeedsReview(row) {
+    return (
+      row.reviewResolved !== "Y" &&
+      (
+        row.likelyParserIssue === "Y" ||
+        !row.sportLeague ||
+        !row.oddsUS ||
+        row.oddsSource === "Calculated" ||
+        !!row.parseWarning
+      )
+    );
+  }
+
+  const visibleRows = useMemo(() => {
+  let next = rowsWithWarnings;
+
+  if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
+  if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
+  if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
+  if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
+  if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
+
+  if (reviewMode) {
+    next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
+  }
+
+  return next;
+}, [
+  rowsWithWarnings,
+  showArchivedRows,
+  showReviewLaterOnly,
+  showLowConfidenceOnly,
+  showLikelyParserIssuesOnly,
+  showNeedsReviewOnly,
+  reviewMode,
+]);
+
+  const reviewedCount = rowsWithWarnings.filter(
+  (row) => row.reviewResolved === "Y"
+).length;
+
+const exportableCount = rowsWithWarnings.filter(
+  (row) => row.archived !== "Y"
+).length;
+
+const counts = {
+  total: rowsWithWarnings.length,
+  visible: visibleRows.length,
+  needsReview: rowsWithWarnings.filter((row) => rowNeedsReview(row)).length,
+  reviewLater: rowsWithWarnings.filter((row) => row.reviewLater === "Y").length,
+  lowConfidence: rowsWithWarnings.filter((row) => row.confidenceFlag === "Low").length,
+  parserIssues: rowsWithWarnings.filter((row) => row.likelyParserIssue === "Y").length,
+  archived: rowsWithWarnings.filter((row) => row.archived === "Y").length,
+  selected: selectedIds.length,
+  reviewed: reviewedCount,
+  exportable: exportableCount,
+};
+
+  const selectedRow =
+    rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const selectedVisibleIds = visibleRows.map((row) => row.id);
+  const allVisibleSelected =
+    selectedVisibleIds.length > 0 && selectedVisibleIds.every((id) => selectedIds.includes(id));
+
+  useEffect(() => {
+    if (!selectedRowId && visibleRows.length > 0) setSelectedRowId(visibleRows[0].id);
+    if (
+      selectedRowId &&
+      rowsWithWarnings.length > 0 &&
+      !rowsWithWarnings.some((row) => row.id === selectedRowId)
+    ) {
+      setSelectedRowId(visibleRows[0]?.id || rowsWithWarnings[0]?.id || "");
+    }
+    if (rowsWithWarnings.length === 0) setSelectedRowId("");
+  }, [rowsWithWarnings, visibleRows, selectedRowId]);
+
+  const showNotice = (message) => {
+    setSaveNotice(message);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => {
+      setSaveNotice("");
+      noticeTimerRef.current = null;
+    }, 2000);
+  };
+
+  const moveSelection = (delta) => {
+    if (visibleRows.length === 0) return;
+    const index = visibleRows.findIndex((row) => row.id === selectedRowId);
+    if (index === -1) return setSelectedRowId(visibleRows[0].id);
+    const nextIndex = Math.min(Math.max(index + delta, 0), visibleRows.length - 1);
+    setSelectedRowId(visibleRows[nextIndex].id);
+  };
+
+  const selectNextAfter = (id) => {
+    const index = visibleRows.findIndex((row) => row.id === id);
+    if (index === -1) return;
+    const next = visibleRows[index + 1] || visibleRows[index - 1] || null;
+    if (next) setSelectedRowId(next.id);
+  };
+
+  useEffect(() => {
+    const handler = (event) => {
+      if (!selectedRowId) return;
+      const tag = String(event.target?.tagName || "").toLowerCase();
+      if (["input", "textarea", "select"].includes(tag)) return;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelection(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSelection(-1);
+      } else if (event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        setWinStatusForRow(selectedRowId, "Y", true);
+      } else if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setWinStatusForRow(selectedRowId, "N", true);
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedRowId, visibleRows]);
+
+  function createUploadBatch(files) {
+  const id = crypto.randomUUID();
+
+  let folder = "";
+  let parentFolder = "";
+
+  if (files[0]?.webkitRelativePath) {
+    const parts = files[0].webkitRelativePath.split("/");
+
+    if (parts.length >= 2) {
+      folder = parts[parts.length - 2];
+    }
+
+    if (parts.length >= 3) {
+      parentFolder = parts[parts.length - 3];
+    }
+  }
+
+  const batch = {
+    id,
+    label: `Batch ${uploadBatches.length + 1}`,
+    status: "queued",
+    fileCount: files.length,
+    processedCount: 0,
+    rowsCreated: 0,
+    errorCount: 0,
+    fileNames: files.map((file) => file.name),
+    folder,
+    parentFolder,
+    createdAt: Date.now(),
+  };
+
+  setUploadBatches((prev) => [batch, ...prev]);
+  return id;
+}
+
+  function updateUploadBatch(batchId, updates) {
+    setUploadBatches((prev) =>
+      prev.map((batch) =>
+        batch.id === batchId
+          ? { ...batch, ...updates }
+          : batch
+      )
+    );
+  }
+
+  function clearUploadHistory() {
+    setUploadBatches([]);
+  }
+
+  function applySavedFilterView(nextView) {
+    setSavedFilterView(nextView);
+
+    if (nextView === "default") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "review_queue") {
+      setReviewMode(true);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "needs_review") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(true);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "parser_issues") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(true);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "archived") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(true);
+    }
+  }
+
+    const handleUpload = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) =>
+      String(file.type || "").startsWith("image/")
+    );
+    if (files.length === 0) return;
+
+    const batchId = createUploadBatch(files);
+    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+
+    setProcessing(true);
+    updateUploadBatch(batchId, { status: "processing" });
+
+    const newRows = [];
+    let processedCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        let folder = "";
+        let parentFolder = "";
+
+        if (file.webkitRelativePath) {
+          const parts = file.webkitRelativePath.split("/");
+
+          if (parts.length >= 2) {
+            folder = parts[parts.length - 2]; // sportsbook
+          }
+
+          if (parts.length >= 3) {
+            parentFolder = parts[parts.length - 3]; // month
+          }
+        }
+        setProcessingMessage(`Reading ${i + 1} of ${files.length}: ${file.name}`);
+
+        try {
+          const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
+          const extractedText = result.data.text || "";
+          const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
+
+          newRows.push({
+  ...parsed,
+  folder,
+  parentFolder,
+            parserId: parsed.id || "",
+            id: crypto.randomUUID(),
+            accountOwner: uploadOwner,
+            sourceImageUrl: URL.createObjectURL(file),
+          });
+        } catch (error) {
+          console.error(error);
+          errorCount += 1;
+        }
+
+        processedCount += 1;
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount,
+          rowsCreated: newRows.length,
+          errorCount,
+        });
+      }
+
+      setRows((prev) => [...prev, ...newRows]);
+      if (newRows[0]) setSelectedRowId(newRows[0].id);
+
+      updateUploadBatch(batchId, {
+        status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
+        processedCount,
+        rowsCreated: newRows.length,
+        errorCount,
+      });
+
+      showNotice(
+        `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
+      );
+    } catch (error) {
+      console.error(error);
+      updateUploadBatch(batchId, {
+        status: "failed",
+        processedCount,
+        rowsCreated: newRows.length,
+        errorCount: errorCount + 1,
+      });
+      showNotice("Could not process upload batch");
+    } finally {
+      setProcessing(false);
+      setProcessingMessage("");
+    }
+  };
+
+  const handleRowFieldChange = (id, field, value) =>
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? enrichRow({ ...row, [field]: value }) : row))
+    );
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleSelectAllVisible = () =>
+    setSelectedIds((prev) =>
+      allVisibleSelected
+        ? prev.filter((id) => !selectedVisibleIds.includes(id))
+        : Array.from(new Set([...prev, ...selectedVisibleIds]))
+    );
+
+  const deleteRow = (id) => {
+    selectNextAfter(id);
+    setRows((prev) => prev.filter((row) => row.id !== id));
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    showNotice("Row deleted");
+  };
+
+  const setWinStatusForSelected = (winValue) => {
+    if (selectedIds.length === 0) {
+      showNotice(`No selected rows to mark ${winValue === "Y" ? "win" : "loss"}`);
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (!selectedIds.includes(row.id)) return row;
+        const next = {
+          ...row,
+          win: winValue,
+          status: winValue === "Y" ? "Won" : "Lost",
+        };
+        return enrichRow(next);
+      })
+    );
+
+    showNotice(
+      `${selectedIds.length} row${selectedIds.length === 1 ? "" : "s"} marked ${
+        winValue === "Y" ? "win" : "loss"
+      }`
+    );
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.length === 0) return showNotice("No selected rows to delete");
+    const currentId = selectedRowId;
+    setRows((prev) => prev.filter((row) => !selectedIds.includes(row.id)));
+    setSelectedIds([]);
+    if (selectedIds.includes(currentId)) setSelectedRowId("");
+    showNotice("Selected rows deleted");
+  };
+
+  const clearAll = () => {
+    setRows([]);
+    setSelectedIds([]);
+    setSelectedRowId("");
+    showNotice("All rows cleared");
+  };
+
+  const setWinStatusForRow = (id, winValue, advance = false) => {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        const next = { ...row, win: winValue };
+        if (winValue === "Y") next.status = "Won";
+        if (winValue === "N") next.status = "Lost";
+        return enrichRow(next);
+      })
+    );
+    if (advance) selectNextAfter(id);
+  };
+
+  const ignoreDuplicateForRow = (id) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? enrichRow({ ...row, duplicateIgnored: row.duplicateIgnored === "Y" ? "N" : "Y" })
+          : row
+      )
+    );
+    showNotice("Duplicate preference updated");
+  };
+
+  const mergeDuplicatesIntoSelected = () => {
+    if (!selectedRow) return showNotice("Select a row first");
+    const key = makeDuplicateKey(selectedRow);
+    const duplicateIds = rowsWithWarnings
+      .filter((row) => row.id !== selectedRow.id && makeDuplicateKey(row) === key)
+      .map((row) => row.id);
+
+    if (duplicateIds.length === 0) return showNotice("No duplicates to merge");
+
+    setRows((prev) => prev.filter((row) => !duplicateIds.includes(row.id)));
+    setSelectedIds((prev) => prev.filter((id) => !duplicateIds.includes(id)));
+    showNotice(`Merged ${duplicateIds.length} duplicate row${duplicateIds.length === 1 ? "" : "s"}`);
+  };
+
+  const buildCsvData = (rowsToExport, debug = false) => {
+    if (debug) {
+      const headers = [
+        "Row ID",
+        "Bet ID",
+        "Source File Name",
+        "Account Owner",
+        "EventDate",
+        "Bet Date",
+        "Bookmaker",
+        "Sport / League",
+        "Selection",
+        "Bet Type",
+        "Bet Source Tag",
+        "Fixture / Event",
+        "Stake",
+        "Odds (US)",
+        "Odds Source",
+        "Odds Missing Reason",
+        "Implied Probability",
+        "Confidence",
+        "Live",
+        "Bonus Bet",
+        "Win",
+        "Review Later",
+        "Market Detail",
+        "Payout",
+        "To Win",
+        "Raw Placed Date",
+        "Status",
+        "Parse Warning",
+        "Duplicate Warning",
+        "Review Notes",
+        "OCR Text",
+        "Debug Trace",
+      ];
+
+      const csvRows = rowsToExport.map((row) => [
+        escapeCsv(row.id),
+        escapeCsv(row.betId),
+        escapeCsv(row.sourceFileName),
+        escapeCsv(row.accountOwner),
+        escapeCsv(row.eventDate),
+        escapeCsv(row.betDate),
+        escapeCsv(getDisplayedBookmaker(row)),
+        escapeCsv(row.sportLeague),
+        escapeCsv(row.selection),
+        escapeCsv(row.betType),
+        escapeCsv(row.betSourceTag),
+        escapeCsv(row.fixtureEvent),
+        escapeCsv(row.stake),
+        escapeCsv(row.oddsUS),
+        escapeCsv(row.oddsSource),
+        escapeCsv(row.oddsMissingReason),
+        escapeCsv(row.impliedProbability),
+        escapeCsv(row.confidenceFlag),
+        escapeCsv(row.live),
+        escapeCsv(row.bonusBet),
+        escapeCsv(row.win),
+        escapeCsv(row.reviewLater),
+        escapeCsv(row.marketDetail),
+        escapeCsv(row.payout),
+        escapeCsv(row.toWin),
+        escapeCsv(row.rawPlacedDate),
+        escapeCsv(row.status),
+        escapeCsv(row.parseWarning),
+        escapeCsv(row.duplicateWarning),
+        escapeCsv(row.reviewNotes),
+        escapeCsv(row.sourceText),
+        escapeCsv(JSON.stringify(row.debugTrace || [])),
+      ]);
+
+      return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+    }
+
+    const headers = [
+      "EventDate",
+      "Bet Date",
+      "Bookmaker",
+      "Sport / League",
+      "Selection",
+      "Bet Type",
+      "Bet Source Tag",
+      "Fixture / Event",
+      "Stake",
+      "Odds (US)",
+      "Odds Source",
+      "Odds Missing Reason",
+      "Implied Probability",
+      "Confidence",
+      "Live",
+      "Bonus Bet",
+      "Win",
+    ];
+
+    const csvRows = rowsToExport.map((row) => [
+      escapeCsv(row.eventDate),
+      escapeCsv(row.betDate),
+      escapeCsv(getDisplayedBookmaker(row)),
+      escapeCsv(row.sportLeague),
+      escapeCsv(row.selection),
+      escapeCsv(row.betType),
+      escapeCsv(row.betSourceTag),
+      escapeCsv(row.fixtureEvent),
+      escapeCsv(row.stake),
+      escapeCsv(row.oddsUS),
+      escapeCsv(row.oddsSource),
+      escapeCsv(row.oddsMissingReason),
+      escapeCsv(row.impliedProbability),
+      escapeCsv(row.confidenceFlag),
+      escapeCsv(row.live),
+      escapeCsv(row.bonusBet),
+      escapeCsv(row.win),
+    ]);
+
+    return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+  };
+
+  const downloadCsv = (filename, content) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportStandardCsv = () => {
+    if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
+    downloadCsv("bet-slip-data.csv", buildCsvData(rowsWithWarnings, false));
+    showNotice("Standard CSV exported");
+  };
+
+  const exportDebugCsv = () => {
+    if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
+    downloadCsv("bet-slip-debug-data.csv", buildCsvData(rowsWithWarnings, true));
+    showNotice("Debug CSV exported");
+  };
+
+  const exportSelectedCsv = (debug = false) => {
+    const rowsToExport = rowsWithWarnings.filter((row) => selectedIds.includes(row.id));
+    if (rowsToExport.length === 0) return showNotice("No selected rows to export");
+    downloadCsv(
+      debug ? "bet-slip-selected-debug-data.csv" : "bet-slip-selected-data.csv",
+      buildCsvData(rowsToExport, debug)
+    );
+    showNotice(`Exported ${rowsToExport.length} selected row${rowsToExport.length === 1 ? "" : "s"}`);
+  };
+
+  const copySelectedOcr = async () => {
+    if (!selectedRow?.sourceText) return showNotice("No OCR text to copy");
+    try {
+      await navigator.clipboard.writeText(selectedRow.sourceText);
+      showNotice("OCR text copied");
+    } catch (error) {
+      console.error(error);
+      showNotice("Could not copy OCR text");
+    }
+  };
+
+  const exportAppState = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      rows,
+      uploadOwner,
+      uploadBookmaker,
+      changelog,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "bet-slip-app-state.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotice("App state exported");
+  };
+
+  const importAppState = async (fileList) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+      showNotice("App state imported");
+    } catch (error) {
+      console.error(error);
+      showNotice("Could not import app state");
+    }
+  };
+
+  const addChangelogEntry = () => {
+    const entry = window.prompt("Add a changelog entry");
+    if (!entry) return;
+    setChangelog((prev) => [`${new Date().toLocaleDateString()} - ${entry}`, ...prev]);
+    showNotice("Changelog updated");
+  };
+
+  const startResize = (event, columnKey) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    resizeStateRef.current = {
+      columnKey,
+      startX: event.clientX,
+      startWidth: columnWidths[columnKey] || 120,
+    };
+
+    const onMouseMove = (moveEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+
+      const delta = moveEvent.clientX - state.startX;
+      const nextWidth = Math.max(60, state.startWidth + delta);
+
+      setColumnWidths((prev) => ({
+        ...prev,
+        [state.columnKey]: nextWidth,
+      }));
+    };
+
+    const onMouseUp = () => {
+      resizeStateRef.current = null;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const editorFields = [
+    ["eventDate", "EventDate"],
+    ["betDate", "Bet Date"],
+    ["bookmaker", "Bookmaker"],
+    ["sportLeague", "Sport / League"],
+    ["selection", "Selection"],
+    ["fixtureEvent", "Fixture / Event"],
+    ["stake", "Stake"],
+    ["oddsUS", "Odds (US)"],
+    ["marketDetail", "Market Detail (helper)"],
+    ["payout", "Payout (helper)"],
+    ["toWin", "To Win (helper)"],
+    ["rawPlacedDate", "Raw Placed Date (helper)"],
+    ["status", "Status (helper)"],
+    ["parseWarning", "Parse Warning (helper)"],
+    ["sourceFileName", "Source File Name (helper)"],
+    ["betId", "Bet ID (helper)"],
+  ];
+
+  function archiveSelectedRows() {
+    if (!selectedIds.length) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedIds.includes(row.id)
+          ? { ...row, archived: "Y", exported: row.exported || "N" }
+          : row
+      )
+    );
+
+    setSelectedIds([]);
+    showNotice("Selected rows archived");
+  }
+
+  function markSelectedRowsExported() {
+    if (!selectedIds.length) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedIds.includes(row.id)
+          ? { ...row, exported: "Y" }
+          : row
+      )
+    );
+
+    showNotice("Selected rows marked exported");
+  }
+
+  function exportSelectedRowsToCsv() {
+    const selectedRows = rowsWithWarnings.filter(
+      (row) => selectedIds.includes(row.id) && row.archived !== "Y"
+    );
+
+    if (!selectedRows.length) return showNotice("No selected active rows to export");
+
+    const unreviewed = selectedRows.filter(
+        (row) => row.reviewResolved !== "Y"
+      );
+
+      if (unreviewed.length > 0) {
+        showNotice(`⚠️ ${unreviewed.length} rows not reviewed`);
+      }
+
+    const headers = [
+      "eventDate",
+      "betDate",
+      "bookmaker",
+      "sportLeague",
+      "selection",
+      "betType",
+      "fixtureEvent",
+      "stake",
+      "oddsUS",
+      "payout",
+      "toWin",
+      "betId",
+      "betSourceTag",
+      "accountOwner",
+    ];
+
+    const csv = [
+      headers.join(","),
+      ...selectedRows.map((row) =>
+        headers.map((header) => escapeCsv(row[header])).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `bet-slip-export-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    markSelectedRowsExported();
+    showNotice(`Exported ${selectedRows.length} row${selectedRows.length === 1 ? "" : "s"} in current batch`);
+  }
+
+  return (
+    <div
+      style={{
+        padding: 20,
+        fontFamily: "Arial, sans-serif",
+        maxWidth: 1600,
+        margin: "0 auto",
+        backgroundColor: "#ffffff",
+        color: "#000000",
+        minHeight: "100vh",
+      }}
+    >
+      <h1>Bet Slip Reader</h1>
+
+            <div
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginBottom: 12,
+          padding: 12,
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          background: "#f9fafb",
+        }}
+      >
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+          Upload owner
+          <select
+            value={uploadOwner}
+            onChange={(e) => setUploadOwner(e.target.value)}
+            style={{ ...selectStyle, width: 120, padding: "6px 8px" }}
+          >
+            <option value="Me">Me</option>
+            <option value="Wife">Wife</option>
+          </select>
+        </label>
+
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+          Upload sportsbook
+          <select
+            value={uploadBookmaker}
+            onChange={(e) => setUploadBookmaker(e.target.value)}
+            style={{ ...selectStyle, width: 150, padding: "6px 8px" }}
+          >
+            
+            {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+  Filter View
+  <select
+    value={savedFilterView}
+    onChange={(e) => applySavedFilterView(e.target.value)}
+    style={{ ...selectStyle, width: 160, padding: "6px 8px" }}
+  >
+    <option value="default">Default</option>
+    <option value="review_queue">Review Queue</option>
+    <option value="needs_review">Needs Review</option>
+    <option value="parser_issues">Parser Issues</option>
+    <option value="archived">Archived</option>
+  </select>
+</label>
+      </div>
+
+            <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(520px, 700px) minmax(340px, 1fr)",
+          gap: 16,
+          alignItems: "stretch",
+          marginBottom: 12,
+        }}
+      >
+  
+        <TopActionGrid
+          hasRows={rowsWithWarnings.length > 0}
+          hasSelectedRows={selectedIds.length > 0}
+          onUpload={handleUpload}
+          onExportCsv={exportStandardCsv}
+          onExportDebugCsv={exportDebugCsv}
+          onExportSelectedCsv={exportSelectedCsv}
+          onExportSelectedDebugCsv={exportSelectedCsv}
+          onExportAppState={exportAppState}
+          onImportAppState={importAppState}
+          onAddChangelogEntry={addChangelogEntry}
+          onDeleteSelected={deleteSelected}
+          onMarkSelectedWin={() => setWinStatusForSelected("Y")}
+          onMarkSelectedLoss={() => setWinStatusForSelected("N")}
+          onClearAll={clearAll}
+        />
+
+        <FilterBar
+          tableMode={tableMode}
+          setTableMode={setTableMode}
+          showReviewLaterOnly={showReviewLaterOnly}
+          setShowReviewLaterOnly={setShowReviewLaterOnly}
+          showLowConfidenceOnly={showLowConfidenceOnly}
+          setShowLowConfidenceOnly={setShowLowConfidenceOnly}
+          showLikelyParserIssuesOnly={showLikelyParserIssuesOnly}
+          setShowLikelyParserIssuesOnly={setShowLikelyParserIssuesOnly}
+          showNeedsReviewOnly={showNeedsReviewOnly}
+          setShowNeedsReviewOnly={setShowNeedsReviewOnly}
+          showArchivedRows={showArchivedRows}
+          setShowArchivedRows={setShowArchivedRows}
+          reviewMode={reviewMode}
+          setReviewMode={setReviewMode}
+          counts={counts}
+        />
+      </div>
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "minmax(420px, 1fr) 320px",
+    gap: 16,
+    alignItems: "stretch",
+    marginBottom: 12,
+  }}
+>
+  <UploadDropZone onFiles={handleUpload} />
+  <ReviewLegend />
+</div>
+
+<UploadBatchStatus
+  batches={uploadBatches}
+  onClearHistory={clearUploadHistory}
+/>
+
+      {saveNotice && <div style={noticeStyle}>{saveNotice}</div>}
+      {processing && <div style={noticeStyle}>{processingMessage || "Reading images..."}</div>}
+
+         {selectedIds.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 12,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: 12,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <strong style={{ alignSelf: "center" }}>
+            {selectedIds.length} selected
+          </strong>
+
+          <button onClick={exportSelectedRowsToCsv} style={smallButtonStyle}>
+            Export Current Batch
+          </button>
+
+          <button onClick={markSelectedRowsExported} style={smallButtonStyle}>
+            Mark Exported
+          </button>
+
+          <button onClick={archiveSelectedRows} style={smallButtonStyle}>
+            Archive Selected
+          </button>
+
+          <button
+            onClick={() => {
+              setRows((prev) =>
+                prev.map((row) =>
+                  selectedIds.includes(row.id)
+                    ? { ...row, reviewResolved: "Y", reviewLater: "N" }
+                    : row
+                )
+              );
+              showNotice("Selected rows marked reviewed");
+            }}
+            style={smallButtonStyle}
+          >
+            Mark Reviewed
+          </button>
+        </div>
+      )}
+
+      {visibleRows.length > 0 && (
+        <ReviewTable
+          rows={visibleRows}
+          selectedRowId={selectedRowId}
+          setSelectedRowId={setSelectedRowId}
+          selectedIds={selectedIds}
+          toggleSelected={toggleSelected}
+          toggleSelectAllVisible={toggleSelectAllVisible}
+          allVisibleSelected={allVisibleSelected}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+          columnWidths={columnWidths}
+          startResize={startResize}
+          setWinStatusForRow={setWinStatusForRow}
+          deleteRow={deleteRow}
+          handleRowFieldChange={handleRowFieldChange}
+          tableMode={tableMode}
+          getRowAttentionLevel={getRowAttentionLevel}
+          isMobile={typeof window !== "undefined" && window.innerWidth < 768}
+        />
+      )}
+
+      {selectedRow && (
+        <div
+          style={{
+            marginTop: 24,
+            marginBottom: 0,
+            padding: 16,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
+
+          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
+          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewResolved",
+                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
+              Mark Win + Next
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
+              Mark Loss + Next
+            </button>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewLater",
+                  selectedRow.reviewLater === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
+            </button>
+            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
+              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
+            </button>
+            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
+              Merge Duplicates Into This Row
+            </button>
+            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
+              Prev Row
+            </button>
+            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
+              Next Row
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "240px 1fr",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontWeight: "bold" }}>Account Owner</label>
+            <select
+              value={selectedRow.accountOwner || "Me"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
+              style={selectStyle}
+            >
+              {ACCOUNT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Type</label>
+            <select
+              value={selectedRow.betType || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
+            <select
+              value={selectedRow.betSourceTag || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_SOURCE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Win</label>
+            <select
+              value={selectedRow.win || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">--</option>
+              <option value="Y">Y</option>
+              <option value="N">N</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
+            <select
+              value={selectedRow.bonusBet || "N"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="N">N</option>
+              <option value="Y">Y</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
+            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
+            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
+            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
+            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
+
+            {editorFields.map(([key, label]) => (
+              <div key={key} style={{ display: "contents" }}>
+                <label style={{ fontWeight: "bold" }}>{label}</label>
+                <input
+                  type="text"
+                  value={selectedRow[key] || ""}
+                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+
+            <label style={{ fontWeight: "bold" }}>Image</label>
+            <div>
+              {selectedRow.sourceImageUrl ? (
+                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={selectedRow.sourceImageUrl}
+                    alt={selectedRow.sourceFileName}
+                    style={{
+                      maxWidth: 260,
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      border: "1px solid #ccc",
+                      borderRadius: 6,
+                    }}
+                  />
+                </a>
+              ) : (
+                <div>No image in session</div>
+              )}
+            </div>
+
+            <label style={{ fontWeight: "bold" }}>Review Notes</label>
+            <textarea
+              value={selectedRow.reviewNotes || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
+              style={textAreaStyle}
+            />
+
+            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
+            <textarea
+              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
+              readOnly
+              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
+            />
+
+            <label style={{ fontWeight: "bold" }}>OCR Text</label>
+            <div>
+              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
+                Copy OCR
+              </button>
+              <textarea
+                value={selectedRow.sourceText || ""}
+                readOnly
+                style={{ ...textAreaStyle, minHeight: 220 }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+          {selectedRow && (
+        <div
+          style={{
+            marginTop: 24,
+            marginBottom: 0,
+            padding: 16,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
+
+          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
+          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewResolved",
+                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
+              Mark Win + Next
+            </button>
+            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
+              Mark Loss + Next
+            </button>
+            <button
+              onClick={() =>
+                handleRowFieldChange(
+                  selectedRow.id,
+                  "reviewLater",
+                  selectedRow.reviewLater === "Y" ? "N" : "Y"
+                )
+              }
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
+            </button>
+            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
+              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
+            </button>
+            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
+              Merge Duplicates Into This Row
+            </button>
+            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
+              Prev Row
+            </button>
+            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
+              Next Row
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "240px 1fr",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontWeight: "bold" }}>Account Owner</label>
+            <select
+              value={selectedRow.accountOwner || "Me"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
+              style={selectStyle}
+            >
+              {ACCOUNT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Type</label>
+            <select
+              value={selectedRow.betType || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
+            <select
+              value={selectedRow.betSourceTag || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_SOURCE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Win</label>
+            <select
+              value={selectedRow.win || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">--</option>
+              <option value="Y">Y</option>
+              <option value="N">N</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
+            <select
+              value={selectedRow.bonusBet || "N"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="N">N</option>
+              <option value="Y">Y</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
+            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
+            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
+            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
+            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
+
+            {editorFields.map(([key, label]) => (
+              <div key={key} style={{ display: "contents" }}>
+                <label style={{ fontWeight: "bold" }}>{label}</label>
+                <input
+                  type="text"
+                  value={selectedRow[key] || ""}
+                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+
+            <label style={{ fontWeight: "bold" }}>Image</label>
+            <div>
+              {selectedRow.sourceImageUrl ? (
+                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={selectedRow.sourceImageUrl}
+                    alt={selectedRow.sourceFileName}
+                    style={{
+                      maxWidth: 260,
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      border: "1px solid #ccc",
+                      borderRadius: 6,
+                    }}
+                  />
+                </a>
+              ) : (
+                <div>No image in session</div>
+              )}
+            </div>
+
+            <label style={{ fontWeight: "bold" }}>Review Notes</label>
+            <textarea
+              value={selectedRow.reviewNotes || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
+              style={textAreaStyle}
+            />
+
+            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
+            <textarea
+              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
+              readOnly
+              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
+            />
+
+            <label style={{ fontWeight: "bold" }}>OCR Text</label>
+            <div>
+              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
+                Copy OCR
+              </button>
+              <textarea
+                value={selectedRow.sourceText || ""}
+                readOnly
+                style={{ ...textAreaStyle, minHeight: 220 }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          marginTop: 28,
+          marginBottom: 8,
+          padding: 12,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: "bold", marginBottom: 8 }}>Changelog</div>
+        <div style={{ display: "grid", gap: 4 }}>
+          {changelog.map((entry, index) => (
+            <div key={`${entry}-${index}`}>{entry}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+

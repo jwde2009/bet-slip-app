@@ -190,6 +190,15 @@ export default function FilterBar({
     </select>
   </label>
 
+<label>
+  <input
+    type="checkbox"
+    checked={showHedgesOnly}
+    onChange={(e) => setShowHedgesOnly(e.target.checked)}
+  />
+  Hedges Only
+</label>
+
   <span style={pillStyles.green}>
     {counts.reviewed} / {counts.exportable} Reviewed
   </span>

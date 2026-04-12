@@ -2,6 +2,9 @@ import { parseBetMgmSlip } from "./parseBetMgm";
 import { parseDraftKingsLikeSlip } from "./parseDraftKings";
 import { parseFanDuelSlip } from "./parseFanDuel";
 import { parseCaesarsSlip } from "./parseCaesars";
+import { parseKalshiSlip } from "./parseKalshi";
+import { parseCircaSlip } from "./parseCirca";
+import { parseBet365Slip } from "./parseBet365";
 const emptyParsed = {
   eventDate: "",
   betDate: "",
@@ -483,7 +486,7 @@ export function enrichRow(row) {
     (
       row.likelyParserIssue === "Y" ||
       !row.sportLeague ||
-      !row.oddsUS ||
+      (!row.oddsUS && String(row.bookmaker || "") !== "Kalshi") ||
       row.oddsSource === "Calculated" ||
       !!row.parseWarning
     );
@@ -555,6 +558,36 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
     shared,
     debug: true,
   });
+}
+
+if (
+  /kalshi/i.test(lowerCleaned) ||
+  /\bmarkets?\s+pay\b/i.test(lowerCleaned) ||
+  /\bcost\b/i.test(lowerCleaned) ||
+  /\bmax payout\b/i.test(lowerCleaned) ||
+  /\bodds\s+\d+% chance\b/i.test(lowerCleaned) ||
+  /\bslide to buy\b/i.test(lowerCleaned) ||
+  /\border completed\b/i.test(lowerCleaned) ||
+  /\bpro basketball\b/i.test(lowerCleaned) ||
+  /\bxx dollars\b/i.test(lowerCleaned)
+) {
+  return parseKalshiSlip(cleaned, shared);
+}
+
+if (
+  forcedBook === "circa" ||
+  /circa/i.test(lowerCleaned) ||
+  /\bwager placed\b/i.test(lowerCleaned) ||
+  /\bthank you for playing with circa sports\b/i.test(lowerCleaned)
+) {
+  return parseCircaSlip(cleaned, shared);
+}
+
+if (
+  forcedBook === "bet365" ||
+  /bet365/i.test(lowerCleaned)
+) {
+  return parseBet365Slip(cleaned, shared);
 }
 
   if (forcedBook === "caesars") {

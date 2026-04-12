@@ -381,8 +381,12 @@ export default function Home() {
     }
   }, [rows, uploadOwner, uploadBookmaker, changelog]);
 
-  const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
-
+  const rowsWithWarnings = useMemo(() => {
+    const enriched = rows.map(enrichRow);
+    const withDuplicates = addDuplicateWarnings(enriched);
+    return addLikelyHedgeFlags(withDuplicates);
+  }, [rows]);
+  
   function rowNeedsReview(row) {
     return (
       row.reviewResolved !== "Y" &&
@@ -404,7 +408,7 @@ export default function Home() {
   if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
   if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
   if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
-
+  if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
   if (reviewMode) {
     next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
   }
@@ -489,12 +493,170 @@ const counts = {
     setSelectedRowId(visibleRows[nextIndex].id);
   };
 
-  const selectNextAfter = (id) => {
+    const selectNextAfter = (id) => {
     const index = visibleRows.findIndex((row) => row.id === id);
     if (index === -1) return;
     const next = visibleRows[index + 1] || visibleRows[index - 1] || null;
     if (next) setSelectedRowId(next.id);
   };
+
+  const selectNextNeedsReviewAfter = (id) => {
+    const index = visibleRows.findIndex((row) => row.id === id);
+    if (index === -1) return;
+
+    const after = visibleRows.slice(index + 1);
+    const before = visibleRows.slice(0, index).reverse();
+
+    const nextNeedsReview =
+      after.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      before.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      after[0] ||
+      before[0] ||
+      null;
+
+    if (nextNeedsReview) setSelectedRowId(nextNeedsReview.id);
+  };
+
+  function classifySideKey(row) {
+    const selection = String(row?.selection || "").toLowerCase().trim();
+    const marketDetail = String(row?.marketDetail || "").toLowerCase().trim();
+    const betType = String(row?.betType || "").toLowerCase().trim();
+
+    if (!selection && !marketDetail) return "";
+
+    if (betType === "moneyline") {
+      return `moneyline:${selection}`;
+    }
+
+    if (betType === "spread") {
+      return `spread:${selection}`;
+    }
+
+    if (betType === "total") {
+      const totalText = `${selection} ${marketDetail}`.toLowerCase();
+
+      const noOver = totalText.match(/\bno on over\s+(\d+(?:\.\d+)?)/i);
+      if (noOver) return `total:under:${noOver[1]}`;
+
+      const noUnder = totalText.match(/\bno on under\s+(\d+(?:\.\d+)?)/i);
+      if (noUnder) return `total:over:${noUnder[1]}`;
+
+      const over = totalText.match(/\bover\s+(\d+(?:\.\d+)?)/i);
+      if (over) return `total:over:${over[1]}`;
+
+      const under = totalText.match(/\bunder\s+(\d+(?:\.\d+)?)/i);
+      if (under) return `total:under:${under[1]}`;
+    }
+
+    return `${betType}:${selection}`;
+  }
+
+  function areLikelyOpposites(rowA, rowB) {
+  if (!rowA || !rowB) return false;
+  if (rowA.id === rowB.id) return false;
+
+  const eventA = String(rowA.fixtureEvent || "").toLowerCase().trim();
+  const eventB = String(rowB.fixtureEvent || "").toLowerCase().trim();
+  if (!eventA || !eventB || eventA !== eventB) return false;
+
+  const typeA = String(rowA.betType || "").toLowerCase().trim();
+  const typeB = String(rowB.betType || "").toLowerCase().trim();
+  if (!typeA || !typeB || typeA !== typeB) return false;
+
+  const keyA = classifySideKey(rowA);
+  const keyB = classifySideKey(rowB);
+  if (!keyA || !keyB || keyA === keyB) return false;
+
+  if (typeA === "total") {
+    const pair =
+      (keyA.startsWith("total:over:") && keyB === keyA.replace("total:over:", "total:under:")) ||
+      (keyA.startsWith("total:under:") && keyB === keyA.replace("total:under:", "total:over:"));
+    if (pair) return true;
+  }
+
+  if (typeA === "moneyline") {
+    return true;
+  }
+
+  if (typeA === "spread") {
+    const spreadA = String(rowA.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
+    const spreadB = String(rowB.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
+    if (spreadA && spreadB) {
+      return Number(spreadA[1]) === -Number(spreadB[1]);
+    }
+  }
+
+  return false;
+}
+
+function addLikelyHedgeFlags(rowsInput) {
+  function impliedProb(odds) {
+    const o = Number(odds);
+    if (!o) return 0;
+    return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+  }
+
+  return rowsInput.map((row) => {
+    const match = rowsInput.find((other) => areLikelyOpposites(row, other));
+
+    if (!match) {
+      return {
+        ...row,
+        likelyHedge: "N",
+        hedgePartnerBookmaker: "",
+        hedgeQuality: "",
+        hedgeStake: "",
+        hedgeProfitLow: "",
+        hedgeProfitHigh: "",
+      };
+    }
+
+    const oddsA = Number(row.oddsUS);
+    const oddsB = Number(match.oddsUS);
+    const stakeA = Number(row.stake);
+
+    let hedgeQuality = "Basic";
+    let hedgeStake = "";
+    let hedgeProfitLow = "";
+    let hedgeProfitHigh = "";
+
+    if (oddsA && oddsB && stakeA) {
+      const probA = impliedProb(oddsA);
+      const probB = impliedProb(oddsB);
+      const total = probA + probB;
+
+      if (total < 0.98) hedgeQuality = "🔥 Arb";
+      else if (total < 1.02) hedgeQuality = "Strong";
+      else hedgeQuality = "Weak";
+
+      // --- hedge sizing ---
+      const decimalA = oddsA > 0 ? 1 + oddsA / 100 : 1 + 100 / Math.abs(oddsA);
+      const decimalB = oddsB > 0 ? 1 + oddsB / 100 : 1 + 100 / Math.abs(oddsB);
+
+      const hedge = (stakeA * decimalA) / decimalB;
+
+      const payoutA = stakeA * decimalA;
+      const payoutB = hedge * decimalB;
+
+      const profitIfA = payoutA - stakeA - hedge;
+      const profitIfB = payoutB - stakeA - hedge;
+
+      hedgeStake = hedge.toFixed(2);
+      hedgeProfitLow = Math.min(profitIfA, profitIfB).toFixed(2);
+      hedgeProfitHigh = Math.max(profitIfA, profitIfB).toFixed(2);
+    }
+
+    return {
+      ...row,
+      likelyHedge: "Y",
+      hedgePartnerBookmaker: getDisplayedBookmaker(match),
+      hedgeQuality,
+      hedgeStake,
+      hedgeProfitLow,
+      hedgeProfitHigh,
+    };
+  });
+}
 
   useEffect(() => {
     const handler = (event) => {
@@ -624,25 +786,23 @@ const counts = {
     }
   }
 
-    const handleUpload = async (fileList) => {
-    const files = Array.from(fileList || []).filter((file) =>
-      String(file.type || "").startsWith("image/")
-    );
-    if (files.length === 0) return;
+  const handleUpload = async (fileList) => {
+  const files = Array.from(fileList || []).filter((file) =>
+    String(file.type || "").startsWith("image/")
+  );
+  if (files.length === 0) return;
 
-    const batchId = createUploadBatch(files);
-    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+  const batchId = createUploadBatch(files);
+  showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
 
-    setProcessing(true);
-    updateUploadBatch(batchId, { status: "processing" });
+  setProcessing(true);
+  updateUploadBatch(batchId, { status: "processing" });
 
-    const newRows = [];
-    let processedCount = 0;
-    let errorCount = 0;
+  let errorCount = 0;
 
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+  try {
+    const results = await Promise.all(
+      files.map(async (file) => {
         let folder = "";
         let parentFolder = "";
 
@@ -650,71 +810,65 @@ const counts = {
           const parts = file.webkitRelativePath.split("/");
 
           if (parts.length >= 2) {
-            folder = parts[parts.length - 2]; // sportsbook
+            folder = parts[parts.length - 2];
           }
 
           if (parts.length >= 3) {
-            parentFolder = parts[parts.length - 3]; // month
+            parentFolder = parts[parts.length - 3];
           }
         }
-        setProcessingMessage(`Reading ${i + 1} of ${files.length}: ${file.name}`);
 
         try {
           const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
           const extractedText = result.data.text || "";
           const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
 
-          newRows.push({
-  ...parsed,
-  folder,
-  parentFolder,
+          return {
+            ...parsed,
+            folder,
+            parentFolder,
             parserId: parsed.id || "",
             id: crypto.randomUUID(),
             accountOwner: uploadOwner,
             sourceImageUrl: URL.createObjectURL(file),
-          });
+          };
         } catch (error) {
           console.error(error);
           errorCount += 1;
+          return null;
         }
+      })
+    );
 
-        processedCount += 1;
+    const newRows = results.filter(Boolean);
 
-        updateUploadBatch(batchId, {
-          status: "processing",
-          processedCount,
-          rowsCreated: newRows.length,
-          errorCount,
-        });
-      }
+    setRows((prev) => [...prev, ...newRows]);
+    if (newRows[0]) setSelectedRowId(newRows[0].id);
 
-      setRows((prev) => [...prev, ...newRows]);
-      if (newRows[0]) setSelectedRowId(newRows[0].id);
+    updateUploadBatch(batchId, {
+      status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
+      processedCount: files.length,
+      rowsCreated: newRows.length,
+      errorCount,
+    });
 
-      updateUploadBatch(batchId, {
-        status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
-        processedCount,
-        rowsCreated: newRows.length,
-        errorCount,
-      });
-
-      showNotice(
-        `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
-      );
-    } catch (error) {
-      console.error(error);
-      updateUploadBatch(batchId, {
-        status: "failed",
-        processedCount,
-        rowsCreated: newRows.length,
-        errorCount: errorCount + 1,
-      });
-      showNotice("Could not process upload batch");
-    } finally {
-      setProcessing(false);
-      setProcessingMessage("");
-    }
-  };
+    showNotice(
+      `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
+    );
+  } catch (error) {
+    console.error(error);
+    updateUploadBatch(batchId, {
+      status: "failed",
+      processedCount: files.length,
+      rowsCreated: 0,
+      errorCount: errorCount + 1,
+    });
+    showNotice("Could not process upload batch");
+  } finally {
+    setProcessing(false);
+    setProcessingMessage("");
+  }
+};
 
   const handleRowFieldChange = (id, field, value) =>
     setRows((prev) =>
@@ -780,17 +934,28 @@ const counts = {
   };
 
   const setWinStatusForRow = (id, winValue, advance = false) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const next = { ...row, win: winValue };
-        if (winValue === "Y") next.status = "Won";
-        if (winValue === "N") next.status = "Lost";
-        return enrichRow(next);
-      })
-    );
-    if (advance) selectNextAfter(id);
-  };
+  setRows((prev) =>
+    prev.map((row) => {
+      if (row.id !== id) return row;
+
+      const next = {
+        ...row,
+        win: winValue,
+        status: winValue === "Y" ? "Won" : "Lost",
+        reviewResolved: "Y",
+        reviewLater: "N",
+      };
+
+      return enrichRow(next);
+    })
+  );
+
+  showNotice(winValue === "Y" ? "Marked win ✓" : "Marked loss ✓");
+
+  if (advance) {
+    setTimeout(() => selectNextNeedsReviewAfter(id), 0);
+  }
+};
 
   const ignoreDuplicateForRow = (id) => {
     setRows((prev) =>
@@ -1364,7 +1529,7 @@ const counts = {
         />
       )}
 
-      {selectedRow && (
+            {selectedRow && (
         <div
           style={{
             marginTop: 24,
@@ -1379,252 +1544,112 @@ const counts = {
 
           {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
           {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewResolved",
-                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
-                )
-              }
-              style={smallButtonStyle}
-            >
-              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
-            </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
-              Mark Win + Next
-            </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
-              Mark Loss + Next
-            </button>
-            <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewLater",
-                  selectedRow.reviewLater === "Y" ? "N" : "Y"
-                )
-              }
-              style={smallButtonStyle}
-            >
-              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
-            </button>
-            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
-              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
-            </button>
-            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
-              Merge Duplicates Into This Row
-            </button>
-            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
-              Prev Row
-            </button>
-            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
-              Next Row
-            </button>
-          </div>
 
           <div
             style={{
-              marginTop: 16,
+              marginTop: 10,
+              marginBottom: 10,
+              padding: 12,
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              background: "#ffffff",
               display: "grid",
-              gridTemplateColumns: "240px 1fr",
-              gap: 8,
-              alignItems: "center",
+              gap: 6,
             }}
           >
-            <label style={{ fontWeight: "bold" }}>Account Owner</label>
-            <select
-              value={selectedRow.accountOwner || "Me"}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
-              style={selectStyle}
-            >
-              {ACCOUNT_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bet Type</label>
-            <select
-              value={selectedRow.betType || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
-              style={selectStyle}
-            >
-              {BET_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option || "--"}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
-            <select
-              value={selectedRow.betSourceTag || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
-              style={selectStyle}
-            >
-              {BET_SOURCE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option || "--"}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Win</label>
-            <select
-              value={selectedRow.win || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
-              style={selectStyle}
-            >
-              <option value="">--</option>
-              <option value="Y">Y</option>
-              <option value="N">N</option>
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
-            <select
-              value={selectedRow.bonusBet || "N"}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
-              style={selectStyle}
-            >
-              <option value="N">N</option>
-              <option value="Y">Y</option>
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
-            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
-            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
-            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
-            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
-
-            {editorFields.map(([key, label]) => (
-              <div key={key} style={{ display: "contents" }}>
-                <label style={{ fontWeight: "bold" }}>{label}</label>
-                <input
-                  type="text"
-                  value={selectedRow[key] || ""}
-                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            ))}
-
-            <label style={{ fontWeight: "bold" }}>Image</label>
             <div>
-              {selectedRow.sourceImageUrl ? (
-                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
-                  <img
-                    src={selectedRow.sourceImageUrl}
-                    alt={selectedRow.sourceFileName}
-                    style={{
-                      maxWidth: 260,
-                      maxHeight: 260,
-                      objectFit: "contain",
-                      border: "1px solid #ccc",
-                      borderRadius: 6,
-                    }}
-                  />
-                </a>
-              ) : (
-                <div>No image in session</div>
-              )}
+              <strong>Fixture / Event:</strong> {selectedRow.fixtureEvent || "—"}
             </div>
-
-            <label style={{ fontWeight: "bold" }}>Review Notes</label>
-            <textarea
-              value={selectedRow.reviewNotes || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
-              style={textAreaStyle}
-            />
-
-            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
-            <textarea
-              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
-              readOnly
-              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
-            />
-
-            <label style={{ fontWeight: "bold" }}>OCR Text</label>
             <div>
-              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
-                Copy OCR
-              </button>
-              <textarea
-                value={selectedRow.sourceText || ""}
-                readOnly
-                style={{ ...textAreaStyle, minHeight: 220 }}
-              />
+              <strong>Selection:</strong> {selectedRow.selection || "—"}
             </div>
+            <div>
+              <strong>Bet Type:</strong> {selectedRow.betType || "—"}
+            </div>
+            <div>
+  <strong>Likely Hedge:</strong>{" "}
+  {selectedRow.likelyHedge === "Y"
+    ? `Yes (${selectedRow.hedgeQuality || "Basic"})`
+    : "No"}
+</div>
+
+{selectedRow.likelyHedge === "Y" && (
+  <>
+    <div>
+      <strong>Hedge Book:</strong>{" "}
+      {selectedRow.hedgePartnerBookmaker || "—"}
+    </div>
+    <div>
+      <strong>Hedge Stake:</strong>{" "}
+      {selectedRow.hedgeStake ? `$${selectedRow.hedgeStake}` : "—"}
+    </div>
+    <div>
+      <strong>Profit Range:</strong>{" "}
+      {selectedRow.hedgeProfitLow && selectedRow.hedgeProfitHigh
+        ? `$${selectedRow.hedgeProfitLow} → $${selectedRow.hedgeProfitHigh}`
+        : "—"}
+    </div>
+  </>
+)}
           </div>
-        </div>
-      )}
-          {selectedRow && (
-        <div
-          style={{
-            marginTop: 24,
-            marginBottom: 0,
-            padding: 16,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "#fafafa",
-          }}
-        >
-          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
-
-          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
-          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
 
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewResolved",
-                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
-                )
-              }
+              onClick={() => {
+                const nextValue = selectedRow.reviewResolved === "Y" ? "N" : "Y";
+
+                setRows((prev) =>
+                  prev.map((row) =>
+                    row.id === selectedRow.id
+                      ? enrichRow({
+                          ...row,
+                          reviewResolved: nextValue,
+                          reviewLater: nextValue === "Y" ? "N" : row.reviewLater,
+                        })
+                      : row
+                  )
+                );
+
+                showNotice(
+                  nextValue === "Y" ? "Reviewed ✓ moving to next" : "Marked unresolved"
+                );
+
+                if (nextValue === "Y") {
+                  setTimeout(() => selectNextNeedsReviewAfter(selectedRow.id), 0);
+                }
+              }}
               style={smallButtonStyle}
             >
               {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
             </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)}
+              style={smallButtonStyle}
+            >
               Mark Win + Next
             </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "N", true)}
+              style={smallButtonStyle}
+            >
               Mark Loss + Next
             </button>
+
             <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewLater",
-                  selectedRow.reviewLater === "Y" ? "N" : "Y"
-                )
-              }
+              onClick={() => {
+                const nextValue = selectedRow.reviewLater === "Y" ? "N" : "Y";
+                handleRowFieldChange(selectedRow.id, "reviewLater", nextValue);
+                showNotice(nextValue === "Y" ? "Marked review later" : "Cleared review later");
+              }}
               style={smallButtonStyle}
             >
               {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
             </button>
+
             <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
               {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
-            </button>
-            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
-              Merge Duplicates Into This Row
-            </button>
-            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
-              Prev Row
-            </button>
-            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
-              Next Row
             </button>
           </div>
 

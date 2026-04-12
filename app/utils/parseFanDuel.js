@@ -613,7 +613,15 @@ if (!selectionCandidate || (!currentSelectionLooksUsable && bestScore <= 3)) {
   });
 }
 
-  const marketDetail = selection;
+  let marketDetail = selection;
+
+const statMatch = selection.match(
+  /\b(over|under)\s+(\d+(\.\d+)?)\s+(points?|rebounds?|assists?|threes?|shots?|hits?|rbis?|goals?|strikeouts?)\b/i
+);
+
+if (statMatch) {
+  marketDetail = `${statMatch[1]} ${statMatch[2]} ${statMatch[4]}`;
+}
   const betType = inferBetType(selection, marketDetail);
   const league = detectLeague(fixture, selection, marketDetail) || "";
 
