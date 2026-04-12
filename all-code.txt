@@ -7274,8 +7274,12 @@ export default function Home() {
     }
   }, [rows, uploadOwner, uploadBookmaker, changelog]);
 
-  const rowsWithWarnings = useMemo(() => addDuplicateWarnings(rows.map(enrichRow)), [rows]);
-
+  const rowsWithWarnings = useMemo(() => {
+    const enriched = rows.map(enrichRow);
+    const withDuplicates = addDuplicateWarnings(enriched);
+    return addLikelyHedgeFlags(withDuplicates);
+  }, [rows]);
+  
   function rowNeedsReview(row) {
     return (
       row.reviewResolved !== "Y" &&
@@ -7297,7 +7301,7 @@ export default function Home() {
   if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
   if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
   if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
-
+  if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
   if (reviewMode) {
     next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
   }
@@ -7382,12 +7386,170 @@ const counts = {
     setSelectedRowId(visibleRows[nextIndex].id);
   };
 
-  const selectNextAfter = (id) => {
+    const selectNextAfter = (id) => {
     const index = visibleRows.findIndex((row) => row.id === id);
     if (index === -1) return;
     const next = visibleRows[index + 1] || visibleRows[index - 1] || null;
     if (next) setSelectedRowId(next.id);
   };
+
+  const selectNextNeedsReviewAfter = (id) => {
+    const index = visibleRows.findIndex((row) => row.id === id);
+    if (index === -1) return;
+
+    const after = visibleRows.slice(index + 1);
+    const before = visibleRows.slice(0, index).reverse();
+
+    const nextNeedsReview =
+      after.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      before.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      after[0] ||
+      before[0] ||
+      null;
+
+    if (nextNeedsReview) setSelectedRowId(nextNeedsReview.id);
+  };
+
+  function classifySideKey(row) {
+    const selection = String(row?.selection || "").toLowerCase().trim();
+    const marketDetail = String(row?.marketDetail || "").toLowerCase().trim();
+    const betType = String(row?.betType || "").toLowerCase().trim();
+
+    if (!selection && !marketDetail) return "";
+
+    if (betType === "moneyline") {
+      return `moneyline:${selection}`;
+    }
+
+    if (betType === "spread") {
+      return `spread:${selection}`;
+    }
+
+    if (betType === "total") {
+      const totalText = `${selection} ${marketDetail}`.toLowerCase();
+
+      const noOver = totalText.match(/\bno on over\s+(\d+(?:\.\d+)?)/i);
+      if (noOver) return `total:under:${noOver[1]}`;
+
+      const noUnder = totalText.match(/\bno on under\s+(\d+(?:\.\d+)?)/i);
+      if (noUnder) return `total:over:${noUnder[1]}`;
+
+      const over = totalText.match(/\bover\s+(\d+(?:\.\d+)?)/i);
+      if (over) return `total:over:${over[1]}`;
+
+      const under = totalText.match(/\bunder\s+(\d+(?:\.\d+)?)/i);
+      if (under) return `total:under:${under[1]}`;
+    }
+
+    return `${betType}:${selection}`;
+  }
+
+  function areLikelyOpposites(rowA, rowB) {
+  if (!rowA || !rowB) return false;
+  if (rowA.id === rowB.id) return false;
+
+  const eventA = String(rowA.fixtureEvent || "").toLowerCase().trim();
+  const eventB = String(rowB.fixtureEvent || "").toLowerCase().trim();
+  if (!eventA || !eventB || eventA !== eventB) return false;
+
+  const typeA = String(rowA.betType || "").toLowerCase().trim();
+  const typeB = String(rowB.betType || "").toLowerCase().trim();
+  if (!typeA || !typeB || typeA !== typeB) return false;
+
+  const keyA = classifySideKey(rowA);
+  const keyB = classifySideKey(rowB);
+  if (!keyA || !keyB || keyA === keyB) return false;
+
+  if (typeA === "total") {
+    const pair =
+      (keyA.startsWith("total:over:") && keyB === keyA.replace("total:over:", "total:under:")) ||
+      (keyA.startsWith("total:under:") && keyB === keyA.replace("total:under:", "total:over:"));
+    if (pair) return true;
+  }
+
+  if (typeA === "moneyline") {
+    return true;
+  }
+
+  if (typeA === "spread") {
+    const spreadA = String(rowA.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
+    const spreadB = String(rowB.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
+    if (spreadA && spreadB) {
+      return Number(spreadA[1]) === -Number(spreadB[1]);
+    }
+  }
+
+  return false;
+}
+
+function addLikelyHedgeFlags(rowsInput) {
+  function impliedProb(odds) {
+    const o = Number(odds);
+    if (!o) return 0;
+    return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+  }
+
+  return rowsInput.map((row) => {
+    const match = rowsInput.find((other) => areLikelyOpposites(row, other));
+
+    if (!match) {
+      return {
+        ...row,
+        likelyHedge: "N",
+        hedgePartnerBookmaker: "",
+        hedgeQuality: "",
+        hedgeStake: "",
+        hedgeProfitLow: "",
+        hedgeProfitHigh: "",
+      };
+    }
+
+    const oddsA = Number(row.oddsUS);
+    const oddsB = Number(match.oddsUS);
+    const stakeA = Number(row.stake);
+
+    let hedgeQuality = "Basic";
+    let hedgeStake = "";
+    let hedgeProfitLow = "";
+    let hedgeProfitHigh = "";
+
+    if (oddsA && oddsB && stakeA) {
+      const probA = impliedProb(oddsA);
+      const probB = impliedProb(oddsB);
+      const total = probA + probB;
+
+      if (total < 0.98) hedgeQuality = "🔥 Arb";
+      else if (total < 1.02) hedgeQuality = "Strong";
+      else hedgeQuality = "Weak";
+
+      // --- hedge sizing ---
+      const decimalA = oddsA > 0 ? 1 + oddsA / 100 : 1 + 100 / Math.abs(oddsA);
+      const decimalB = oddsB > 0 ? 1 + oddsB / 100 : 1 + 100 / Math.abs(oddsB);
+
+      const hedge = (stakeA * decimalA) / decimalB;
+
+      const payoutA = stakeA * decimalA;
+      const payoutB = hedge * decimalB;
+
+      const profitIfA = payoutA - stakeA - hedge;
+      const profitIfB = payoutB - stakeA - hedge;
+
+      hedgeStake = hedge.toFixed(2);
+      hedgeProfitLow = Math.min(profitIfA, profitIfB).toFixed(2);
+      hedgeProfitHigh = Math.max(profitIfA, profitIfB).toFixed(2);
+    }
+
+    return {
+      ...row,
+      likelyHedge: "Y",
+      hedgePartnerBookmaker: getDisplayedBookmaker(match),
+      hedgeQuality,
+      hedgeStake,
+      hedgeProfitLow,
+      hedgeProfitHigh,
+    };
+  });
+}
 
   useEffect(() => {
     const handler = (event) => {
@@ -7517,25 +7679,23 @@ const counts = {
     }
   }
 
-    const handleUpload = async (fileList) => {
-    const files = Array.from(fileList || []).filter((file) =>
-      String(file.type || "").startsWith("image/")
-    );
-    if (files.length === 0) return;
+  const handleUpload = async (fileList) => {
+  const files = Array.from(fileList || []).filter((file) =>
+    String(file.type || "").startsWith("image/")
+  );
+  if (files.length === 0) return;
 
-    const batchId = createUploadBatch(files);
-    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+  const batchId = createUploadBatch(files);
+  showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
 
-    setProcessing(true);
-    updateUploadBatch(batchId, { status: "processing" });
+  setProcessing(true);
+  updateUploadBatch(batchId, { status: "processing" });
 
-    const newRows = [];
-    let processedCount = 0;
-    let errorCount = 0;
+  let errorCount = 0;
 
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+  try {
+    const results = await Promise.all(
+      files.map(async (file) => {
         let folder = "";
         let parentFolder = "";
 
@@ -7543,71 +7703,65 @@ const counts = {
           const parts = file.webkitRelativePath.split("/");
 
           if (parts.length >= 2) {
-            folder = parts[parts.length - 2]; // sportsbook
+            folder = parts[parts.length - 2];
           }
 
           if (parts.length >= 3) {
-            parentFolder = parts[parts.length - 3]; // month
+            parentFolder = parts[parts.length - 3];
           }
         }
-        setProcessingMessage(`Reading ${i + 1} of ${files.length}: ${file.name}`);
 
         try {
           const result = await Tesseract.recognize(file, "eng", { logger: () => {} });
           const extractedText = result.data.text || "";
           const parsed = parseBetSlip(extractedText, file.name, uploadBookmaker);
 
-          newRows.push({
-  ...parsed,
-  folder,
-  parentFolder,
+          return {
+            ...parsed,
+            folder,
+            parentFolder,
             parserId: parsed.id || "",
             id: crypto.randomUUID(),
             accountOwner: uploadOwner,
             sourceImageUrl: URL.createObjectURL(file),
-          });
+          };
         } catch (error) {
           console.error(error);
           errorCount += 1;
+          return null;
         }
+      })
+    );
 
-        processedCount += 1;
+    const newRows = results.filter(Boolean);
 
-        updateUploadBatch(batchId, {
-          status: "processing",
-          processedCount,
-          rowsCreated: newRows.length,
-          errorCount,
-        });
-      }
+    setRows((prev) => [...prev, ...newRows]);
+    if (newRows[0]) setSelectedRowId(newRows[0].id);
 
-      setRows((prev) => [...prev, ...newRows]);
-      if (newRows[0]) setSelectedRowId(newRows[0].id);
+    updateUploadBatch(batchId, {
+      status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
+      processedCount: files.length,
+      rowsCreated: newRows.length,
+      errorCount,
+    });
 
-      updateUploadBatch(batchId, {
-        status: errorCount > 0 ? (newRows.length > 0 ? "partial" : "failed") : "complete",
-        processedCount,
-        rowsCreated: newRows.length,
-        errorCount,
-      });
-
-      showNotice(
-        `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
-      );
-    } catch (error) {
-      console.error(error);
-      updateUploadBatch(batchId, {
-        status: "failed",
-        processedCount,
-        rowsCreated: newRows.length,
-        errorCount: errorCount + 1,
-      });
-      showNotice("Could not process upload batch");
-    } finally {
-      setProcessing(false);
-      setProcessingMessage("");
-    }
-  };
+    showNotice(
+      `Batch complete: ${newRows.length} row${newRows.length === 1 ? "" : "s"} created`
+    );
+  } catch (error) {
+    console.error(error);
+    updateUploadBatch(batchId, {
+      status: "failed",
+      processedCount: files.length,
+      rowsCreated: 0,
+      errorCount: errorCount + 1,
+    });
+    showNotice("Could not process upload batch");
+  } finally {
+    setProcessing(false);
+    setProcessingMessage("");
+  }
+};
 
   const handleRowFieldChange = (id, field, value) =>
     setRows((prev) =>
@@ -7673,17 +7827,28 @@ const counts = {
   };
 
   const setWinStatusForRow = (id, winValue, advance = false) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const next = { ...row, win: winValue };
-        if (winValue === "Y") next.status = "Won";
-        if (winValue === "N") next.status = "Lost";
-        return enrichRow(next);
-      })
-    );
-    if (advance) selectNextAfter(id);
-  };
+  setRows((prev) =>
+    prev.map((row) => {
+      if (row.id !== id) return row;
+
+      const next = {
+        ...row,
+        win: winValue,
+        status: winValue === "Y" ? "Won" : "Lost",
+        reviewResolved: "Y",
+        reviewLater: "N",
+      };
+
+      return enrichRow(next);
+    })
+  );
+
+  showNotice(winValue === "Y" ? "Marked win ✓" : "Marked loss ✓");
+
+  if (advance) {
+    setTimeout(() => selectNextNeedsReviewAfter(id), 0);
+  }
+};
 
   const ignoreDuplicateForRow = (id) => {
     setRows((prev) =>
@@ -8257,7 +8422,7 @@ const counts = {
         />
       )}
 
-      {selectedRow && (
+            {selectedRow && (
         <div
           style={{
             marginTop: 24,
@@ -8272,252 +8437,112 @@ const counts = {
 
           {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
           {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewResolved",
-                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
-                )
-              }
-              style={smallButtonStyle}
-            >
-              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
-            </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
-              Mark Win + Next
-            </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
-              Mark Loss + Next
-            </button>
-            <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewLater",
-                  selectedRow.reviewLater === "Y" ? "N" : "Y"
-                )
-              }
-              style={smallButtonStyle}
-            >
-              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
-            </button>
-            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
-              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
-            </button>
-            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
-              Merge Duplicates Into This Row
-            </button>
-            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
-              Prev Row
-            </button>
-            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
-              Next Row
-            </button>
-          </div>
 
           <div
             style={{
-              marginTop: 16,
+              marginTop: 10,
+              marginBottom: 10,
+              padding: 12,
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              background: "#ffffff",
               display: "grid",
-              gridTemplateColumns: "240px 1fr",
-              gap: 8,
-              alignItems: "center",
+              gap: 6,
             }}
           >
-            <label style={{ fontWeight: "bold" }}>Account Owner</label>
-            <select
-              value={selectedRow.accountOwner || "Me"}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
-              style={selectStyle}
-            >
-              {ACCOUNT_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bet Type</label>
-            <select
-              value={selectedRow.betType || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
-              style={selectStyle}
-            >
-              {BET_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option || "--"}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
-            <select
-              value={selectedRow.betSourceTag || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
-              style={selectStyle}
-            >
-              {BET_SOURCE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option || "--"}
-                </option>
-              ))}
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Win</label>
-            <select
-              value={selectedRow.win || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
-              style={selectStyle}
-            >
-              <option value="">--</option>
-              <option value="Y">Y</option>
-              <option value="N">N</option>
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
-            <select
-              value={selectedRow.bonusBet || "N"}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
-              style={selectStyle}
-            >
-              <option value="N">N</option>
-              <option value="Y">Y</option>
-            </select>
-
-            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
-            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
-            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
-            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
-
-            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
-            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
-
-            {editorFields.map(([key, label]) => (
-              <div key={key} style={{ display: "contents" }}>
-                <label style={{ fontWeight: "bold" }}>{label}</label>
-                <input
-                  type="text"
-                  value={selectedRow[key] || ""}
-                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            ))}
-
-            <label style={{ fontWeight: "bold" }}>Image</label>
             <div>
-              {selectedRow.sourceImageUrl ? (
-                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
-                  <img
-                    src={selectedRow.sourceImageUrl}
-                    alt={selectedRow.sourceFileName}
-                    style={{
-                      maxWidth: 260,
-                      maxHeight: 260,
-                      objectFit: "contain",
-                      border: "1px solid #ccc",
-                      borderRadius: 6,
-                    }}
-                  />
-                </a>
-              ) : (
-                <div>No image in session</div>
-              )}
+              <strong>Fixture / Event:</strong> {selectedRow.fixtureEvent || "—"}
             </div>
-
-            <label style={{ fontWeight: "bold" }}>Review Notes</label>
-            <textarea
-              value={selectedRow.reviewNotes || ""}
-              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
-              style={textAreaStyle}
-            />
-
-            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
-            <textarea
-              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
-              readOnly
-              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
-            />
-
-            <label style={{ fontWeight: "bold" }}>OCR Text</label>
             <div>
-              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
-                Copy OCR
-              </button>
-              <textarea
-                value={selectedRow.sourceText || ""}
-                readOnly
-                style={{ ...textAreaStyle, minHeight: 220 }}
-              />
+              <strong>Selection:</strong> {selectedRow.selection || "—"}
             </div>
+            <div>
+              <strong>Bet Type:</strong> {selectedRow.betType || "—"}
+            </div>
+            <div>
+  <strong>Likely Hedge:</strong>{" "}
+  {selectedRow.likelyHedge === "Y"
+    ? `Yes (${selectedRow.hedgeQuality || "Basic"})`
+    : "No"}
+</div>
+
+{selectedRow.likelyHedge === "Y" && (
+  <>
+    <div>
+      <strong>Hedge Book:</strong>{" "}
+      {selectedRow.hedgePartnerBookmaker || "—"}
+    </div>
+    <div>
+      <strong>Hedge Stake:</strong>{" "}
+      {selectedRow.hedgeStake ? `$${selectedRow.hedgeStake}` : "—"}
+    </div>
+    <div>
+      <strong>Profit Range:</strong>{" "}
+      {selectedRow.hedgeProfitLow && selectedRow.hedgeProfitHigh
+        ? `$${selectedRow.hedgeProfitLow} → $${selectedRow.hedgeProfitHigh}`
+        : "—"}
+    </div>
+  </>
+)}
           </div>
-        </div>
-      )}
-          {selectedRow && (
-        <div
-          style={{
-            marginTop: 24,
-            marginBottom: 0,
-            padding: 16,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "#fafafa",
-          }}
-        >
-          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
-
-          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
-          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
 
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewResolved",
-                  selectedRow.reviewResolved === "Y" ? "N" : "Y"
-                )
-              }
+              onClick={() => {
+                const nextValue = selectedRow.reviewResolved === "Y" ? "N" : "Y";
+
+                setRows((prev) =>
+                  prev.map((row) =>
+                    row.id === selectedRow.id
+                      ? enrichRow({
+                          ...row,
+                          reviewResolved: nextValue,
+                          reviewLater: nextValue === "Y" ? "N" : row.reviewLater,
+                        })
+                      : row
+                  )
+                );
+
+                showNotice(
+                  nextValue === "Y" ? "Reviewed ✓ moving to next" : "Marked unresolved"
+                );
+
+                if (nextValue === "Y") {
+                  setTimeout(() => selectNextNeedsReviewAfter(selectedRow.id), 0);
+                }
+              }}
               style={smallButtonStyle}
             >
               {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
             </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)} style={smallButtonStyle}>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)}
+              style={smallButtonStyle}
+            >
               Mark Win + Next
             </button>
-            <button onClick={() => setWinStatusForRow(selectedRow.id, "N", true)} style={smallButtonStyle}>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "N", true)}
+              style={smallButtonStyle}
+            >
               Mark Loss + Next
             </button>
+
             <button
-              onClick={() =>
-                handleRowFieldChange(
-                  selectedRow.id,
-                  "reviewLater",
-                  selectedRow.reviewLater === "Y" ? "N" : "Y"
-                )
-              }
+              onClick={() => {
+                const nextValue = selectedRow.reviewLater === "Y" ? "N" : "Y";
+                handleRowFieldChange(selectedRow.id, "reviewLater", nextValue);
+                showNotice(nextValue === "Y" ? "Marked review later" : "Cleared review later");
+              }}
               style={smallButtonStyle}
             >
               {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
             </button>
+
             <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
               {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
-            </button>
-            <button onClick={mergeDuplicatesIntoSelected} style={smallButtonStyle}>
-              Merge Duplicates Into This Row
-            </button>
-            <button onClick={() => moveSelection(-1)} style={smallButtonStyle}>
-              Prev Row
-            </button>
-            <button onClick={() => moveSelection(1)} style={smallButtonStyle}>
-              Next Row
             </button>
           </div>
 
@@ -8879,6 +8904,15 @@ export default function FilterBar({
       <option value="simplified">Simplified</option>
     </select>
   </label>
+
+<label>
+  <input
+    type="checkbox"
+    checked={showHedgesOnly}
+    onChange={(e) => setShowHedgesOnly(e.target.checked)}
+  />
+  Hedges Only
+</label>
 
   <span style={pillStyles.green}>
     {counts.reviewed} / {counts.exportable} Reviewed
@@ -10070,13 +10104,11 @@ export default function TopActionGrid({
 }) {
   return (
     <div style={gridWrapStyle}>
-      <GridButton label="Upload Bet Slips" variant="dark" asLabel>
+            <GridButton label="Upload Bet Slips" variant="dark" asLabel>
         <input
-  type="file"
-  accept="image/*"
-  multiple
-  webkitdirectory="true"
-  directory=""
+          type="file"
+          accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
+          multiple
           onChange={(e) => onUpload(e.target.files)}
           style={{ display: "none" }}
         />
@@ -10543,6 +10575,255 @@ export function extractBestOdds({ receiptText, rawSelection, payout, stake }) {
   }
 
   return { oddsUS: "", oddsSource: "" };
+}
+
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\utils\parseBet365.js =====
+// app/utils/parseBet365.js
+
+import { detectLeague } from "./detectLeague";
+
+function clean(value = "") {
+  return String(value)
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getLines(text = "") {
+  return String(text)
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => clean(line))
+    .filter(Boolean);
+}
+
+function pushTrace(debugTrace, stage, data = {}) {
+  if (!Array.isArray(debugTrace)) return;
+  debugTrace.push({ stage, ...data });
+}
+
+function getMatch(text, regex) {
+  const m = String(text || "").match(regex);
+  return m ? String(m[1] || "").trim() : "";
+}
+
+function extractStake(text = "") {
+  return (
+    getMatch(text, /\bStake[:\s]*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /\bTotal Stake[:\s]*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+    ""
+  ).replace(/,/g, "");
+}
+
+function extractToWin(text = "") {
+  return (
+    getMatch(text, /\bTo Win[:\s]*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /\bReturns?[:\s]*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+    ""
+  ).replace(/,/g, "");
+}
+
+function extractOddsUS(text = "") {
+  return (
+    getMatch(text, /\bOdds[:\s]*([+-]\d{2,5})/i) ||
+    getMatch(text, /(^|\s)([+-]\d{2,5})(?=\s|$)/i.replace ? "" : "") ||
+    ""
+  );
+}
+
+// safer odds fallback
+function extractOddsUSFallback(text = "") {
+  const m = String(text).match(/(^|\s)([+-]\d{2,5})(?=\s|$)/);
+  return m ? m[2] : "";
+}
+
+function isLikelyMeta(line = "") {
+  const s = String(line || "").toLowerCase();
+  return (
+    s.includes("bet365") ||
+    s.includes("receipt") ||
+    s.includes("open bets") ||
+    s.includes("my bets") ||
+    s.includes("cash out") ||
+    s.includes("stake") ||
+    s.includes("to win") ||
+    s.includes("returns") ||
+    s.includes("potential returns") ||
+    s.includes("single") ||
+    s.includes("parlay") ||
+    s.includes("placed") ||
+    s.includes("settled")
+  );
+}
+
+function looksLikeFixture(line = "") {
+  const s = String(line || "");
+  return (
+    /@| v | vs | vs\. /i.test(s) ||
+    /\b[A-Za-z]+\s+at\s+[A-Za-z]+\b/i.test(s)
+  );
+}
+
+function extractFixture(lines = []) {
+  const match =
+    lines.find((line) => looksLikeFixture(line) && !isLikelyMeta(line)) || "";
+  return match;
+}
+
+function classifyBetType(selection = "", marketDetail = "") {
+  const text = `${selection} ${marketDetail}`.toLowerCase();
+
+  if (/\bover\b|\bunder\b|\btotal\b/i.test(text)) return "total";
+  if (/[+-]\d+(?:\.\d+)?/.test(selection) && !/\b[+-]\d{2,5}\b/.test(selection)) return "spread";
+  if (/\bmoneyline\b/i.test(text)) return "moneyline";
+  if (/\bto win\b/i.test(text)) return "moneyline";
+
+  return "straight";
+}
+
+function extractSelectionAndMarket(lines = [], text = "") {
+  const nonMeta = lines.filter((line) => !isLikelyMeta(line));
+
+  // totals
+  const totalLine = nonMeta.find((line) => /\b(Over|Under)\s+\d+(?:\.\d+)?/i.test(line));
+  if (totalLine) {
+    return {
+      selection: clean(totalLine),
+      marketDetail: clean(totalLine),
+    };
+  }
+
+  // team/player + spread
+  const spreadLine = nonMeta.find(
+    (line) => /[A-Za-z].*\s[+-]\d+(?:\.\d+)?\b/.test(line) && !/\b[+-]\d{2,5}\b/.test(line)
+  );
+  if (spreadLine) {
+    return {
+      selection: clean(spreadLine),
+      marketDetail: clean(spreadLine),
+    };
+  }
+
+  // "X to win"
+  const winLine = nonMeta.find((line) => /\bto win\b/i.test(line));
+  if (winLine) {
+    const selection = clean(winLine.replace(/\bto win\b/i, ""));
+    return {
+      selection,
+      marketDetail: clean(winLine),
+    };
+  }
+
+  // fallback: first non-meta non-fixture line
+  const candidate = nonMeta.find((line) => !looksLikeFixture(line));
+  return {
+    selection: clean(candidate || ""),
+    marketDetail: clean(candidate || ""),
+  };
+}
+
+export function parseBet365Slip(cleaned, shared = {}) {
+  const {
+    enrichRow,
+    parsePlacedDate,
+    detectStatus,
+    extractBetId,
+  } = shared || {};
+
+  const sourceText = clean(cleaned || "");
+  const lines = getLines(cleaned || "");
+  const debugTrace = [];
+
+  pushTrace(debugTrace, "bet365_start", {
+    lineCount: lines.length,
+    preview: lines.slice(0, 20),
+  });
+
+  const placed =
+    typeof parsePlacedDate === "function"
+      ? parsePlacedDate(sourceText)
+      : { raw: "", normalized: "", dateObj: null, dateOnly: "" };
+
+  const fixtureEvent = extractFixture(lines);
+  const { selection, marketDetail } = extractSelectionAndMarket(lines, sourceText);
+
+  let oddsUS = extractOddsUS(sourceText);
+  if (!oddsUS) oddsUS = extractOddsUSFallback(sourceText);
+
+  const stake = extractStake(sourceText);
+  const toWin = extractToWin(sourceText);
+  const betType = classifyBetType(selection, marketDetail);
+
+  const sportLeague =
+    detectLeague({
+      cleaned: sourceText,
+      marketDetail,
+      fixtureEvent,
+      selection,
+      isParlay: false,
+    }) || "";
+
+  const status = typeof detectStatus === "function" ? detectStatus(sourceText) : "";
+  const betId = typeof extractBetId === "function" ? extractBetId(sourceText) : "";
+
+  const reviewLater =
+    !selection || !stake || !oddsUS ? "Y" : "N";
+
+  const row = {
+    eventDate: "",
+    betDate: placed.dateOnly || "",
+    bookmaker: "bet365",
+    sportLeague,
+    selection,
+    betType,
+    fixtureEvent,
+    stake,
+    oddsUS,
+    oddsSource: oddsUS ? "OCR" : "",
+    oddsMissingReason: oddsUS ? "" : "bet365_odds_missing",
+    live: "N",
+    bonusBet: "N",
+    win: "",
+    marketDetail,
+    payout: "",
+    toWin,
+    rawPlacedDate: placed.raw || "",
+    status,
+    parseWarning: reviewLater === "Y" ? "bet365_needs_review" : "",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText,
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId,
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: selection && stake && oddsUS ? "Medium" : "Low",
+    likelyParserIssue: reviewLater === "Y" ? "Y" : "N",
+    reviewLater,
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+    debugTrace,
+  };
+
+  pushTrace(debugTrace, "bet365_result", {
+    selection: row.selection,
+    betType: row.betType,
+    fixtureEvent: row.fixtureEvent,
+    stake: row.stake,
+    oddsUS: row.oddsUS,
+    sportLeague: row.sportLeague,
+    reviewLater: row.reviewLater,
+  });
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
 }
 
 
@@ -11510,6 +11791,132 @@ const league = detectLeague(fixture, selection, marketDetail) || "";
   status,
   ...(debug ? { debugTrace } : {}),
 };
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}
+
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\utils\parseCirca.js =====
+// app/utils/parseCirca.js
+
+function clean(text = "") {
+  return String(text)
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getLines(text) {
+  return text.split("\n").map((l) => clean(l)).filter(Boolean);
+}
+
+function extractOdds(text) {
+  const m = text.match(/\b(Yes|No)\s+([+-]\d{2,5})/i);
+  if (!m) return { selection: "", odds: "" };
+
+  return {
+    selection: m[1],
+    odds: m[2],
+  };
+}
+
+function extractStakeAndWin(text) {
+  const m = text.match(/RISK\s+WIN\s+([\d,.]+)\s+([\d,.]+)/i);
+  if (!m) return { stake: "", toWin: "" };
+
+  return {
+    stake: m[1].replace(/,/g, ""),
+    toWin: m[2].replace(/,/g, ""),
+  };
+}
+
+function extractFixture(text) {
+  const m = text.match(/([A-Z]{2,5}\/[A-Z]{2,5})\s+(.+?)\?/i);
+  if (!m) return "";
+
+  const matchup = m[1].replace("/", " @ ");
+  const detail = m[2].trim();
+
+  return `${matchup} (${detail})`;
+}
+
+function classifyBetType(fixture = "") {
+  const lower = fixture.toLowerCase();
+
+  if (lower.includes("over") || lower.includes("under") || lower.includes("total")) {
+    return "total";
+  }
+
+  return "moneyline";
+}
+
+export function parseCircaSlip(cleaned, shared = {}) {
+  const { enrichRow, parsePlacedDate } = shared || {};
+
+  const text = clean(cleaned || "");
+  const lines = getLines(text);
+
+  // --- Extract pieces ---
+  const oddsMatch = extractOdds(text);
+  let selection = oddsMatch.selection;
+  const odds = oddsMatch.odds;
+
+  // Improve selection using fixture context
+  const fixture = extractFixture(text);
+
+  if (selection && fixture) {
+    selection = `${fixture} → ${selection}`;
+  }
+  const { stake, toWin } = extractStakeAndWin(text);
+  const fixtureEvent = extractFixture(text);
+
+  const betType = classifyBetType(fixtureEvent);
+
+  const placed =
+    typeof parsePlacedDate === "function"
+      ? parsePlacedDate(text)
+      : { raw: "", dateOnly: "" };
+
+  const row = {
+    eventDate: "",
+    betDate: placed.dateOnly || "",
+    bookmaker: "Circa",
+    sportLeague: "", // let your global detection handle this
+    selection: selection || fixtureEvent,
+    betType,
+    fixtureEvent,
+    stake,
+    oddsUS: odds,
+    oddsSource: "OCR",
+    oddsMissingReason: odds ? "" : "missing",
+    live: "N",
+    bonusBet: "N",
+    win: "",
+    marketDetail: fixtureEvent,
+    payout: "",
+    toWin,
+    rawPlacedDate: placed.raw || "",
+    status: "Open",
+    parseWarning: selection ? "" : "circa_selection_missing",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText: text,
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId: "",
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: selection && odds ? "Medium" : "Low",
+    likelyParserIssue: selection ? "N" : "Y",
+    reviewLater: selection ? "N" : "Y",
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+  };
 
   return typeof enrichRow === "function" ? enrichRow(row) : row;
 }
@@ -12563,20 +12970,20 @@ function pushTrace(debugTrace, stage, data = {}) {
   debugTrace.push({ stage, ...data });
 }
 
-function cleanLine(value = "") {
-  return String(value)
-    .replace(/\u00A0/g, " ")
-    .replace(/[|]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function normalizeText(text = "") {
-  return String(text)
+  return String(text || "")
     .replace(/\r/g, "")
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .trim();
+}
+
+function cleanLine(value = "") {
+  return String(value || "")
+    .replace(/[|]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -12589,60 +12996,219 @@ function getLines(text = "") {
 
 function getMatch(text, regex) {
   const match = String(text || "").match(regex);
-  return match ? match[1] || match[0] : "";
+  return match ? (match[1] || match[0] || "").trim() : "";
 }
 
 function extractStake(text) {
-  const raw = getMatch(text, /\bCost:\s*\$?([\d,]+(?:\.\d{2})?)/i);
+  const raw =
+    getMatch(text, /\bCost:\s*\$?([\d,]+(?:\.\d{2})?)/i) ||
+    getMatch(text, /\bAmount:\s*\$?([\d,]+(?:\.\d{2})?)/i);
   return raw ? raw.replace(/,/g, "") : "";
 }
 
-function extractRawPlacedDate(text) {
-  return getMatch(text, /\bBought:\s*([^\n|]+(?:\|\s*[^\n]+)?)/i);
-}
-
-function extractBetDate(rawPlacedDate, parsePlacedDate) {
-  if (!rawPlacedDate || typeof parsePlacedDate !== "function") return "";
-  return parsePlacedDate(rawPlacedDate);
-}
-
 function extractLegCount(text) {
-  const raw = getMatch(text, /\b(\d+)\s+markets?\s+pay\b/i);
+  const raw =
+    getMatch(text, /\b(\d+)\s+markets?\s+pay\b/i) ||
+    getMatch(text, /\b(\d+)\s+market\b/i);
   return raw ? Number(raw) : 0;
 }
 
-function isFixtureLine(line) {
-  const s = String(line || "");
-  return /\bat\b/i.test(s) && !/to win|points scored|over|under|[+-]\d+(\.\d+)?/i.test(s);
+function cleanFixtureLine(line = "") {
+  return String(line || "")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/^(?:[A-Z]\s+){1,3}(?=[A-Z][a-z]+\s+at\s+[A-Z][a-z]+)/, "")
+    .replace(/^(?:[A-Z]{1,3}\s+){1,3}(?=[A-Z][a-z]+\s+at\s+[A-Z][a-z]+)/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelyMetaLine(line = "") {
+  const s = String(line || "").toLowerCase();
+  return (
+    /\bkalshi\b/.test(s) ||
+    /\bportfolio\b/.test(s) ||
+    /\bmarket(s)? pay\b/.test(s) ||
+    /\bcost:\b/.test(s) ||
+    /\bfee\b/.test(s) ||
+    /\bbought:\b/.test(s) ||
+    /\border\b/.test(s) ||
+    /\bfilled\b/.test(s) ||
+    /\bstatus\b/.test(s) ||
+    /\bcontracts?\b/.test(s) ||
+    /\bshares?\b/.test(s) ||
+    /\bquantity\b/.test(s) ||
+    /\bpayout\b/.test(s) ||
+    /\breturn\b/.test(s) ||
+    /\bprofit\b/.test(s)
+  );
+}
+
+function isFixtureLine(line = "") {
+  const s = cleanLine(line);
+
+  // must contain "at"
+  if (!/\bat\b/i.test(s)) return false;
+
+  // ignore obvious junk
+  if (/cost|payout|odds|chance|buy|order/i.test(s)) return false;
+
+  return true;
+}
+
+function detectExplicitLeague(sourceText = "", lines = []) {
+  const joined = [sourceText, ...lines]
+    .join("\n")
+    .toLowerCase()
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (
+    joined.includes("pro basketball m") ||
+    joined.includes("pro basketball") ||
+    joined.includes("basketball m") ||
+    joined.includes("nba")
+  ) {
+    return "NBA";
+  }
+
+  if (
+    joined.includes("college basketball") ||
+    joined.includes("ncaam") ||
+    joined.includes("ncaab")
+  ) {
+    return "NCAAM";
+  }
+
+  if (joined.includes("wnba")) return "WNBA";
+
+  if (
+    joined.includes("pro baseball") ||
+    joined.includes("baseball") ||
+    joined.includes("mlb")
+  ) {
+    return "MLB";
+  }
+
+  if (
+    joined.includes("pro football") ||
+    joined.includes("football") ||
+    joined.includes("nfl")
+  ) {
+    return "NFL";
+  }
+
+  if (
+    joined.includes("pro hockey") ||
+    joined.includes("hockey") ||
+    joined.includes("nhl")
+  ) {
+    return "NHL";
+  }
+
+  if (
+    joined.includes("soccer") ||
+    joined.includes("champions league") ||
+    joined.includes("premier league") ||
+    joined.includes("mls")
+  ) {
+    return "Soccer";
+  }
+
+  return "";
+}
+
+function inferLeagueFromFixture(fixtureEvent = "", selection = "", marketDetail = "") {
+  const text = `${fixtureEvent} ${selection} ${marketDetail}`.toLowerCase();
+
+  if (
+    /celtics|knicks|lakers|clippers|bucks|pacers|bulls|mavericks|spurs|pelicans|thunder|warriors|timberwolves|hornets|heat|nets|suns|grizzlies|nuggets|trail blazers|blazers|hawks|magic|pistons|raptors|76ers|sixers|cavaliers|rockets|jazz|kings/i.test(
+      text
+    )
+  ) {
+    return "NBA";
+  }
+
+  if (
+    /yankees|mets|dodgers|cubs|cardinals|astros|braves|phillies|padres|giants|red sox|blue jays|orioles|guardians|mariners|rangers|twins|white sox|tigers|reds|pirates|brewers|diamondbacks|rockies|angels|athletics|a's|nationals|marlins|rays|royals/i.test(
+      text
+    )
+  ) {
+    return "MLB";
+  }
+
+  if (
+    /chiefs|bills|ravens|bengals|cowboys|eagles|packers|bears|lions|vikings|49ers|seahawks|rams|chargers|raiders|broncos|jets|patriots|dolphins|steelers|browns|texans|colts|titans|jaguars|saints|falcons|panthers|buccaneers|commanders|giants|cardinals/i.test(
+      text
+    )
+  ) {
+    return "NFL";
+  }
+
+  if (
+    /bruins|rangers|islanders|devils|flyers|penguins|capitals|hurricanes|lightning|panthers|leafs|maple leafs|canadiens|senators|sabres|red wings|blue jackets|avalanche|stars|wild|jets|predators|blues|blackhawks|kraken|canucks|oilers|flames|kings|ducks|sharks|golden knights/i.test(
+      text
+    )
+  ) {
+    return "NHL";
+  }
+
+  return "";
+}
+
+function inferLeagueFromAllText(sourceText = "") {
+  const text = String(sourceText || "").toLowerCase();
+
+  if (/basketball/.test(text)) return "NBA";
+  if (/baseball/.test(text)) return "MLB";
+  if (/football/.test(text)) return "NFL";
+  if (/hockey/.test(text)) return "NHL";
+
+  return "";
+}
+
+function normalizeTotalSelection(side, number, suffix = "") {
+  const tail = suffix ? ` ${suffix}` : "";
+  return `${side} ${number}${tail}`.trim();
 }
 
 function classifyLeg(line) {
   const value = cleanLine(line);
-
   if (!value) return null;
 
-  if (/^(yes|no)\b/i.test(value)) {
-    return {
-      raw: value,
-      selection: value.toUpperCase(),
-      betType: "moneyline",
-      marketDetail: value,
-    };
-  }
+  const lower = value.toLowerCase();
 
-  if (/^over\s+\d+(\.\d+)?\s+/i.test(value) || /^under\s+\d+(\.\d+)?\s+/i.test(value)) {
-    const side = /^over/i.test(value) ? "Over" : "Under";
-    const number = getMatch(value, /^(?:over|under)\s+(\d+(?:\.\d+)?)/i);
+  // 🔥 Handle "No - Over 224.5 points scored"
+  let m = value.match(/^(Yes|No)\s*-\s*(Over|Under)\s+(\d+(?:\.\d+)?)/i);
+  if (m) {
+    const yesNo = m[1].toLowerCase();
+    const ou = m[2];
+    const number = m[3];
+
     return {
       raw: value,
-      selection: `${side} ${number}`,
+      selection: `${yesNo === "yes" ? "Yes on" : "No on"} ${ou} ${number}`,
       betType: "total",
       marketDetail: value,
     };
   }
 
-  if (/\bto win\b/i.test(value)) {
-    const team = value.replace(/\bto win\b/i, "").trim();
+  // 🔥 Handle totals (very loose now)
+  if (/over\s+\d+/.test(lower) || /under\s+\d+/.test(lower)) {
+    const match = value.match(/(Over|Under)\s+(\d+(?:\.\d+)?)/i);
+    if (match) {
+      return {
+        raw: value,
+        selection: `${match[1]} ${match[2]}`,
+        betType: "total",
+        marketDetail: value,
+      };
+    }
+  }
+
+  // 🔥 Handle moneyline
+  if (lower.includes("to win")) {
+    const team = value.replace(/to win/i, "").trim();
     return {
       raw: value,
       selection: team,
@@ -12651,11 +13217,22 @@ function classifyLeg(line) {
     };
   }
 
-  if (/[A-Za-z].*[+-]\d+(\.\d+)?\b/.test(value)) {
+  // 🔥 Handle spread (looser)
+  if (/[+-]\d+(\.\d+)?/.test(value)) {
     return {
       raw: value,
       selection: value,
       betType: "spread",
+      marketDetail: value,
+    };
+  }
+
+  // 🔥 fallback: if it looks like a meaningful line, keep it
+  if (value.length > 5 && !isLikelyMetaLine(value)) {
+    return {
+      raw: value,
+      selection: value,
+      betType: "",
       marketDetail: value,
     };
   }
@@ -12667,9 +13244,13 @@ function buildLegs(lines, debugTrace) {
   const legs = [];
   let currentFixture = "";
 
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = cleanLine(rawLine);
+
+    if (!line) continue;
+
     if (isFixtureLine(line)) {
-      currentFixture = line;
+      currentFixture = cleanFixtureLine(line);
       continue;
     }
 
@@ -12697,8 +13278,9 @@ function summarizeParlayLegs(legs) {
 function summarizeFixtures(legs) {
   const fixtures = [];
   for (const leg of legs) {
-    if (leg.fixtureEvent && !fixtures.includes(leg.fixtureEvent)) {
-      fixtures.push(leg.fixtureEvent);
+    const fixture = cleanFixtureLine(leg.fixtureEvent || "");
+    if (fixture && !fixtures.includes(fixture)) {
+      fixtures.push(fixture);
     }
   }
   return fixtures.join(" | ");
@@ -12709,39 +13291,50 @@ function getPrimaryBetType(legs, legCountFromTicket) {
   return legs[0]?.betType || "";
 }
 
-function getConfidence(legs, stake) {
+function getConfidenceFlag(legs, stake, fixtureEvent) {
+  if (legs.length >= 1 && stake && fixtureEvent) return "Medium";
   if (legs.length >= 1 && stake) return "Medium";
   if (legs.length >= 1) return "Low";
   return "Low";
 }
 
-export function parseKalshiSlip(text, shared = {}) {
+function shouldReviewLater({ legs, selection, betType }) {
+  if (!legs.length) return "Y";
+  if (!selection) return "Y";
+  if (!betType) return "Y";
+
+  // DO NOT require odds or fixture for Kalshi
+  return "N";
+}
+
+export function parseKalshiSlip(cleaned, shared = {}) {
   const {
     detectStatus,
     extractBetId,
     enrichRow,
     parsePlacedDate,
-    debugTrace,
   } = shared || {};
 
-  const sourceText = normalizeText(text || "");
+  const sourceText = normalizeText(cleaned || "");
   const lines = getLines(sourceText);
+  const debugTrace = [];
 
   pushTrace(debugTrace, "kalshi_start", {
     lineCount: lines.length,
-    preview: lines.slice(0, 20),
+    preview: lines.slice(0, 25),
   });
 
-  const bookmaker = /kalshi/i.test(sourceText) ? "Kalshi" : "";
-
-  const sportLeagueLine =
-    lines.find((line) => /pro basketball|nba|ncaam|ncaab|baseball|mlb|nhl|soccer|football|nfl/i.test(line)) || "";
-
-  
-
+  const bookmaker = "Kalshi";
   const stake = extractStake(sourceText);
-  const rawPlacedDate = extractRawPlacedDate(sourceText);
-  const betDate = extractBetDate(rawPlacedDate, parsePlacedDate);
+
+  const placed =
+    typeof parsePlacedDate === "function"
+      ? parsePlacedDate(sourceText)
+      : { raw: "", normalized: "", dateObj: null, dateOnly: "" };
+
+  const rawPlacedDate = placed.raw || "";
+  const betDate = placed.dateOnly || "";
+
   const status = typeof detectStatus === "function" ? detectStatus(sourceText) : "";
   const betId = typeof extractBetId === "function" ? extractBetId(sourceText) : "";
   const legCountFromTicket = extractLegCount(sourceText);
@@ -12756,7 +13349,7 @@ export function parseKalshiSlip(text, shared = {}) {
   if (legs.length === 1) {
     selection = legs[0].selection || "";
     marketDetail = legs[0].marketDetail || "";
-    fixtureEvent = legs[0].fixtureEvent || "";
+    fixtureEvent = cleanFixtureLine(legs[0].fixtureEvent || "");
     betType = legs[0].betType || "";
   } else if (legs.length > 1) {
     selection = summarizeParlayLegs(legs);
@@ -12765,23 +13358,35 @@ export function parseKalshiSlip(text, shared = {}) {
     betType = getPrimaryBetType(legs, legCountFromTicket);
   }
 
-    const sportLeague =
+  const explicitLeague = detectExplicitLeague(sourceText, lines);
+  const detectedLeague =
     detectLeague({
-        cleaned: sourceText,
-        marketDetail,
-        fixtureEvent,
-        selection,
-        isParlay: betType === "parlay",
+      cleaned: sourceText,
+      marketDetail,
+      fixtureEvent,
+      selection,
+      isParlay: betType === "parlay",
     }) || "";
 
-  const confidenceFlag = getConfidence(legs, stake);
-  const reviewLater = legs.length === 0 ? "Y" : "N";
+    const sportLeague =
+  explicitLeague ||
+  detectedLeague ||
+  inferLeagueFromFixture(fixtureEvent, selection, marketDetail) ||
+  inferLeagueFromAllText(sourceText) ||
+  "";
+  const confidenceFlag = getConfidenceFlag(legs, stake, fixtureEvent);
+  const reviewLater = shouldReviewLater({
+    legs,
+    selection,
+    betType,
+    fixtureEvent,
+  });
 
   const row = {
     eventDate: "",
-    betDate: betDate || "",
-    bookmaker: bookmaker || "Kalshi",
-    sportLeague: sportLeague || "",
+    betDate,
+    bookmaker,
+    sportLeague,
     selection,
     betType,
     fixtureEvent,
@@ -12797,7 +13402,7 @@ export function parseKalshiSlip(text, shared = {}) {
     toWin: "",
     rawPlacedDate,
     status,
-    parseWarning: reviewLater === "Y" ? "kalshi_no_normalized_legs_found" : "",
+    parseWarning: reviewLater === "Y" ? "kalshi_needs_manual_review" : "",
     duplicateWarning: "",
     sourceFileName: "",
     sourceText,
@@ -12812,6 +13417,7 @@ export function parseKalshiSlip(text, shared = {}) {
     reviewLater,
     duplicateIgnored: "N",
     reviewResolved: "N",
+    debugTrace,
   };
 
   pushTrace(debugTrace, "kalshi_result", {
@@ -12835,6 +13441,8 @@ import { parseDraftKingsLikeSlip } from "./parseDraftKings";
 import { parseFanDuelSlip } from "./parseFanDuel";
 import { parseCaesarsSlip } from "./parseCaesars";
 import { parseKalshiSlip } from "./parseKalshi";
+import { parseCircaSlip } from "./parseCirca";
+import { parseBet365Slip } from "./parseBet365";
 const emptyParsed = {
   eventDate: "",
   betDate: "",
@@ -13316,7 +13924,7 @@ export function enrichRow(row) {
     (
       row.likelyParserIssue === "Y" ||
       !row.sportLeague ||
-      !row.oddsUS ||
+      (!row.oddsUS && String(row.bookmaker || "") !== "Kalshi") ||
       row.oddsSource === "Calculated" ||
       !!row.parseWarning
     );
@@ -13390,8 +13998,34 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
   });
 }
 
-if (/kalshi/i.test(lowerCleaned)) {
+if (
+  /kalshi/i.test(lowerCleaned) ||
+  /\bmarkets?\s+pay\b/i.test(lowerCleaned) ||
+  /\bcost\b/i.test(lowerCleaned) ||
+  /\bmax payout\b/i.test(lowerCleaned) ||
+  /\bodds\s+\d+% chance\b/i.test(lowerCleaned) ||
+  /\bslide to buy\b/i.test(lowerCleaned) ||
+  /\border completed\b/i.test(lowerCleaned) ||
+  /\bpro basketball\b/i.test(lowerCleaned) ||
+  /\bxx dollars\b/i.test(lowerCleaned)
+) {
   return parseKalshiSlip(cleaned, shared);
+}
+
+if (
+  forcedBook === "circa" ||
+  /circa/i.test(lowerCleaned) ||
+  /\bwager placed\b/i.test(lowerCleaned) ||
+  /\bthank you for playing with circa sports\b/i.test(lowerCleaned)
+) {
+  return parseCircaSlip(cleaned, shared);
+}
+
+if (
+  forcedBook === "bet365" ||
+  /bet365/i.test(lowerCleaned)
+) {
+  return parseBet365Slip(cleaned, shared);
 }
 
   if (forcedBook === "caesars") {
