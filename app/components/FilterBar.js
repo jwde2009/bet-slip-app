@@ -107,6 +107,8 @@ export default function FilterBar({
   setShowNeedsReviewOnly,
   showHedgesOnly,
   setShowHedgesOnly,
+  showGuaranteedProfitOnly,
+  setShowGuaranteedProfitOnly,
   showArchivedRows,
   setShowArchivedRows,
   reviewMode,
@@ -179,36 +181,48 @@ export default function FilterBar({
         </label>
       </div>
 
-      <div style={rowStyle}>
-  <label style={{ ...checkboxLabelStyle, gap: 10 }}>
-    View
-    <select
-      value={tableMode}
-      onChange={(e) => setTableMode(e.target.value)}
-      style={selectStyle}
-    >
-      <option value="debug">Debug</option>
-      <option value="simplified">Simplified</option>
-    </select>
-  </label>
+            <div style={rowStyle}>
+        <label style={{ ...checkboxLabelStyle, gap: 10 }}>
+          View
+          <select
+            value={tableMode}
+            onChange={(e) => setTableMode(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="debug">Debug</option>
+            <option value="simplified">Simplified</option>
+          </select>
+        </label>
 
-<label>
-  <input
-    type="checkbox"
-    checked={showHedgesOnly}
-    onChange={(e) => setShowHedgesOnly(e.target.checked)}
-  />
-  Hedges Only
-</label>
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={showHedgesOnly}
+            onChange={(e) => setShowHedgesOnly(e.target.checked)}
+          />
+          <span>Hedges Only</span>
+          <span style={pillStyles.blue}>{counts?.hedges || 0}</span>
+        </label>
 
-  <span style={pillStyles.green}>
-    {counts.reviewed} / {counts.exportable} Reviewed
-  </span>
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={showGuaranteedProfitOnly}
+            onChange={(e) => setShowGuaranteedProfitOnly(e.target.checked)}
+          />
+          <span>Guaranteed Profit</span>
+          <span style={pillStyles.green}>{counts?.guaranteedProfit || 0}</span>
+        </label>
 
-  <span style={pillStyles.green}>Rows: {counts.total}</span>
-<span style={pillStyles.blue}>Visible: {counts.visible}</span>
-<span style={pillStyles.red}>Needs Review: {counts.needsReview}</span>
-<span style={pillStyles.gray}>Selected: {counts.selected}</span></div>
+        <span style={pillStyles.green}>
+          {counts.reviewed} / {counts.exportable} Reviewed
+        </span>
+
+        <span style={pillStyles.green}>Rows: {counts.total}</span>
+        <span style={pillStyles.blue}>Visible: {counts.visible}</span>
+        <span style={pillStyles.red}>Needs Review: {counts.needsReview}</span>
+        <span style={pillStyles.gray}>Selected: {counts.selected}</span>
+      </div>
 
       <div style={{ color: "#166534", fontWeight: 700, fontSize: 13 }}>
         Keyboard: W = win, L = loss, ↑/↓ = move rows

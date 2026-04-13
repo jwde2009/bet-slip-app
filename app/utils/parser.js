@@ -2,7 +2,7 @@ import { PARSER_REGISTRY } from "./parserRegistry";
 import { canonicalizeTeamsInText } from "./canonicalTeamNames";
 import { canonicalizeFixture, getCanonicalFixtureKey } from "./canonicalFixture";
 import { canonicalizeSelectionFields } from "./canonicalSelection";
-
+import { detectLeague } from "./detectLeague";
 import {
   cleanTextLine,
   normalizeOcrText,
@@ -29,50 +29,57 @@ import {
   extractParlayInfo,
 } from "./parserSelectionHelpers";
 const emptyParsed = {
-  eventDate: "",
-  betDate: "",
-  bookmaker: "",
-  sportLeague: "",
-  selection: "",
-  betType: "",
-  fixtureEvent: "",
-  stake: "",
-  oddsUS: "",
-  oddsSource: "",
-  oddsMissingReason: "",
-  live: "",
-  bonusBet: "",
-  win: "",
-  marketDetail: "",
-  payout: "",
-  toWin: "",
-  rawPlacedDate: "",
-  status: "",
-  parseWarning: "",
-  duplicateWarning: "",
-  sourceFileName: "",
-  sourceText: "",
-  sourceImageUrl: "",
-  reviewNotes: "",
-  betId: "",
-  accountOwner: "Me",
-  betSourceTag: "",
-  impliedProbability: "",
-  confidenceFlag: "",
-  likelyParserIssue: "N",
-  reviewLater: "N",
-  duplicateIgnored: "N",
-  reviewResolved: "N",
-  canonicalBookmaker: "",
-  canonicalFixture: "",
-  canonicalFixtureKey: "",
-  canonicalSelection: "",
-  canonicalBetType: "",
-  canonicalMarket: "",
-  canonicalSide: "",
-  canonicalLine: "",
-  canonicalPlayer: "",
-  canonicalTeam: "",
+    eventDate: "",
+    betDate: "",
+    bookmaker: "",
+    sportLeague: "",
+    selection: "",
+    betType: "",
+    fixtureEvent: "",
+    stake: "",
+    oddsUS: "",
+    oddsSource: "",
+    oddsMissingReason: "",
+    live: "",
+    bonusBet: "",
+    win: "",
+    marketDetail: "",
+    payout: "",
+    toWin: "",
+    rawPlacedDate: "",
+    status: "",
+    parseWarning: "",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText: "",
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId: "",
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: "",
+    likelyParserIssue: "N",
+    reviewLater: "N",
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+    canonicalBookmaker: "",
+    canonicalFixture: "",
+    canonicalFixtureKey: "",
+    canonicalSelection: "",
+    canonicalBetType: "",
+    canonicalMarket: "",
+    canonicalSide: "",
+    canonicalLine: "",
+    canonicalPlayer: "",
+    canonicalTeam: "",
+    canonicalPeriod: "",
+    canonicalMarketFamily: "",
+    canonicalSubjectType: "",
+    canonicalResultTarget: "",
+    canonicalSelectionKey: "",
+    canonicalHedgeKey: "",
+    canonicalOppositeKey: ""
 };
 
 export function enrichRow(row) {
@@ -86,6 +93,8 @@ export function enrichRow(row) {
     fixtureEvent: normalizedFixture,
     selection: normalizedSelection,
   });
+
+  
 
   const needsReview =
     row.reviewResolved !== "Y" &&
@@ -102,6 +111,14 @@ export function enrichRow(row) {
     bookmaker: normalizedBookmaker,
     fixtureEvent: normalizedFixture,
     selection: normalizedSelection,
+    
+    sportLeague:
+    row.sportLeague ||
+    detectLeague({
+      selection: normalizedSelection,
+      marketDetail: row.marketDetail,
+      fixtureEvent: normalizedFixture,
+    }),
 
     canonicalBookmaker: canonical.canonicalBookmaker || normalizedBookmaker,
     canonicalFixture: canonical.canonicalFixture || canonicalizeFixture(normalizedFixture),
@@ -113,6 +130,13 @@ export function enrichRow(row) {
     canonicalLine: canonical.canonicalLine || "",
     canonicalPlayer: canonical.canonicalPlayer || "",
     canonicalTeam: canonical.canonicalTeam || "",
+    canonicalPeriod: canonical.canonicalPeriod || "",
+    canonicalMarketFamily: canonical.canonicalMarketFamily || "",
+    canonicalSubjectType: canonical.canonicalSubjectType || "",
+    canonicalResultTarget: canonical.canonicalResultTarget || "",
+    canonicalSelectionKey: canonical.canonicalSelectionKey || "",
+    canonicalHedgeKey: canonical.canonicalHedgeKey || "",
+    canonicalOppositeKey: canonical.canonicalOppositeKey || "",
 
     reviewLater: needsReview ? "Y" : (row.reviewLater || "N"),
     exported: row.exported || "N",
@@ -196,6 +220,13 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
     )
   ) {
     parserName = "bet365";
+  } else if (
+    forcedBook === "thescore" ||
+    sportsbook === "theScore" ||
+    /thescore/i.test(lowerCleaned) ||
+    /score bet/i.test(lowerCleaned)
+  ) {
+    parserName = "theScore";
   } else if (forcedBook === "caesars" || /\bcaesars\b/i.test(lowerCleaned)) {
     parserName = "Caesars";
   } else if (sportsbook === "BetMGM") {

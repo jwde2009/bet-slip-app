@@ -1,0 +1,3257 @@
+﻿
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\page.js =====
+"use client";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import ImportPanel from "./components/ImportPanel";
+import ExtractionGuide from "./components/ExtractionGuide";
+import ParsedOddsTable from "./components/ParsedOddsTable";
+import MarketMatchPanel from "./components/MarketMatchPanel";
+import FairOddsPanel from "./components/FairOddsPanel";
+import ParlayFilters from "./components/ParlayFilters";
+import ParlayResults from "./components/ParlayResults";
+
+import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
+import { parseOddsText } from "./utils/parseOddsText";
+import { normalizeParsedRows } from "./utils/normalizeTeams";
+import { buildCanonicalMarkets } from "./utils/matchMarkets";
+import { calculateFairOddsForMarkets } from "./utils/fairOdds";
+import { buildParlayCandidates } from "./utils/parlayEngine";
+
+export default function EVParlayLabPage() {
+  const [rawText, setRawText] = useState(SAMPLE_RAW_TEXT);
+  const [sportsbook, setSportsbook] = useState("DraftKings");
+  const [rows, setRows] = useState([]);
+  const [filters, setFilters] = useState(SAMPLE_FILTERS);
+  const [lastParsedAt, setLastParsedAt] = useState(null);
+
+  function handleParse() {
+    const parsed = parseOddsText(rawText, {
+      sportsbook,
+      sourceType: "pasted_text",
+    });
+
+    const normalized = normalizeParsedRows(parsed);
+    setRows(normalized);
+    setLastParsedAt(new Date().toISOString());
+  }
+
+  function handleClearInput() {
+    setRawText("");
+  }
+
+  function handleClearParsedRows() {
+    setRows([]);
+    setLastParsedAt(null);
+  }
+
+  function handleUpdateRow(rowId, patch) {
+    setRows((prev) =>
+      prev.map((row) => (row.id === rowId ? { ...row, ...patch, userEdited: true } : row))
+    );
+  }
+
+  function handleDeleteRow(rowId) {
+    setRows((prev) => prev.filter((row) => row.id !== rowId));
+  }
+
+  const marketBundle = useMemo(() => buildCanonicalMarkets(rows), [rows]);
+
+  const fairOddsBundle = useMemo(() => {
+    return calculateFairOddsForMarkets(marketBundle.markets, rows);
+  }, [marketBundle.markets, rows]);
+
+  const parlayCandidates = useMemo(() => {
+    return buildParlayCandidates({
+      rows,
+      markets: marketBundle.markets,
+      fairOddsResults: fairOddsBundle,
+      filters,
+    });
+  }, [rows, marketBundle.markets, fairOddsBundle, filters]);
+
+  return (
+    <div
+      style={{
+        padding: 20,
+        color: "#111",
+        background: "#f7f7f8",
+        minHeight: "100vh",
+      }}
+    >
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap",
+      marginBottom: 8,
+    }}
+  >
+    <div>
+      <h1 style={{ marginTop: 0, marginBottom: 8 }}>EV Parlay Lab</h1>
+      <p style={{ marginTop: 0, color: "#555", marginBottom: 0 }}>
+        Import odds, review parsed rows, compare to sharp prices, and rank possible EV parlays.
+      </p>
+    </div>
+
+    <Link
+  href="/"
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: "#166534",
+    color: "#f0fdf4",
+    textDecoration: "none",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  }}
+>
+  â† Back to Bet Slip App
+</Link>
+  </div>
+
+        <ImportPanel
+          rawText={rawText}
+          setRawText={setRawText}
+          sportsbook={sportsbook}
+          setSportsbook={setSportsbook}
+          onParse={handleParse}
+          onClearInput={handleClearInput}
+          onClearParsedRows={handleClearParsedRows}
+          hasRows={rows.length > 0}
+          lastParsedAt={lastParsedAt}
+        />
+
+        <ExtractionGuide sportsbook={sportsbook} />
+
+        <ParsedOddsTable
+          rows={rows}
+          onUpdateRow={handleUpdateRow}
+          onDeleteRow={handleDeleteRow}
+        />
+
+        <MarketMatchPanel
+          markets={marketBundle.markets}
+          unmatchedRows={marketBundle.unmatchedRows}
+        />
+
+        <FairOddsPanel fairOddsResults={fairOddsBundle} />
+
+        <ParlayFilters filters={filters} setFilters={setFilters} />
+
+        <ParlayResults parlays={parlayCandidates} />
+      </div>
+    </div>
+  );
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\ExtractionGuide.js =====
+"use client";
+
+import { useState } from "react";
+import { EXTRACTION_GUIDES } from "../data/extractionGuides";
+
+export default function ExtractionGuide({ sportsbook }) {
+  const [copyNotice, setCopyNotice] = useState("");
+  const [showCommand, setShowCommand] = useState(false);
+  const guide = EXTRACTION_GUIDES[sportsbook] || EXTRACTION_GUIDES.Auto;
+
+  async function handleCopyCommand() {
+    if (!guide.command) return;
+
+    try {
+      await navigator.clipboard.writeText(guide.command);
+      setCopyNotice("Copied to clipboard");
+      window.setTimeout(() => setCopyNotice(""), 1500);
+    } catch (error) {
+      console.error(error);
+      setCopyNotice("Copy failed");
+      window.setTimeout(() => setCopyNotice(""), 1500);
+    }
+  }
+
+  return (
+    <section style={sectionStyle}>
+      <div style={headerRowStyle}>
+        <h2 style={h2Style}>Book Extraction Guide</h2>
+      </div>
+
+      <div style={gridStyle}>
+        <GuideCard label="Best Method" value={guide.bestMethod} />
+        <GuideCard label="Fallback" value={guide.fallbackMethod} />
+        <GuideCard label="Avoid" value={guide.avoid} />
+      </div>
+
+      {guide.command ? (
+        <div style={commandRowWrapStyle}>
+          <div style={commandControlsStyle}>
+            <button type="button" onClick={handleCopyCommand} style={copyButtonStyle}>
+              Copy Command
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCommand((prev) => !prev)}
+              style={secondaryButtonStyle}
+            >
+              {showCommand ? "Hide Command" : "Show Command"}
+            </button>
+
+            {copyNotice ? <span style={copyNoticeStyle}>{copyNotice}</span> : null}
+          </div>
+
+          {showCommand ? (
+            <div style={commandWrapStyle}>
+              <div style={labelStyle}>Command</div>
+              <div style={commandStyle}>{guide.command}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 14 }}>
+        <div style={subheadStyle}>Steps</div>
+        <ol style={listStyle}>
+          {guide.steps.map((step) => (
+            <li key={step} style={{ marginBottom: 6 }}>
+              {step}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function GuideCard({ label, value }) {
+  return (
+    <div style={cardStyle}>
+      <div style={labelStyle}>{label}</div>
+      <div style={valueStyle}>{value}</div>
+    </div>
+  );
+}
+
+const sectionStyle = {
+  background: "#f0fdf4",
+  border: "2px solid #166534",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const h2Style = {
+  marginTop: 0,
+  marginBottom: 0,
+  color: "#14532d",
+};
+
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const cardStyle = {
+  background: "#ffffff",
+  border: "1px solid #86efac",
+  borderRadius: 10,
+  padding: 12,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  marginBottom: 6,
+  textTransform: "uppercase",
+};
+
+const valueStyle = {
+  color: "#14532d",
+  fontSize: 14,
+  lineHeight: 1.4,
+};
+
+const subheadStyle = {
+  fontWeight: 800,
+  color: "#166534",
+  marginBottom: 8,
+};
+
+const listStyle = {
+  margin: 0,
+  paddingLeft: 20,
+  color: "#14532d",
+  lineHeight: 1.5,
+};
+
+const commandRowWrapStyle = {
+  marginTop: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const commandControlsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const commandWrapStyle = {
+  background: "#ffffff",
+  border: "1px solid #86efac",
+  borderRadius: 10,
+  padding: 12,
+};
+
+const commandStyle = {
+  fontFamily: "monospace",
+  fontSize: 13,
+  background: "#f8fafc",
+  border: "1px solid #d1d5db",
+  borderRadius: 8,
+  padding: 10,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  color: "#111827",
+};
+
+const copyButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 14px",
+  cursor: "pointer",
+  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const secondaryButtonStyle = {
+  background: "#dcfce7",
+  color: "#14532d",
+  border: "1px solid #86efac",
+  borderRadius: 8,
+  padding: "10px 14px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const copyNoticeStyle = {
+  color: "#166534",
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\FairOddsPanel.js =====
+"use client";
+
+import { useState } from "react";
+
+export default function FairOddsPanel({ fairOddsResults }) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <section style={sectionStyle}>
+      <div style={headerRowStyle}>
+        <h2 style={h2Style}>4. Fair Odds Engine</h2>
+
+        <button type="button" onClick={() => setCollapsed((prev) => !prev)} style={toggleButtonStyle}>
+          {collapsed ? "Show" : "Hide"}
+        </button>
+      </div>
+
+      {!collapsed &&
+        (fairOddsResults.length === 0 ? (
+          <p style={mutedStyle}>No fair odds calculated yet. Make sure some rows are marked as sharp.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Market</th>
+                  <th style={thStyle}>Selection</th>
+                  <th style={thStyle}>Fair Prob</th>
+                  <th style={thStyle}>Fair American</th>
+                  <th style={thStyle}>Hold %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fairOddsResults.map((result) => (
+                  <tr key={result.id}>
+                    <td style={tdStyle}>{result.marketDisplayName}</td>
+                    <td style={tdStyle}>{result.selectionLabel}</td>
+                    <td style={tdStyle}>{(result.fairProbability * 100).toFixed(2)}%</td>
+                    <td style={tdStyle}>{formatAmerican(result.fairAmerican)}</td>
+                    <td style={tdStyle}>
+                      {typeof result.holdPct === "number" ? `${result.holdPct.toFixed(2)}%` : "â€”"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+    </section>
+  );
+}
+
+function formatAmerican(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
+  return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "1px solid #ddd",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 8,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8 };
+const mutedStyle = { color: "#666", fontSize: 14 };
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 14,
+};
+
+const thStyle = {
+  textAlign: "left",
+  borderBottom: "1px solid #ddd",
+  padding: 8,
+};
+
+const tdStyle = {
+  borderBottom: "1px solid #eee",
+  padding: 8,
+};
+
+const toggleButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\ImportPanel.js =====
+"use client";
+
+const SPORTSBOOK_OPTIONS = [
+  "Auto",
+  "DraftKings",
+  "FanDuel",
+  "BetMGM",
+  "Caesars",
+  "Pinnacle",
+  "TheScoreBet",
+  "Manual",
+];
+
+export default function ImportPanel({
+  rawText,
+  setRawText,
+  sportsbook,
+  setSportsbook,
+  onParse,
+  onClearInput,
+  onClearParsedRows,
+  hasRows,
+  lastParsedAt,
+}) {
+  return (
+    <section style={sectionStyle}>
+      <h2 style={h2Style}>1. Import Odds</h2>
+      <p style={mutedStyle}>
+        Paste extracted odds text here and choose the source book.
+      </p>
+
+      <div style={controlsRowStyle}>
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>Sportsbook</span>
+          <select
+            value={sportsbook}
+            onChange={(e) => setSportsbook(e.target.value)}
+            style={inputStyle}
+          >
+            {SPORTSBOOK_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <textarea
+        value={rawText}
+        onChange={(e) => setRawText(e.target.value)}
+        style={textareaStyle}
+        placeholder="Paste odds text here..."
+      />
+
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+        <button onClick={onParse} style={primaryButtonStyle}>
+          Parse Input
+        </button>
+
+        <button onClick={onClearInput} style={secondaryButtonStyle}>
+          Clear Input
+        </button>
+
+        <button
+          onClick={onClearParsedRows}
+          style={{
+            ...dangerButtonStyle,
+            ...(hasRows ? {} : disabledButtonStyle),
+          }}
+          disabled={!hasRows}
+        >
+          Clear Parsed Rows
+        </button>
+
+        <span style={mutedStyle}>
+          {lastParsedAt ? `Last parsed: ${new Date(lastParsedAt).toLocaleString()}` : "Not parsed yet"}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+const sectionStyle = {
+  background: "#f0fdf4",
+  border: "2px solid #166534",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8, color: "#14532d" };
+
+const mutedStyle = {
+  color: "#166534",
+  fontSize: 14,
+};
+
+const controlsRowStyle = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const fieldStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  minWidth: 220,
+};
+
+const fieldLabelStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  textTransform: "uppercase",
+};
+
+const inputStyle = {
+  padding: "8px 10px",
+  borderRadius: 8,
+  border: "1px solid #86efac",
+  background: "#fff",
+  color: "#14532d",
+  fontWeight: 700,
+};
+
+const textareaStyle = {
+  width: "100%",
+  minHeight: 220,
+  padding: 12,
+  borderRadius: 8,
+  border: "1px solid #86efac",
+  fontFamily: "monospace",
+  fontSize: 14,
+  resize: "vertical",
+  background: "#fff",
+  color: "#111",
+};
+
+const baseButtonStyle = {
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 14px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const primaryButtonStyle = {
+  ...baseButtonStyle,
+  background: "#166534",
+  color: "#f0fdf4",
+};
+
+const secondaryButtonStyle = {
+  ...baseButtonStyle,
+  background: "#dcfce7",
+  color: "#14532d",
+  border: "1px solid #86efac",
+};
+
+const dangerButtonStyle = {
+  ...baseButtonStyle,
+  background: "#fef2f2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+};
+
+const disabledButtonStyle = {
+  opacity: 0.45,
+  cursor: "not-allowed",
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\MarketMatchPanel.js =====
+"use client";
+
+import { useState } from "react";
+
+export default function MarketMatchPanel({ markets, unmatchedRows }) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <section style={sectionStyle}>
+      <div style={headerRowStyle}>
+        <div>
+          <h2 style={h2Style}>3. Canonical Market Matching</h2>
+          <div style={{ color: "#555" }}>
+            Markets: <strong>{markets.length}</strong> | Unmatched Rows:{" "}
+            <strong>{unmatchedRows.length}</strong>
+          </div>
+        </div>
+
+        <button type="button" onClick={() => setCollapsed((prev) => !prev)} style={toggleButtonStyle}>
+          {collapsed ? "Show" : "Hide"}
+        </button>
+      </div>
+
+      {!collapsed &&
+        (markets.length === 0 ? (
+          <p style={mutedStyle}>No canonical markets built yet.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {markets.map((market) => (
+              <div key={market.id} style={cardStyle}>
+                <div style={{ fontWeight: 700 }}>{market.displayName}</div>
+                <div style={mutedStyle}>
+                  {market.marketType}
+                  {market.lineValue !== null && market.lineValue !== undefined
+                    ? ` â€¢ ${market.lineValue}`
+                    : ""}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  {market.selections.map((selection) => (
+                    <div key={selection.id} style={{ marginBottom: 4 }}>
+                      <strong>{selection.label}</strong> â€” {selection.quotes.length} quote(s)
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+    </section>
+  );
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "1px solid #ddd",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 8,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8 };
+const mutedStyle = { color: "#666", fontSize: 14 };
+
+const cardStyle = {
+  border: "1px solid #e6e6e6",
+  borderRadius: 10,
+  padding: 12,
+  background: "#fafafa",
+};
+
+const toggleButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\ParlayFilters.js =====
+"use client";
+
+const ODDS_SUGGESTIONS = [
+  "-500",
+  "-400",
+  "-300",
+  "-200",
+  "-100",
+  "+100",
+  "+200",
+  "+300",
+  "+400",
+];
+
+export default function ParlayFilters({ filters, setFilters }) {
+  function updateField(key, value) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  return (
+    <section style={sectionStyle}>
+      <h2 style={h2Style}>5. Parlay Filters</h2>
+
+      <div style={gridStyle}>
+        <label style={labelStyle}>
+          Max Legs
+          <input
+            type="number"
+            value={filters.maxLegs}
+            onChange={(e) => updateField("maxLegs", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Min Total Odds (American)
+          <input
+            type="text"
+            list="american-odds-suggestions"
+            value={String(filters.minTotalAmericanOdds ?? "")}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              const parsed = Number(raw.replace(/[^\d+-]/g, ""));
+              updateField("minTotalAmericanOdds", Number.isFinite(parsed) ? parsed : "");
+            }}
+            style={inputStyle}
+            placeholder="+200 or -200"
+          />
+          <datalist id="american-odds-suggestions">
+            {ODDS_SUGGESTIONS.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </label>
+
+        <label style={labelStyle}>
+          Boost %
+          <input
+            type="number"
+            value={filters.boostPct}
+            onChange={(e) => updateField("boostPct", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Stake
+          <input
+            type="number"
+            value={filters.stake}
+            onChange={(e) => updateField("stake", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Bankroll
+          <input
+            type="number"
+            value={filters.bankroll}
+            onChange={(e) => updateField("bankroll", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Kelly Fraction
+          <input
+            type="number"
+            step="0.01"
+            value={filters.kellyFraction}
+            onChange={(e) => updateField("kellyFraction", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 12 }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.allowSameGame === true}
+            onChange={(e) => updateField("allowSameGame", e.target.checked)}
+          />{" "}
+          Allow same game
+        </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.allowRepeats === true}
+            onChange={(e) => updateField("allowRepeats", e.target.checked)}
+          />{" "}
+          Allow repeated teams
+        </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.onlyPositiveEdgeLegs === true}
+            onChange={(e) => updateField("onlyPositiveEdgeLegs", e.target.checked)}
+          />{" "}
+          Only positive-edge legs
+        </label>
+      </div>
+    </section>
+  );
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "1px solid #ddd",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8 };
+
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+};
+
+const labelStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  fontSize: 14,
+};
+
+const inputStyle = {
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  background: "#fff",
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\ParlayResults.js =====
+"use client";
+
+import { useState } from "react";
+
+export default function ParlayResults({ parlays }) {
+  const [collapsedMap, setCollapsedMap] = useState({});
+
+  function toggleParlay(id) {
+    setCollapsedMap((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
+
+  return (
+    <section style={sectionStyle}>
+      <h2 style={h2Style}>6. Parlay Results</h2>
+
+      {parlays.length === 0 ? (
+        <div style={emptyWarningStyle}>
+          No positive EV parlays found with available odds.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {parlays.map((parlay, idx) => {
+            const isCollapsed = !!collapsedMap[parlay.id];
+
+            return (
+              <div key={parlay.id} style={cardStyle}>
+                <div style={cardHeaderStyle}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>Candidate #{idx + 1}</div>
+                    <div style={subtleStyle}>
+                      EV {formatPct(parlay.expectedValuePct)} â€¢ Boosted {formatAmerican(parlay.boostedParlayAmerican)}
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={() => toggleParlay(parlay.id)} style={toggleButtonStyle}>
+                    {isCollapsed ? "Show" : "Hide"}
+                  </button>
+                </div>
+
+                {!isCollapsed && (
+                  <>
+                    <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                      {parlay.legDescriptions.map((leg) => (
+                        <div key={leg}>â€¢ {leg}</div>
+                      ))}
+                    </div>
+
+                    <div style={metricsGridStyle}>
+                      <MetricRow label="Raw Odds" value={formatAmerican(parlay.rawParlayAmerican)} />
+                      <MetricRow label="Boosted Odds" value={formatAmerican(parlay.boostedParlayAmerican)} />
+                      <MetricRow label="Fair Hit %" value={formatPct(parlay.fairHitProbability)} />
+                      <MetricRow label="EV %" value={formatPct(parlay.expectedValuePct)} />
+                      <MetricRow label="Expected $" value={`$${(parlay.expectedProfitAtStake ?? 0).toFixed(2)}`} />
+                      <MetricRow
+                        label="Â¼ Kelly Stake"
+                        value={`$${(parlay.suggestedKellyStake ?? 0).toFixed(2)}`}
+                      />
+                    </div>
+
+                    {parlay.notes?.length ? (
+                      <div style={notesWrapStyle}>
+                        {parlay.notes.map((note) => (
+                          <span key={note} style={notePillStyle}>
+                            {note}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MetricRow({ label, value }) {
+  return (
+    <div style={metricCardStyle}>
+      <div style={metricLabelStyle}>{label}</div>
+      <div style={metricValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function formatAmerican(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
+  return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
+}
+
+function formatPct(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "1px solid #ddd",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8 };
+const subtleStyle = { color: "#666", fontSize: 13 };
+
+const cardStyle = {
+  border: "1px solid #e6e6e6",
+  borderRadius: 10,
+  padding: 12,
+  background: "#fafafa",
+};
+
+const cardHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const toggleButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const metricsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 10,
+  marginTop: 12,
+};
+
+const metricCardStyle = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 8,
+  padding: 10,
+};
+
+const metricLabelStyle = {
+  fontSize: 12,
+  color: "#6b7280",
+  fontWeight: 700,
+  marginBottom: 4,
+  textTransform: "uppercase",
+};
+
+const metricValueStyle = {
+  fontSize: 15,
+  color: "#111827",
+  fontWeight: 800,
+};
+
+const notesWrapStyle = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 12,
+};
+
+const notePillStyle = {
+  background: "#ecfdf5",
+  color: "#166534",
+  border: "1px solid #bbf7d0",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const emptyWarningStyle = {
+  background: "#fef2f2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+  borderRadius: 10,
+  padding: 12,
+  fontWeight: 800,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\components\ParsedOddsTable.js =====
+"use client";
+
+import { useMemo, useState } from "react";
+
+const MARKET_ORDER = {
+  moneyline_2way: 1,
+  moneyline_3way: 2,
+  spread: 3,
+  total: 4,
+};
+
+export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
+  const groupedRows = useMemo(() => buildGroupedRows(rows), [rows]);
+  const [collapsedEvents, setCollapsedEvents] = useState({});
+
+  function toggleEvent(eventName) {
+    setCollapsedEvents((prev) => ({
+      ...prev,
+      [eventName]: !prev[eventName],
+    }));
+  }
+
+  function collapseAll() {
+    const next = {};
+    for (const group of groupedRows) {
+      next[group.event] = true;
+    }
+    setCollapsedEvents(next);
+  }
+
+  function expandAll() {
+    const next = {};
+    for (const group of groupedRows) {
+      next[group.event] = false;
+    }
+    setCollapsedEvents(next);
+  }
+
+  return (
+    <section style={sectionStyle}>
+      <div style={headerRowStyle}>
+        <div>
+          <h2 style={h2Style}>2. Parsed Odds Review</h2>
+          <p style={mutedStyle}>
+            Parsed rows: <strong>{rows.length}</strong>
+          </p>
+        </div>
+
+        {rows.length > 0 ? (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" onClick={collapseAll} style={toggleButtonStyle}>
+              Collapse All
+            </button>
+            <button type="button" onClick={expandAll} style={toggleButtonStyle}>
+              Expand All
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {rows.length === 0 ? (
+        <p style={mutedStyle}>No parsed rows yet.</p>
+      ) : (
+        <div style={scrollFrameStyle}>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Book</th>
+                  <th style={thStyle}>Sport</th>
+                  <th style={thStyle}>Event</th>
+                  <th style={thStyle}>Market</th>
+                  <th style={thStyle}>Selection</th>
+                  <th style={thStyle}>Line</th>
+                  <th style={thStyle}>Odds</th>
+                  <th style={thStyle}>Sharp</th>
+                  <th style={thStyle}>Confidence</th>
+                  <th style={thStyle}>Warnings</th>
+                  <th style={thStyle}>Delete</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedRows.map((eventGroup) => (
+                  <EventGroup
+                    key={eventGroup.event}
+                    eventGroup={eventGroup}
+                    isCollapsed={!!collapsedEvents[eventGroup.event]}
+                    onToggle={() => toggleEvent(eventGroup.event)}
+                    onUpdateRow={onUpdateRow}
+                    onDeleteRow={onDeleteRow}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EventGroup({
+  eventGroup,
+  isCollapsed,
+  onToggle,
+  onUpdateRow,
+  onDeleteRow,
+}) {
+  const totalRowsInEvent = eventGroup.markets.reduce(
+    (sum, marketGroup) => sum + marketGroup.rows.length,
+    0
+  );
+
+  return (
+    <>
+      <tr>
+        <td colSpan={11} style={eventHeaderStyle}>
+          <div style={eventHeaderInnerStyle}>
+            <button type="button" onClick={onToggle} style={collapseButtonStyle}>
+              {isCollapsed ? "Show" : "Hide"}
+            </button>
+
+            <div style={eventHeaderTextWrapStyle}>
+              <div style={eventHeaderTitleStyle}>{eventGroup.event}</div>
+              <div style={eventHeaderMetaStyle}>
+                {eventGroup.markets.length} market
+                {eventGroup.markets.length === 1 ? "" : "s"} â€¢ {totalRowsInEvent} row
+                {totalRowsInEvent === 1 ? "" : "s"}
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+
+      {!isCollapsed &&
+        eventGroup.markets.map((marketGroup) => (
+          <MarketGroup
+            key={`${eventGroup.event}__${marketGroup.market}`}
+            marketGroup={marketGroup}
+            onUpdateRow={onUpdateRow}
+            onDeleteRow={onDeleteRow}
+          />
+        ))}
+    </>
+  );
+}
+
+function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
+  return (
+    <>
+      <tr>
+        <td colSpan={11} style={marketHeaderStyle}>
+          {marketGroup.market}
+        </td>
+      </tr>
+
+      {marketGroup.rows.map((row, idx) => {
+        const zebraBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+
+        return (
+          <tr key={row.id} style={{ background: zebraBg }}>
+            <td style={{ ...tdStyle, background: zebraBg }}>{row.sportsbook}</td>
+            <td style={{ ...tdStyle, background: zebraBg }}>{row.sport}</td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <div style={eventCellStyle}>
+                <div style={eventTextStyle}>{row.eventLabelRaw || "â€”"}</div>
+                <input
+                  value={row.eventLabelRaw || ""}
+                  onChange={(e) => onUpdateRow(row.id, { eventLabelRaw: e.target.value })}
+                  style={eventInputStyle}
+                />
+              </div>
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <select
+                value={row.marketType}
+                onChange={(e) => onUpdateRow(row.id, { marketType: e.target.value })}
+                style={inputStyle}
+              >
+                <option value="moneyline_2way">moneyline_2way</option>
+                <option value="moneyline_3way">moneyline_3way</option>
+                <option value="spread">spread</option>
+                <option value="total">total</option>
+              </select>
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <input
+                value={row.selectionNormalized || ""}
+                onChange={(e) =>
+                  onUpdateRow(row.id, { selectionNormalized: e.target.value })
+                }
+                style={inputStyle}
+              />
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <input
+                value={
+                  row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
+                    ? "ML"
+                    : Number.isFinite(row.lineValue)
+                    ? row.lineValue
+                    : "â€”"
+                }
+                onChange={(e) =>
+                  onUpdateRow(row.id, {
+                    lineValue:
+                      e.target.value === "" || e.target.value === "â€”" || e.target.value === "ML"
+                        ? null
+                        : Number(e.target.value),
+                  })
+                }
+                style={smallInputStyle}
+              />
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <input
+                value={Number.isFinite(row.oddsAmerican) ? row.oddsAmerican : ""}
+                onChange={(e) =>
+                  onUpdateRow(row.id, {
+                    oddsAmerican: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                style={smallInputStyle}
+              />
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <input
+                type="checkbox"
+                checked={!!row.isSharpSource}
+                onChange={(e) =>
+                  onUpdateRow(row.id, { isSharpSource: e.target.checked })
+                }
+              />
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <span style={getConfidencePillStyle(row.confidence)}>{row.confidence}</span>
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              {row.parseWarnings?.length ? row.parseWarnings.join(", ") : "â€”"}
+            </td>
+
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              <button onClick={() => onDeleteRow(row.id)} style={dangerButtonStyle}>
+                Delete
+              </button>
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+function buildGroupedRows(rows) {
+  const sorted = [...rows].sort((a, b) => {
+    const eventA = String(a.eventLabelRaw || "");
+    const eventB = String(b.eventLabelRaw || "");
+    if (eventA !== eventB) return eventA.localeCompare(eventB);
+
+    const marketA = MARKET_ORDER[a.marketType] || 99;
+    const marketB = MARKET_ORDER[b.marketType] || 99;
+    if (marketA !== marketB) return marketA - marketB;
+
+    return String(a.selectionNormalized || "").localeCompare(String(b.selectionNormalized || ""));
+  });
+
+  const eventMap = new Map();
+
+  for (const row of sorted) {
+    const eventKey = row.eventLabelRaw || "Unknown Event";
+    if (!eventMap.has(eventKey)) {
+      eventMap.set(eventKey, {
+        event: eventKey,
+        markets: [],
+      });
+    }
+
+    const eventGroup = eventMap.get(eventKey);
+    let marketGroup = eventGroup.markets.find((m) => m.market === row.marketType);
+
+    if (!marketGroup) {
+      marketGroup = {
+        market: row.marketType,
+        rows: [],
+      };
+      eventGroup.markets.push(marketGroup);
+      eventGroup.markets.sort(
+        (a, b) => (MARKET_ORDER[a.market] || 99) - (MARKET_ORDER[b.market] || 99)
+      );
+    }
+
+    marketGroup.rows.push(row);
+  }
+
+  return Array.from(eventMap.values());
+}
+
+function getConfidencePillStyle(confidence) {
+  const value = String(confidence || "").toLowerCase();
+
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 70,
+    padding: "4px 10px",
+    borderRadius: 999,
+    fontWeight: 800,
+    fontSize: 12,
+  };
+
+  if (value === "high") {
+    return { ...base, background: "#166534", color: "#ecfdf5" };
+  }
+
+  if (value === "medium") {
+    return { ...base, background: "#ca8a04", color: "#fefce8" };
+  }
+
+  if (value === "low") {
+    return { ...base, background: "#dc2626", color: "#fef2f2" };
+  }
+
+  return { ...base, background: "#374151", color: "#f9fafb" };
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "2px solid #166534",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 12,
+  flexWrap: "wrap",
+};
+
+const h2Style = { marginTop: 0, marginBottom: 6, color: "#14532d" };
+const mutedStyle = { color: "#166534", fontSize: 14, margin: 0 };
+
+const scrollFrameStyle = {
+  maxHeight: 520,
+  overflow: "auto",
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+};
+
+const tableWrapStyle = {
+  minWidth: 1200,
+};
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "separate",
+  borderSpacing: 0,
+  fontSize: 14,
+};
+
+const thStyle = {
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  textAlign: "left",
+  borderBottom: "1px solid #d1d5db",
+  padding: 8,
+  whiteSpace: "nowrap",
+  background: "#dcfce7",
+  color: "#14532d",
+};
+
+const tdStyle = {
+  borderBottom: "1px solid #e5e7eb",
+  padding: 8,
+  verticalAlign: "top",
+};
+
+const eventHeaderStyle = {
+  padding: "10px 12px",
+  background: "#166534",
+  color: "#f0fdf4",
+  fontWeight: 800,
+  letterSpacing: 0.2,
+};
+
+const eventHeaderInnerStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+};
+
+const eventHeaderTextWrapStyle = {
+  display: "grid",
+  gap: 4,
+  flex: 1,
+  minWidth: 220,
+};
+
+const eventHeaderTitleStyle = {
+  fontWeight: 800,
+  lineHeight: 1.35,
+};
+
+const eventHeaderMetaStyle = {
+  fontSize: 12,
+  color: "#dcfce7",
+  fontWeight: 700,
+};
+
+const collapseButtonStyle = {
+  background: "#f0fdf4",
+  color: "#166534",
+  border: "none",
+  borderRadius: 8,
+  padding: "6px 10px",
+  cursor: "pointer",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const toggleButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const marketHeaderStyle = {
+  padding: "8px 12px",
+  background: "#dcfce7",
+  color: "#14532d",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  fontSize: 12,
+  letterSpacing: 0.4,
+};
+
+const inputStyle = {
+  width: "100%",
+  minWidth: 120,
+  padding: 6,
+  borderRadius: 6,
+  border: "1px solid #ccc",
+  background: "#fff",
+};
+
+const smallInputStyle = {
+  width: 90,
+  padding: 6,
+  borderRadius: 6,
+  border: "1px solid #ccc",
+  background: "#fff",
+};
+
+const eventCellStyle = {
+  display: "grid",
+  gap: 8,
+  minWidth: 260,
+};
+
+const eventTextStyle = {
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+  lineHeight: 1.35,
+  fontWeight: 700,
+  color: "#111827",
+};
+
+const eventInputStyle = {
+  width: "100%",
+  padding: 6,
+  borderRadius: 6,
+  border: "1px solid #ccc",
+  background: "#fff",
+};
+
+const dangerButtonStyle = {
+  background: "#fef2f2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+  borderRadius: 6,
+  padding: "6px 10px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\data\extractionGuides.js =====
+export const EXTRACTION_GUIDES = {
+  DraftKings: {
+    bestMethod: "Browser console innerText from the main content area",
+    fallbackMethod: "Copy visible page text if console is unavailable",
+    avoid: "Copied HTML from the page source or giant page navigation blocks",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the DraftKings odds page you want.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab.",
+    ],
+  },
+
+  FanDuel: {
+    bestMethod: "Browser console innerText from the main odds area",
+    fallbackMethod: "Copy visible odds text from a focused odds page",
+    avoid: "Random highlighted copy that mixes nav, promos, and odds",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the FanDuel odds page.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab.",
+    ],
+  },
+
+  BetMGM: {
+    bestMethod: "Browser console innerText or focused visible copy",
+    fallbackMethod: "Copy visible odds text",
+    avoid: "Full-page HTML and promo-heavy copy",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the BetMGM odds page.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab.",
+    ],
+  },
+
+  Caesars: {
+    bestMethod: "Browser console innerText or focused container copy",
+    fallbackMethod: "Visible odds list copy",
+    avoid: "Huge page copy with unrelated navigation",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the Caesars odds page.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab.",
+    ],
+  },
+
+  Pinnacle: {
+    bestMethod: "Focused odds table text copy",
+    fallbackMethod: "Console innerText from the main odds area",
+    avoid: "General navigation copy instead of odds table copy",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the Pinnacle market page.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab as the sharp source.",
+    ],
+  },
+
+  TheScoreBet: {
+    bestMethod: "Browser console innerText from the main odds area",
+    fallbackMethod: "Copy visible page text from the odds list",
+    avoid: "Full-page copy with promos, nav, and unrelated article text",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Open the TheScoreBet odds page.",
+      "Open browser DevTools, then go to the Console tab.",
+      "Click Copy Command below, then paste it into the console.",
+      "Paste the copied sportsbook text into EV Parlay Lab.",
+    ],
+  },
+
+  Manual: {
+    bestMethod: "Paste text in a clean row-based format",
+    fallbackMethod: "Use editable review table after paste",
+    avoid: "Mixed text from multiple unrelated screens",
+    command: "",
+    steps: [
+      "Paste your cleaned odds text into the box.",
+      "Parse it.",
+      "Fix any bad rows in the review table.",
+    ],
+  },
+
+  Auto: {
+    bestMethod: "Use Auto only when you are not sure which parser to choose",
+    fallbackMethod: "Pick the sportsbook manually for better results",
+    avoid: "Assuming Auto will always identify the right source",
+    command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
+    steps: [
+      "Paste text into the box.",
+      "Try Parse Input.",
+      "If results are poor, choose the sportsbook manually and parse again.",
+    ],
+  },
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\data\sampleData.js =====
+export const SAMPLE_RAW_TEXT = ``;
+
+export const SAMPLE_FILTERS = {
+  maxLegs: 2,
+  minTotalAmericanOdds: 200,
+  boostPct: 20,
+  stake: 10,
+  bankroll: 6000,
+  kellyFraction: 0.25,
+  allowSameGame: false,
+  allowRepeats: false,
+  onlyPositiveEdgeLegs: true,
+};
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\data\teamAliases.js =====
+function addAliases(map, sport, canonical, aliases) {
+  if (!map[sport]) map[sport] = {};
+  const all = [canonical, ...aliases];
+
+  for (const alias of all) {
+    map[sport][String(alias).trim().toLowerCase()] = canonical;
+  }
+}
+
+export const TEAM_ALIASES_BY_SPORT = {};
+
+export function normalizeTeamNameBySport(name = "", sport = "") {
+  const clean = String(name).trim();
+  if (!clean) return "";
+
+  const sportKey = String(sport || "").trim().toUpperCase();
+  const lower = clean.toLowerCase();
+
+  if (sportKey && TEAM_ALIASES_BY_SPORT[sportKey]?.[lower]) {
+    return TEAM_ALIASES_BY_SPORT[sportKey][lower];
+  }
+
+  for (const key of Object.keys(TEAM_ALIASES_BY_SPORT)) {
+    if (TEAM_ALIASES_BY_SPORT[key][lower]) {
+      return TEAM_ALIASES_BY_SPORT[key][lower];
+    }
+  }
+
+  return clean;
+}
+
+/* =========================
+   NBA
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Atlanta Hawks", ["atl", "atlanta", "hawks", "atl hawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Boston Celtics", ["bos", "boston", "celtics", "bos celtics"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Brooklyn Nets", ["bkn", "bk", "brooklyn", "nets", "bkn nets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha", "charlotte", "hornets", "cha hornets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Chicago Bulls", ["chi", "chicago", "bulls", "chi bulls"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Cleveland Cavaliers", ["cle", "cavs", "cavaliers", "cle cavaliers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Dallas Mavericks", ["dal", "dallas", "mavs", "mavericks", "dal mavericks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Denver Nuggets", ["den", "denver", "nuggets", "den nuggets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Detroit Pistons", ["det", "detroit", "pistons", "det pistons"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Golden State Warriors", ["gs", "gsw", "golden state", "warriors", "gs warriors", "gsw warriors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Houston Rockets", ["hou", "houston", "rockets", "hou rockets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Indiana Pacers", ["ind", "indy", "indiana", "pacers", "ind pacers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Clippers", ["lac", "la clippers", "clippers", "los angeles clippers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Lakers", ["lal", "la lakers", "lakers", "los angeles lakers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Memphis Grizzlies", ["mem", "memphis", "grizzlies", "mem grizzlies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Miami Heat", ["mia", "miami", "heat", "mia heat"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Milwaukee Bucks", ["mil", "milwaukee", "bucks", "mil bucks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Minnesota Timberwolves", ["min", "minnesota", "wolves", "timberwolves", "min timberwolves"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New Orleans Pelicans", ["no", "nop", "new orleans", "pelicans", "nop pelicans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New York Knicks", ["ny", "nyk", "new york", "knicks", "ny knicks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Oklahoma City Thunder", ["okc", "oklahoma city", "thunder", "okc thunder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Orlando Magic", ["orl", "orlando", "magic", "orl magic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Philadelphia 76ers", ["phi", "philadelphia", "76ers", "sixers", "phi 76ers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Phoenix Suns", ["phx", "phoenix", "suns", "phx suns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Portland Trail Blazers", ["por", "portland", "blazers", "trail blazers", "por blazers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Sacramento Kings", ["sac", "sacramento", "kings", "sac kings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "San Antonio Spurs", ["sa", "sas", "san antonio", "spurs", "sas spurs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Toronto Raptors", ["tor", "toronto", "raptors", "tor raptors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Utah Jazz", ["utah", "uta", "jazz", "uta jazz"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Washington Wizards", ["wsh", "was", "washington", "wizards", "was wizards"]);
+
+/* =========================
+   NHL
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Anaheim Ducks", ["ana", "anaheim", "ducks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Boston Bruins", ["bos", "boston", "bruins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Buffalo Sabres", ["buf", "buffalo", "sabres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Calgary Flames", ["cgy", "calgary", "flames"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Carolina Hurricanes", ["car", "carolina", "hurricanes", "canes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Chicago Blackhawks", ["chi", "chicago", "blackhawks", "hawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Colorado Avalanche", ["col", "colorado", "avalanche", "avs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Columbus Blue Jackets", ["cbj", "columbus", "blue jackets", "jackets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Dallas Stars", ["dal", "dallas", "stars"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Detroit Red Wings", ["det", "detroit", "red wings", "wings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Edmonton Oilers", ["edm", "edmonton", "oilers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Florida Panthers", ["fla", "florida", "panthers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Los Angeles Kings", ["la", "lak", "kings", "la kings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Minnesota Wild", ["min", "minnesota", "wild"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Montreal Canadiens", ["mtl", "montreal", "canadiens", "habs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Nashville Predators", ["nsh", "nashville", "predators", "preds"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New Jersey Devils", ["nj", "njd", "new jersey", "devils"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Islanders", ["nyi", "islanders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Rangers", ["nyr", "rangers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Ottawa Senators", ["ott", "ottawa", "senators", "sens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Philadelphia Flyers", ["phi", "philadelphia", "flyers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Pittsburgh Penguins", ["pit", "pittsburgh", "penguins", "pens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "San Jose Sharks", ["sj", "sjs", "san jose", "sharks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Seattle Kraken", ["sea", "seattle", "kraken"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "St. Louis Blues", ["stl", "st louis", "saint louis", "blues"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Tampa Bay Lightning", ["tb", "tbl", "tampa bay", "lightning", "bolts"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Toronto Maple Leafs", ["tor", "toronto", "maple leafs", "leafs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["utah", "utah hockey club", "utah hc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vancouver Canucks", ["van", "vancouver", "canucks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vegas Golden Knights", ["vgk", "vegas", "golden knights", "knights"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Washington Capitals", ["wsh", "was", "washington", "capitals", "caps"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Winnipeg Jets", ["wpg", "winnipeg", "jets"]);
+
+/* =========================
+   MLB
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Arizona Diamondbacks", ["ari", "arizona", "diamondbacks", "dbacks", "d-backs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Atlanta Braves", ["atl", "atlanta", "braves"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Baltimore Orioles", ["bal", "baltimore", "orioles", "o's", "os"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Boston Red Sox", ["bos", "boston", "red sox", "sox"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Chicago Cubs", ["chc", "cubs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Chicago White Sox", ["chw", "cws", "white sox"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Cincinnati Reds", ["cin", "cincinnati", "reds"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Cleveland Guardians", ["cle", "cleveland", "guardians"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Colorado Rockies", ["col", "colorado", "rockies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Detroit Tigers", ["det", "detroit", "tigers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Houston Astros", ["hou", "houston", "astros"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Kansas City Royals", ["kc", "kcr", "royals"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Los Angeles Angels", ["laa", "angels", "los angeles angels"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Los Angeles Dodgers", ["lad", "dodgers", "los angeles dodgers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Miami Marlins", ["mia", "miami", "marlins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Milwaukee Brewers", ["mil", "milwaukee", "brewers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Minnesota Twins", ["min", "minnesota", "twins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "New York Mets", ["nym", "mets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "New York Yankees", ["nyy", "yankees"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Athletics", ["oak", "oakland", "a's", "as", "athletics"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Philadelphia Phillies", ["phi", "phillies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Pittsburgh Pirates", ["pit", "pirates"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "San Diego Padres", ["sd", "sdp", "padres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "San Francisco Giants", ["sf", "sfg", "giants"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Seattle Mariners", ["sea", "seattle", "mariners", "ms"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "St. Louis Cardinals", ["stl", "st louis", "saint louis", "cardinals", "cards"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Tampa Bay Rays", ["tb", "tbr", "rays"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Texas Rangers", ["tex", "texas", "rangers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Toronto Blue Jays", ["tor", "toronto", "blue jays", "jays"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Washington Nationals", ["wsh", "was", "washington", "nationals", "nats"]);
+
+/* =========================
+   NFL
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Arizona Cardinals", ["ari", "arizona", "cardinals", "cards"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Atlanta Falcons", ["atl", "atlanta", "falcons"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Baltimore Ravens", ["bal", "baltimore", "ravens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Buffalo Bills", ["buf", "buffalo", "bills"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Carolina Panthers", ["car", "carolina", "panthers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Chicago Bears", ["chi", "chicago", "bears"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Cincinnati Bengals", ["cin", "cincinnati", "bengals"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Cleveland Browns", ["cle", "cleveland", "browns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Dallas Cowboys", ["dal", "dallas", "cowboys"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Denver Broncos", ["den", "denver", "broncos"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Detroit Lions", ["det", "detroit", "lions"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Green Bay Packers", ["gb", "packers", "green bay"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Houston Texans", ["hou", "houston", "texans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Indianapolis Colts", ["ind", "indy", "colts"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Jacksonville Jaguars", ["jax", "jacksonville", "jaguars", "jags"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Kansas City Chiefs", ["kc", "chiefs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Las Vegas Raiders", ["lv", "raiders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Los Angeles Chargers", ["lac", "chargers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Los Angeles Rams", ["lar", "rams"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Miami Dolphins", ["mia", "miami", "dolphins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Minnesota Vikings", ["min", "minnesota", "vikings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New England Patriots", ["ne", "patriots"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New Orleans Saints", ["no", "saints"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New York Giants", ["nyg", "giants"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New York Jets", ["nyj", "jets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Philadelphia Eagles", ["phi", "eagles"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Pittsburgh Steelers", ["pit", "steelers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "San Francisco 49ers", ["sf", "49ers", "niners"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Seattle Seahawks", ["sea", "seahawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Tampa Bay Buccaneers", ["tb", "bucs", "buccaneers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Tennessee Titans", ["ten", "titans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Washington Commanders", ["wsh", "was", "washington", "commanders"]);
+
+/* =========================
+   MLS
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Atlanta United", ["atlanta united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Austin FC", ["austin", "austin fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Charlotte FC", ["charlotte fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Chicago Fire", ["chicago fire", "fire"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "FC Cincinnati", ["cincinnati", "fc cincinnati"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Colorado Rapids", ["colorado rapids", "rapids"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Columbus Crew", ["columbus crew", "crew"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "D.C. United", ["dc united", "d.c. united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "FC Dallas", ["fc dallas", "dallas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Houston Dynamo", ["houston dynamo", "dynamo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Inter Miami CF", ["inter miami", "miami cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "LA Galaxy", ["la galaxy", "galaxy"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Los Angeles FC", ["lafc", "los angeles fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Minnesota United", ["minnesota united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "CF MontrÃ©al", ["montreal", "cf montreal", "cf montrÃ©al"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Nashville SC", ["nashville sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New England Revolution", ["new england revolution", "revolution", "revs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New York City FC", ["nycfc", "new york city fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New York Red Bulls", ["ny red bulls", "red bulls"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Orlando City SC", ["orlando city", "orlando city sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Philadelphia Union", ["philadelphia union", "union"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Portland Timbers", ["portland timbers", "timbers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Real Salt Lake", ["real salt lake", "rsl"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "San Diego FC", ["san diego fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "San Jose Earthquakes", ["san jose earthquakes", "earthquakes", "quakes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Seattle Sounders FC", ["seattle sounders", "sounders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Sporting Kansas City", ["sporting kc", "sporting kansas city", "skc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "St. Louis City SC", ["st louis city", "saint louis city", "st. louis city", "city sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Toronto FC", ["toronto fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Vancouver Whitecaps FC", ["vancouver whitecaps", "whitecaps"]);
+
+/* =========================
+   Premier League
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Arsenal", ["arsenal fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Aston Villa", ["villa", "aston villa fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Bournemouth", ["afc bournemouth", "bournemouth"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Brentford", ["brentford fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Brighton & Hove Albion", ["brighton", "brighton and hove albion"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Chelsea", ["chelsea fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Crystal Palace", ["palace", "crystal palace fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Everton", ["everton fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Fulham", ["fulham fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Ipswich Town", ["ipswich", "ipswich town fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Leicester City", ["leicester", "leicester city fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Liverpool", ["liverpool fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Manchester City", ["man city", "manchester city", "mci"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Manchester United", ["man united", "man utd", "manchester united", "mun"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Newcastle United", ["newcastle", "newcastle united fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Nottingham Forest", ["nottingham forest", "forest"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Southampton", ["southampton fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Tottenham Hotspur", ["tottenham", "spurs", "tottenham hotspur fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "West Ham United", ["west ham", "west ham united fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Wolverhampton Wanderers", ["wolves", "wolverhampton", "wolverhampton wanderers"]);
+
+/* =========================
+   Bundesliga
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Bayern Munich", ["bayern", "fc bayern", "fc bayern munchen", "fc bayern mÃ¼nchen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Borussia Dortmund", ["dortmund", "bvb", "borussia dortmund"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "RB Leipzig", ["leipzig", "rbl", "rb leipzig"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Bayer Leverkusen", ["leverkusen", "bayer leverkusen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Eintracht Frankfurt", ["frankfurt", "eintracht"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfB Stuttgart", ["stuttgart", "vfb stuttgart"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfL Wolfsburg", ["wolfsburg", "vfl wolfsburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Borussia MÃ¶nchengladbach", ["gladbach", "monchengladbach", "mÃ¶nchengladbach"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Werder Bremen", ["bremen", "werder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "SC Freiburg", ["freiburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "TSG Hoffenheim", ["hoffenheim"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FSV Mainz 05", ["mainz", "mainz 05"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC Augsburg", ["augsburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Union Berlin", ["union berlin"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC Heidenheim", ["heidenheim"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC St. Pauli", ["st pauli", "st. pauli"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Holstein Kiel", ["holstein kiel", "kiel"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfL Bochum", ["bochum"]);
+
+/* =========================
+   Ligue 1
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Paris Saint-Germain", ["psg", "paris sg", "paris saint germain"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Marseille", ["om", "olympique de marseille"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Monaco", ["as monaco"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lille", ["lille osc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lyon", ["ol", "olympique lyonnais"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Nice", ["ogc nice"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lens", ["rc lens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Rennes", ["stade rennes", "rennes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Reims", ["stade reims"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Strasbourg", ["rc strasbourg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Nantes", ["fc nantes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Montpellier", ["montpellier hsc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Toulouse", ["toulouse fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Brest", ["stad brestois", "brest"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Auxerre", ["aj auxerre"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Le Havre", ["le havre ac"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Angers", ["angers sco"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Saint-Ã‰tienne", ["saint etienne", "st etienne", "saint-Ã©tienne"]);
+
+/* =========================
+   La Liga
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Madrid", ["rm", "real madrid cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Barcelona", ["barca", "fc barcelona"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "AtlÃ©tico Madrid", ["atletico madrid", "atleti"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Athletic Club", ["athletic bilbao", "bilbao"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Sociedad", ["sociedad", "real sociedad"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Betis", ["betis"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Sevilla", ["sevilla fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Villarreal", ["villarreal cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Valencia", ["valencia cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Getafe", ["getafe cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Celta Vigo", ["celta", "celta de vigo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Osasuna", ["ca osasuna"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Mallorca", ["rcd mallorca"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Rayo Vallecano", ["rayo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Girona", ["girona fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "AlavÃ©s", ["alaves", "deportivo alaves", "deportivo alavÃ©s"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Las Palmas", ["ud las palmas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "LeganÃ©s", ["leganes", "cd leganÃ©s"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Espanyol", ["rcd espanyol"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Valladolid", ["valladolid"]);
+
+/* =========================
+   Serie A
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Inter Milan", ["inter", "internazionale"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "AC Milan", ["milan", "ac milan"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Juventus", ["juve"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Napoli", ["ssc napoli"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Roma", ["as roma"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Lazio", ["ss lazio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Atalanta", ["atalanta bc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Bologna", ["bologna fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Fiorentina", ["acf fiorentina"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Torino", ["torino fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Genoa", ["genoa cfc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Monza", ["ac monza"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Udinese", ["udinese calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Lecce", ["us lecce"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Parma", ["parma calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Cagliari", ["cagliari calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Hellas Verona", ["verona", "hellas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Como", ["como 1907"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Empoli", ["empoli fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Venezia", ["venezia fc"]);
+
+/* =========================
+   International Soccer
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "United States", ["usa", "usmnt", "united states men", "united states national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Mexico", ["mex", "mexico national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Canada", ["can", "canada national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "England", ["eng"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "France", ["fra"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Germany", ["ger", "deutschland"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Spain", ["esp"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Italy", ["ita"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Portugal", ["por"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Netherlands", ["ned", "holland"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Belgium", ["bel"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Brazil", ["bra"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Argentina", ["arg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Uruguay", ["uru"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Colombia", ["col"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Croatia", ["cro"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Switzerland", ["sui"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Denmark", ["den"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Poland", ["pol"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Japan", ["jpn"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "South Korea", ["kor", "korea republic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Australia", ["aus"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Morocco", ["mar"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Nigeria", ["nga"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Egypt", ["egy"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Senegal", ["sen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Cameroon", ["cmr"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Turkey", ["tur"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Austria", ["aut"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Czech Republic", ["cze"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Sweden", ["swe"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Norway", ["nor"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Serbia", ["srb"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Ukraine", ["ukr"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Chile", ["chi"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Peru", ["per"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Ecuador", ["ecu"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Paraguay", ["par"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Costa Rica", ["crc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Panama", ["pan"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Jamaica", ["jam"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Saudi Arabia", ["ksa"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Qatar", ["qat"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iran", ["irn"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iraq", ["irq"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Draw", ["tie", "x"]);
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\boostMath.js =====
+import { decimalToAmerican } from "./odds";
+
+export function applyProfitBoostToDecimal(rawDecimal, boostPct) {
+  const d = Number(rawDecimal);
+  const b = Number(boostPct);
+
+  if (!Number.isFinite(d) || d <= 1) return null;
+  if (!Number.isFinite(b)) return d;
+
+  const boostedDecimal = 1 + (d - 1) * (1 + b / 100);
+  return boostedDecimal;
+}
+
+export function applyProfitBoostToAmerican(rawDecimal, boostPct) {
+  const boostedDecimal = applyProfitBoostToDecimal(rawDecimal, boostPct);
+  if (!boostedDecimal) return null;
+  return decimalToAmerican(boostedDecimal);
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\fairOdds.js =====
+import {
+  decimalToAmerican,
+  impliedProbabilityFromDecimal,
+} from "./odds";
+
+export function calculateFairOddsForMarkets(markets) {
+  const results = [];
+
+  for (const market of markets) {
+    const sharpSelections = market.selections
+      .map((selection) => {
+        const sharpQuote = selection.quotes.find((q) => q.isSharpSource);
+        if (!sharpQuote) return null;
+        return {
+          selectionId: selection.id,
+          selectionLabel: selection.label,
+          decimal: sharpQuote.oddsDecimal,
+        };
+      })
+      .filter(Boolean);
+
+    const expectedOutcomes =
+      market.marketType === "moneyline_3way" ? 3 : 2;
+
+    if (sharpSelections.length !== expectedOutcomes) continue;
+
+    const implieds = sharpSelections.map((s) => impliedProbabilityFromDecimal(s.decimal));
+    const impliedSum = implieds.reduce((acc, n) => acc + n, 0);
+    const holdPct = (impliedSum - 1) * 100;
+
+    sharpSelections.forEach((selection, idx) => {
+      const fairProbability = implieds[idx] / impliedSum;
+      const fairDecimal = 1 / fairProbability;
+      const fairAmerican = decimalToAmerican(fairDecimal);
+
+      results.push({
+        id: `${market.id}::${selection.selectionId}`,
+        marketId: market.id,
+        marketDisplayName: market.displayName,
+        selectionId: selection.selectionId,
+        selectionLabel: selection.selectionLabel,
+        fairProbability,
+        fairDecimal,
+        fairAmerican,
+        holdPct,
+      });
+    });
+  }
+
+  return results;
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\matchMarkets.js =====
+export function buildCanonicalMarkets(rows) {
+  const eligibleRows = rows.filter(
+  (row) =>
+    !row.excluded &&
+    Number.isFinite(row.oddsAmerican) &&
+    row.selectionNormalized &&
+    row.eventLabelRaw
+);
+
+  const marketMap = new Map();
+  const unmatchedRows = [];
+
+  for (const row of eligibleRows) {
+    const marketKey = [
+      row.sport,
+      row.eventLabelRaw,
+      row.marketType,
+      row.lineValue ?? "",
+    ].join("||");
+
+    if (!marketMap.has(marketKey)) {
+      marketMap.set(marketKey, {
+        id: marketKey,
+        displayName: row.eventLabelRaw,
+        sport: row.sport,
+        marketType: row.marketType,
+        lineValue: row.lineValue ?? null,
+        selections: [],
+      });
+    }
+
+    const market = marketMap.get(marketKey);
+    let selection = market.selections.find((s) => s.label === row.selectionNormalized);
+
+    if (!selection) {
+      selection = {
+        id: `${marketKey}::${row.selectionNormalized}`,
+        label: row.selectionNormalized,
+        quotes: [],
+      };
+      market.selections.push(selection);
+    }
+
+    selection.quotes.push({
+      parsedRowId: row.id,
+      sportsbook: row.sportsbook,
+      oddsAmerican: row.oddsAmerican,
+      oddsDecimal: row.oddsDecimal,
+      isSharpSource: row.isSharpSource,
+      isTargetBook: row.isTargetBook,
+    });
+  }
+
+  const markets = Array.from(marketMap.values());
+
+  return { markets, unmatchedRows };
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\normalizeTeams.js =====
+import { normalizeTeamNameBySport } from "../data/teamAliases";
+import { americanToDecimal } from "./odds";
+
+export function normalizeParsedRows(rows) {
+  return rows.map((row) => {
+    const { homeTeam, awayTeam } = inferTeamsFromEvent(row.eventLabelRaw);
+    const selectionNormalized = normalizeTeamNameBySport(
+      row.selectionNormalized || row.selectionRaw,
+      row.sport
+    );
+
+    return {
+      ...row,
+      homeTeamRaw: homeTeam,
+      awayTeamRaw: awayTeam,
+      homeTeam: normalizeTeamNameBySport(homeTeam, row.sport),
+      awayTeam: normalizeTeamNameBySport(awayTeam, row.sport),
+      selectionNormalized,
+      oddsDecimal: americanToDecimal(row.oddsAmerican),
+    };
+  });
+}
+
+function inferTeamsFromEvent(eventLabelRaw = "") {
+  const label = eventLabelRaw.trim();
+
+  if (label.includes("@")) {
+    const [away, home] = label.split("@").map((s) => s.trim());
+    return { homeTeam: home || "", awayTeam: away || "" };
+  }
+
+  if (/\bvs\b/i.test(label)) {
+    const [home, away] = label.split(/\bvs\b/i).map((s) => s.trim());
+    return { homeTeam: home || "", awayTeam: away || "" };
+  }
+
+  return { homeTeam: "", awayTeam: "" };
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\odds.js =====
+export function americanToDecimal(american) {
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return null;
+  if (n > 0) return 1 + n / 100;
+  return 1 + 100 / Math.abs(n);
+}
+
+export function decimalToAmerican(decimal) {
+  const d = Number(decimal);
+  if (!Number.isFinite(d) || d <= 1) return null;
+  if (d >= 2) return (d - 1) * 100;
+  return -100 / (d - 1);
+}
+
+export function impliedProbabilityFromDecimal(decimal) {
+  const d = Number(decimal);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  return 1 / d;
+}
+
+export function impliedProbabilityFromAmerican(american) {
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return null;
+  if (n > 0) return 100 / (n + 100);
+  return Math.abs(n) / (Math.abs(n) + 100);
+}
+
+export function multiplyDecimals(decimals) {
+  return decimals.reduce((acc, d) => acc * d, 1);
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parlayEngine.js =====
+import { multiplyDecimals } from "./odds";
+import { applyProfitBoostToAmerican, applyProfitBoostToDecimal } from "./boostMath";
+
+export function buildParlayCandidates({ rows, markets, fairOddsResults, filters }) {
+  const fairMap = new Map(
+    fairOddsResults.map((result) => [`${result.marketId}::${result.selectionId}`, result])
+  );
+
+  const candidateLegs = [];
+
+  for (const market of markets) {
+    for (const selection of market.selections) {
+      const targetQuotes = selection.quotes.filter((q) => q.isTargetBook);
+      const bestTargetQuote = [...targetQuotes].sort((a, b) => b.oddsDecimal - a.oddsDecimal)[0];
+      const fair = fairMap.get(`${market.id}::${selection.id}`);
+
+      if (!bestTargetQuote || !fair) continue;
+
+      const legEvPct =
+        fair.fairProbability * (bestTargetQuote.oddsDecimal - 1) - (1 - fair.fairProbability);
+
+      if (filters.onlyPositiveEdgeLegs && legEvPct <= 0) continue;
+
+      candidateLegs.push({
+        marketId: market.id,
+        eventName: market.displayName,
+        marketType: market.marketType,
+        selectionId: selection.id,
+        selectionLabel: selection.label,
+        sportsbook: bestTargetQuote.sportsbook,
+        oddsAmerican: bestTargetQuote.oddsAmerican,
+        oddsDecimal: bestTargetQuote.oddsDecimal,
+        fairProbability: fair.fairProbability,
+        legEvPct,
+      });
+    }
+  }
+
+  const combinations = generateCombinations(candidateLegs, filters.maxLegs)
+    .filter((combo) => combo.length === filters.maxLegs)
+    .filter((combo) => {
+      if (filters.allowSameGame) return true;
+      const uniqueMarkets = new Set(combo.map((leg) => leg.marketId));
+      return uniqueMarkets.size === combo.length;
+    })
+    .filter((combo) => {
+      if (filters.allowRepeats) return true;
+      const names = combo.map((leg) => leg.selectionLabel.toLowerCase());
+      return new Set(names).size === names.length;
+    });
+
+  const parlays = combinations
+    .map((legs, idx) => {
+      const rawParlayDecimal = multiplyDecimals(legs.map((leg) => leg.oddsDecimal));
+      const boostedParlayDecimal = applyProfitBoostToDecimal(rawParlayDecimal, filters.boostPct);
+      const rawParlayAmerican = decimalToAmericanSafe(rawParlayDecimal);
+      const boostedParlayAmerican = applyProfitBoostToAmerican(rawParlayDecimal, filters.boostPct);
+
+      if (typeof filters.minTotalAmericanOdds === "number") {
+        if (rawParlayAmerican < filters.minTotalAmericanOdds) return null;
+      }
+
+      const fairHitProbability = legs.reduce((acc, leg) => acc * leg.fairProbability, 1);
+      const expectedProfitPerDollar =
+        fairHitProbability * (boostedParlayDecimal - 1) - (1 - fairHitProbability);
+
+      const expectedValuePct = expectedProfitPerDollar;
+      const expectedProfitAtStake = expectedProfitPerDollar * filters.stake;
+
+      if (!(expectedValuePct > 0)) return null;
+
+      const suggestedKellyStake = calculateSuggestedKellyStake({
+        bankroll: Number(filters.bankroll || 0),
+        kellyFraction: Number(filters.kellyFraction || 0),
+        winProbability: fairHitProbability,
+        decimalOdds: boostedParlayDecimal,
+      });
+
+      return {
+        id: `parlay_${idx + 1}`,
+        legDescriptions: legs.map(
+          (leg) => `${leg.selectionLabel} ${formatAmerican(leg.oddsAmerican)} (${leg.eventName})`
+        ),
+        rawParlayDecimal,
+        rawParlayAmerican,
+        boostedParlayDecimal,
+        boostedParlayAmerican,
+        fairHitProbability,
+        expectedValuePct,
+        expectedProfitPerDollar,
+        expectedProfitAtStake,
+        confidenceScore: average(legs.map((leg) => leg.legEvPct)),
+        suggestedKellyStake,
+        notes: buildNotes({
+          legs,
+          boostedParlayAmerican,
+          expectedValuePct,
+          fairHitProbability,
+          suggestedKellyStake,
+          stake: Number(filters.stake || 0),
+        }),
+        containsCorrelationRisk: false,
+        containsSameGameLegs: false,
+        containsRepeatedTeam: false,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.expectedValuePct - a.expectedValuePct);
+
+  return parlays.slice(0, 50);
+}
+
+function buildNotes({ legs, boostedParlayAmerican, expectedValuePct, fairHitProbability, suggestedKellyStake, stake }) {
+  const dogCount = legs.filter((leg) => Number(leg.oddsAmerican) > 0).length;
+  const favoriteCount = legs.length - dogCount;
+
+  const notes = [];
+
+  if (fairHitProbability >= 0.3) {
+    notes.push("Lower variance profile");
+  } else if (fairHitProbability >= 0.15) {
+    notes.push("Moderate variance profile");
+  } else {
+    notes.push("High variance profile");
+  }
+
+  if (dogCount === 0) {
+    notes.push("All favorites");
+  } else if (favoriteCount === 0) {
+    notes.push("All underdogs");
+  } else {
+    notes.push(`${favoriteCount} favorite${favoriteCount === 1 ? "" : "s"}, ${dogCount} underdog${dogCount === 1 ? "" : "s"}`);
+  }
+
+  if (boostedParlayAmerican >= 1000) {
+    notes.push("Long-odds structure");
+  } else if (boostedParlayAmerican >= 400) {
+    notes.push("Mid-odds structure");
+  } else {
+    notes.push("Shorter-odds structure");
+  }
+
+  if (expectedValuePct >= 0.08) {
+    notes.push("Stronger modeled edge");
+  } else if (expectedValuePct >= 0.03) {
+    notes.push("Modest modeled edge");
+  } else {
+    notes.push("Thin modeled edge");
+  }
+
+  if (Number.isFinite(suggestedKellyStake) && suggestedKellyStake > 0) {
+    notes.push(`Â¼ Kelly-style stake â‰ˆ $${suggestedKellyStake.toFixed(2)}`);
+  }
+
+  if (stake > 0 && Number.isFinite(suggestedKellyStake) && suggestedKellyStake > 0) {
+    if (stake > suggestedKellyStake * 1.5) {
+      notes.push("Current stake is aggressive versus model");
+    } else if (stake < suggestedKellyStake * 0.6) {
+      notes.push("Current stake is conservative versus model");
+    } else {
+      notes.push("Current stake is roughly aligned with model");
+    }
+  }
+
+  return notes;
+}
+
+function calculateSuggestedKellyStake({ bankroll, kellyFraction, winProbability, decimalOdds }) {
+  const p = Number(winProbability);
+  const d = Number(decimalOdds);
+  const b = d - 1;
+  const q = 1 - p;
+
+  if (!Number.isFinite(bankroll) || bankroll <= 0) return 0;
+  if (!Number.isFinite(kellyFraction) || kellyFraction <= 0) return 0;
+  if (!Number.isFinite(p) || !Number.isFinite(d) || b <= 0) return 0;
+
+  const fullKelly = (b * p - q) / b;
+  if (!(fullKelly > 0)) return 0;
+
+  return bankroll * fullKelly * kellyFraction;
+}
+
+function generateCombinations(items, size) {
+  const results = [];
+
+  function backtrack(start, combo) {
+    if (combo.length === size) {
+      results.push([...combo]);
+      return;
+    }
+
+    for (let i = start; i < items.length; i += 1) {
+      combo.push(items[i]);
+      backtrack(i + 1, combo);
+      combo.pop();
+    }
+  }
+
+  backtrack(0, []);
+  return results;
+}
+
+function average(nums) {
+  if (!nums.length) return 0;
+  return nums.reduce((acc, n) => acc + n, 0) / nums.length;
+}
+
+function formatAmerican(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
+  return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
+}
+
+function decimalToAmericanSafe(d) {
+  if (!Number.isFinite(d) || d <= 1) return null;
+  if (d >= 2) return (d - 1) * 100;
+  return -100 / (d - 1);
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parseOddsText.js =====
+export { parseOddsText } from "./parsers";
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\index.js =====
+import { parseDraftKingsText } from "./parseDraftKingsText";
+import { parseFanDuelText } from "./parseFanDuelText";
+import { parseBetMGMText } from "./parseBetMGMText";
+import { parseCaesarsText } from "./parseCaesarsText";
+import { parsePinnacleText } from "./parsePinnacleText";
+import { parseTheScoreBetText } from "./parseTheScoreBetText";
+
+export function parseOddsText(rawText, context = {}) {
+  const sportsbook = String(context.sportsbook || "Manual").trim().toLowerCase();
+
+  if (sportsbook === "draftkings") {
+    return parseDraftKingsText(rawText, context);
+  }
+
+  if (sportsbook === "fanduel") {
+    return parseFanDuelText(rawText, context);
+  }
+
+  if (sportsbook === "betmgm") {
+    return parseBetMGMText(rawText, context);
+  }
+
+  if (sportsbook === "caesars") {
+    return parseCaesarsText(rawText, context);
+  }
+
+  if (sportsbook === "pinnacle") {
+    return parsePinnacleText(rawText, context);
+  }
+
+  if (sportsbook === "thescorebet") {
+  return parseTheScoreBetText(rawText, context);
+  }
+
+  if (
+    /sportsbook\s*\/\s*basketball odds\s*\/\s*nba odds/i.test(rawText) ||
+    /more bets/i.test(rawText) ||
+    /\bAT\b/.test(rawText)
+  ) {
+    return parseDraftKingsText(rawText, context);
+  }
+
+  return [];
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parseBetMGMText.js =====
+export function parseBetMGMText(rawText, context = {}) {
+  return [];
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parseCaesarsText.js =====
+export function parseCaesarsText(rawText, context = {}) {
+  return [];
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parseDraftKingsText.js =====
+import { americanToDecimal } from "../odds";
+
+let nextId = 1;
+
+function makeId() {
+  return `dk_row_${nextId++}`;
+}
+
+export function parseDraftKingsText(rawText, context = {}) {
+  if (!rawText || typeof rawText !== "string") return [];
+
+  const lines = rawText
+    .split("\n")
+    .map((line) => normalizeMinus(line).trim())
+    .filter(Boolean);
+
+  const rows = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const away = lines[i];
+    const awayMaybeScore = lines[i + 1];
+    const atLine = lines[i + 2] === "AT" ? lines[i + 2] : lines[i + 1];
+    const home = atLine === "AT" ? lines[i + 3] : lines[i + 2];
+    const homeMaybeScore = atLine === "AT" ? lines[i + 4] : lines[i + 3];
+
+    if (!looksLikeTeamLine(away) || atLine !== "AT" || !looksLikeTeamLine(home)) {
+      continue;
+    }
+
+    const event = `${away} @ ${home}`;
+
+    let j = atLine === "AT" ? i + 4 : i + 3;
+
+    if (isScoreLine(awayMaybeScore)) j += 1;
+    if (isScoreLine(homeMaybeScore)) j += 1;
+
+    // Collect lines until the next game start or obvious section break
+    const block = [];
+    for (let k = j; k < lines.length; k += 1) {
+      const current = lines[k];
+      const next = lines[k + 1];
+      const nextNext = lines[k + 2];
+
+      const nextStartsGame =
+        looksLikeTeamLine(current) &&
+        (next === "AT" || nextNext === "AT");
+
+      if (nextStartsGame && block.length > 0) break;
+      if (isHardStopLine(current) && block.length > 0) break;
+
+      block.push(current);
+
+      // stop once we've likely captured enough market rows for this game
+      if (block.length >= 12 && hasEnoughForGame(block)) break;
+    }
+
+    const parsed = parseGameBlock(block);
+
+    if (parsed.mlAway !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: away,
+          marketType: "moneyline_2way",
+          lineValue: null,
+          oddsAmerican: parsed.mlAway,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    if (parsed.mlHome !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: home,
+          marketType: "moneyline_2way",
+          lineValue: null,
+          oddsAmerican: parsed.mlHome,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    if (parsed.spreadAwayLine !== null && parsed.spreadAwayOdds !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: away,
+          marketType: "spread",
+          lineValue: parsed.spreadAwayLine,
+          oddsAmerican: parsed.spreadAwayOdds,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    if (parsed.spreadHomeLine !== null && parsed.spreadHomeOdds !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: home,
+          marketType: "spread",
+          lineValue: parsed.spreadHomeLine,
+          oddsAmerican: parsed.spreadHomeOdds,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    if (parsed.totalLine !== null && parsed.overOdds !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Over",
+          marketType: "total",
+          lineValue: parsed.totalLine,
+          oddsAmerican: parsed.overOdds,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    if (parsed.totalLine !== null && parsed.underOdds !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Under",
+          marketType: "total",
+          lineValue: parsed.totalLine,
+          oddsAmerican: parsed.underOdds,
+          context,
+          sportHint: event,
+        })
+      );
+    }
+
+    i = Math.max(i, j + block.length - 1);
+  }
+
+  return rows;
+}
+
+function parseGameBlock(block) {
+  const result = {
+    spreadAwayLine: null,
+    spreadAwayOdds: null,
+    spreadHomeLine: null,
+    spreadHomeOdds: null,
+    totalLine: null,
+    overOdds: null,
+    underOdds: null,
+    mlAway: null,
+    mlHome: null,
+  };
+
+  const cleaned = block.filter((line) => !isIgnorableMarketLine(line));
+
+  // Pattern we want from DK:
+  // spreadAwayLine, spreadAwayOdds, O, totalLine, overOdds, mlAway,
+  // spreadHomeLine, spreadHomeOdds, U, totalLine, underOdds, mlHome
+
+  let idx = 0;
+
+  const spreadAwayLine = parseSpreadLine(cleaned[idx]);
+  const spreadAwayOdds = parseAmericanOdds(cleaned[idx + 1]);
+
+  if (spreadAwayLine !== null && spreadAwayOdds !== null) {
+    result.spreadAwayLine = spreadAwayLine;
+    result.spreadAwayOdds = spreadAwayOdds;
+    idx += 2;
+  }
+
+  if (cleaned[idx] === "O") {
+    const totalLine = parseTotalNumber(cleaned[idx + 1]);
+    const overOdds = parseAmericanOdds(cleaned[idx + 2]);
+
+    if (totalLine !== null && overOdds !== null) {
+      result.totalLine = totalLine;
+      result.overOdds = overOdds;
+      idx += 3;
+    }
+  }
+
+  const mlAway = parseAmericanOdds(cleaned[idx]);
+  if (mlAway !== null) {
+    result.mlAway = mlAway;
+    idx += 1;
+  }
+
+  const spreadHomeLine = parseSpreadLine(cleaned[idx]);
+  const spreadHomeOdds = parseAmericanOdds(cleaned[idx + 1]);
+
+  if (spreadHomeLine !== null && spreadHomeOdds !== null) {
+    result.spreadHomeLine = spreadHomeLine;
+    result.spreadHomeOdds = spreadHomeOdds;
+    idx += 2;
+  }
+
+  if (cleaned[idx] === "U") {
+    const totalLine2 = parseTotalNumber(cleaned[idx + 1]);
+    const underOdds = parseAmericanOdds(cleaned[idx + 2]);
+
+    if (totalLine2 !== null && underOdds !== null) {
+      if (result.totalLine === null) result.totalLine = totalLine2;
+      result.underOdds = underOdds;
+      idx += 3;
+    }
+  }
+
+  const mlHome = parseAmericanOdds(cleaned[idx]);
+  if (mlHome !== null) {
+    result.mlHome = mlHome;
+  }
+
+  return result;
+}
+
+function makeRow({ event, selection, marketType, lineValue, oddsAmerican, context, sportHint }) {
+  const safeOdds = Number.isFinite(oddsAmerican) ? oddsAmerican : null;
+
+  return {
+    id: makeId(),
+    batchId: "dk_batch",
+    sportsbook: context.sportsbook || "DraftKings",
+    sport: inferSportFromContextOrText(context, sportHint || event),
+    league: "",
+    eventLabelRaw: event,
+    homeTeamRaw: "",
+    awayTeamRaw: "",
+    homeTeam: "",
+    awayTeam: "",
+    eventStartTime: "",
+    marketType,
+    selectionRaw: selection,
+    selectionNormalized: selection,
+    lineValue: Number.isFinite(lineValue) ? lineValue : null,
+    oddsAmerican: safeOdds,
+    oddsDecimal: Number.isFinite(safeOdds) ? americanToDecimal(safeOdds) : null,
+    marketSide: null,
+    confidence: "high",
+    parseWarnings: [],
+    isSharpSource: false,
+    isTargetBook: true,
+    excluded: false,
+    userEdited: false,
+  };
+}
+
+function inferSportFromContextOrText(context, text) {
+  if (context.sport && typeof context.sport === "string") return context.sport;
+  if (/nba|wizards|lakers|warriors|celtics|knicks|heat|bucks|mavericks|rockets|timberwolves|pelicans|spurs|trail blazers|cavaliers|hawks|bulls|jazz|thunder|suns/i.test(text)) {
+    return "NBA";
+  }
+  if (/nhl|bruins|rangers|canucks|penguins/i.test(text)) return "NHL";
+  if (/mlb|yankees|dodgers|phillies|giants|twins/i.test(text)) return "MLB";
+  if (/arsenal|chelsea|draw|premier league|mls/i.test(text)) return "SOCCER";
+  return "UNKNOWN";
+}
+
+function looksLikeTeamLine(line) {
+  if (!line) return false;
+
+  const text = String(line).trim();
+
+  if (
+    text.length < 3 ||
+    isScoreLine(text) ||
+    parseAmericanOdds(text) !== null ||
+    parseSpreadLine(text) !== null ||
+    parseTotalNumber(text) !== null ||
+    text === "O" ||
+    text === "U"
+  ) {
+    return false;
+  }
+
+  if (
+    /log in|a-z sports|sportsbook|games|futures|quick sgp|game lines|player props|alt lines|quick hits|today|more bets|nba betting news|view full article|author|server time|parse input|clear input|clear parsed rows|book extraction guide|copy command|best method|fallback|avoid|steps|eastern conference|western conference|draftkings inc|about draftkings|careers|privacy policy|responsible gaming|how to bet/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
+
+  if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(text)) return false;
+  if (/quarter|pm|am|^\d{1,2}:\d{2}/i.test(text)) return false;
+
+  return /[a-zA-Z]/.test(text);
+}
+
+function isScoreLine(line) {
+  return /^\d{1,3}$/.test(String(line || "").trim());
+}
+
+function parseAmericanOdds(line) {
+  const text = normalizeMinus(String(line || "").trim());
+  if (!/^[+-]\d{2,5}$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseSpreadLine(line) {
+  const text = normalizeMinus(String(line || "").trim());
+  if (!/^[+-]\d+(\.\d+)?$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseTotalNumber(line) {
+  const text = normalizeMinus(String(line || "").trim());
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isIgnorableMarketLine(line) {
+  const text = String(line || "").trim();
+  return (
+    /^more bets$/i.test(text) ||
+    /quarter/i.test(text) ||
+    /am|pm/i.test(text) ||
+    /^(mon|tue|wed|thu|fri|sat|sun)/i.test(text)
+  );
+}
+
+function isHardStopLine(line) {
+  const text = String(line || "").trim();
+  return (
+    /nba betting news|view full article|author|today's nba odds|popular nba events|how to read nba odds|popular nba betting types|always wager responsibly|nba teams|draftkings inc/i.test(
+      text
+    )
+  );
+}
+
+function hasEnoughForGame(block) {
+  const americanCount = block.filter((line) => parseAmericanOdds(line) !== null).length;
+  const spreadCount = block.filter((line) => parseSpreadLine(line) !== null).length;
+  const totalMarkers = block.filter((line) => line === "O" || line === "U").length;
+  return americanCount >= 4 && spreadCount >= 2 && totalMarkers >= 2;
+}
+
+function normalizeMinus(value) {
+  return String(value || "").replace(/âˆ’/g, "-");
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parseFanDuelText.js =====
+export function parseFanDuelText(rawText, context = {}) {
+  return [];
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parsePinnacleText.js =====
+import { decimalToAmerican } from "../odds";
+
+let nextId = 1;
+
+function makeId() {
+  return `pin_row_${nextId++}`;
+}
+
+export function parsePinnacleText(rawText, context = {}) {
+  if (!rawText || typeof rawText !== "string") return [];
+
+  const lines = rawText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const rows = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const away = lines[i];
+    const awayMaybeScore = lines[i + 1];
+    const home = lines[i + 2];
+    const homeMaybeScore = lines[i + 3];
+    const status = lines[i + 4];
+    const extraMarker = lines[i + 5];
+
+    if (!isValidGamePair(away, home)) {
+      continue;
+    }
+
+    const event = `${away} @ ${home}`;
+
+    let j = i + 4;
+
+    if (isScoreLine(awayMaybeScore)) j += 1;
+    if (isScoreLine(homeMaybeScore)) j += 1;
+    if (looksLikeStatusLine(lines[j])) j += 1;
+    if (looksLikeExtraMarker(lines[j])) j += 1;
+
+    const block = lines.slice(j, j + 10);
+
+    // Expected block:
+    // [spreadAwayLine, spreadAwayDec, spreadHomeLine, spreadHomeDec, mlAwayDec, mlHomeDec, total, overDec, total, underDec]
+
+    const spreadAwayLine = block[0];
+    const spreadAwayDec = block[1];
+    const spreadHomeLine = block[2];
+    const spreadHomeDec = block[3];
+    const mlAwayDec = block[4];
+    const mlHomeDec = block[5];
+    const totals = block.filter((line) => parseNumber(line) !== null);
+    const decimals = block.filter((line) => parseDecimal(line) !== null);
+
+    // Expect pattern: total, dec, total, dec
+    const parsedTotal1 = parseNumber(totals[0]);
+    const parsedTotal2 = parseNumber(totals[1]);
+
+    const parsedOverDec = parseDecimal(decimals[decimals.length - 2]);
+    const parsedUnderDec = parseDecimal(decimals[decimals.length - 1]);
+
+    const parsedSpreadAwayLine = parseNumber(spreadAwayLine);
+    const parsedSpreadAwayDec = parseDecimal(spreadAwayDec);
+
+    const parsedSpreadHomeLine = parseNumber(spreadHomeLine);
+    const parsedSpreadHomeDec = parseDecimal(spreadHomeDec);
+
+    const parsedMlAwayDec = parseDecimal(mlAwayDec);
+    const parsedMlHomeDec = parseDecimal(mlHomeDec);
+
+    const mlWarning =
+  !parsedMlAwayDec || !parsedMlHomeDec
+    ? ["missing_moneyline"]
+    : [];
+
+if (parsedMlAwayDec) {
+  rows.push(
+    makeRow({
+      event,
+      selection: away,
+      marketType: "moneyline_2way",
+      lineValue: null,
+      decimalOdds: parsedMlAwayDec,
+      context,
+      parseWarnings: mlWarning,
+    })
+  );
+}
+
+if (parsedMlHomeDec) {
+  rows.push(
+    makeRow({
+      event,
+      selection: home,
+      marketType: "moneyline_2way",
+      lineValue: null,
+      decimalOdds: parsedMlHomeDec,
+      context,
+      parseWarnings: mlWarning,
+    })
+  );
+}
+
+    if (parsedSpreadAwayLine !== null && parsedSpreadAwayDec) {
+      rows.push(
+        makeRow({
+          event,
+          selection: away,
+          marketType: "spread",
+          lineValue: parsedSpreadAwayLine,
+          decimalOdds: parsedSpreadAwayDec,
+          context,
+        })
+      );
+    }
+
+    if (parsedSpreadHomeLine !== null && parsedSpreadHomeDec) {
+      rows.push(
+        makeRow({
+          event,
+          selection: home,
+          marketType: "spread",
+          lineValue: parsedSpreadHomeLine,
+          decimalOdds: parsedSpreadHomeDec,
+          context,
+        })
+      );
+    }
+
+    if (parsedTotal1 !== null && parsedOverDec) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Over",
+          marketType: "total",
+          lineValue: parsedTotal1,
+          decimalOdds: parsedOverDec,
+          context,
+        })
+      );
+    }
+
+    if (parsedTotal2 !== null && parsedUnderDec) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Under",
+          marketType: "total",
+          lineValue: parsedTotal2,
+          decimalOdds: parsedUnderDec,
+          context,
+        })
+      );
+    }
+
+    i = j + 9;
+  }
+
+  return rows;
+}
+
+function makeRow({
+  event,
+  selection,
+  marketType,
+  lineValue,
+  decimalOdds,
+  context,
+  parseWarnings = [],
+}) {
+  const fairAmerican = decimalToAmerican(decimalOdds);
+
+  return {
+    id: makeId(),
+    batchId: "pinnacle_batch",
+    sportsbook: context.sportsbook || "Pinnacle",
+    sport: inferSportFromText(event, context),
+    league: "",
+    eventLabelRaw: event,
+    homeTeamRaw: "",
+    awayTeamRaw: "",
+    homeTeam: "",
+    awayTeam: "",
+    eventStartTime: "",
+    marketType,
+    selectionRaw: selection,
+    selectionNormalized: selection,
+    lineValue,
+    oddsAmerican: Number.isFinite(fairAmerican) ? Math.round(fairAmerican) : null,
+    oddsDecimal: decimalOdds,
+    marketSide: null,
+    confidence: "high",
+    parseWarnings,
+    isSharpSource: true,
+    isTargetBook: false,
+    excluded: false,
+    userEdited: false,
+  };
+}
+
+function inferSportFromText(text, context) {
+  if (context.sport) return context.sport;
+  if (/nba|warriors|lakers|celtics|knicks|pelicans|timberwolves/i.test(text)) return "NBA";
+  if (/nhl|bruins|canucks|rangers|penguins/i.test(text)) return "NHL";
+  if (/mlb|yankees|dodgers|phillies|twins|giants/i.test(text)) return "MLB";
+  if (/arsenal|chelsea|draw|premier league|mls/i.test(text)) return "SOCCER";
+  return "UNKNOWN";
+}
+
+function looksLikeTeamLine(line) {
+  if (!line) return false;
+
+  const text = String(line).trim();
+
+  // Reject short / numeric / odds lines
+  if (
+    text.length < 4 ||
+    /^[+-]?\d+(\.\d+)?$/.test(text) ||
+    /^[OU]\s/i.test(text) ||
+    /^[+-]\d/.test(text)
+  ) {
+    return false;
+  }
+
+  // Reject headers / labels
+  if (
+    /join|log in|sports betting|live centre|casino|help|language|odds format|accept|bet slip|back to top/i.test(text) ||
+    /handicap|money line|over|under|futures|team total|1st half|2nd quarter/i.test(text)
+  ) {
+    return false;
+  }
+
+  // Reject dates
+  if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(text)) return false;
+
+  // Reject clocks / live status
+  if (/Q\d|:\d{2}|LIVE/i.test(text)) return false;
+
+  // Must contain letters
+  if (!/[a-zA-Z]/.test(text)) return false;
+
+  return true;
+}
+
+function isValidGamePair(away, home) {
+  if (!away || !home) return false;
+
+  if (!looksLikeTeamLine(away) || !looksLikeTeamLine(home)) return false;
+
+  const combined = `${away} ${home}`.toLowerCase();
+
+  const badWords = [
+    "handicap",
+    "money line",
+    "over",
+    "under",
+    "futures",
+    "team total",
+    "game",
+    "all",
+    "basketball",
+    "nba",
+  ];
+
+  if (badWords.some((w) => combined.includes(w))) return false;
+
+  if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(away)) return false;
+  if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(home)) return false;
+
+  return true;
+}
+
+function isScoreLine(line) {
+  return /^\d{1,3}$/.test(String(line || "").trim());
+}
+
+function looksLikeStatusLine(line) {
+  return /^(Q\d|1H|2H|OT|LIVE|TUE,|WED,|THU,|FRI,|SAT,|SUN,|\d{1,2}:\d{2}|Q\d-\d{2}:\d{2})/i.test(
+    String(line || "").trim()
+  );
+}
+
+function looksLikeExtraMarker(line) {
+  return /^\+\d+$/.test(String(line || "").trim());
+}
+
+function looksLikeDecimal(line) {
+  return /^\d+\.\d{2,3}$/.test(String(line || "").trim());
+}
+
+function parseDecimal(line) {
+  const n = Number(String(line || "").trim());
+
+  // Only valid decimal odds range
+  if (!Number.isFinite(n)) return null;
+  if (n < 1.01 || n > 20) return null;
+
+  return n;
+}
+
+function parseNumber(line) {
+  const n = Number(String(line || "").trim().replace(/[+]/g, ""));
+  return Number.isFinite(n) ? Number(String(line || "").trim()) : null;
+}
+
+
+===== C:\Users\jwde2\Desktop\bet-slip-app\app\ev-parlay-lab\utils\parsers\parseTheScoreBetText.js =====
+export function parseTheScoreBetText(rawText, context = {}) {
+  return [];
+}

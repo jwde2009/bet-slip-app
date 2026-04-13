@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { parseBetSlip, enrichRow } from "./utils/parser";
 import {
   americanOddsFromStakeAndProfit,
@@ -26,6 +27,19 @@ import ReviewLegend from "./components/ReviewLegend";
 import Tesseract from "tesseract.js";
 
 import { detectLeague } from "./utils/detectLeague";
+
+const evLabButtonStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  borderRadius: 8,
+  background: "#166534",
+  color: "#f0fdf4",
+  textDecoration: "none",
+  fontWeight: 700,
+  border: "2px solid #14532d",
+};
 
 const BOOKMAKER_UPLOAD_OPTIONS = [
   "Auto",
@@ -325,6 +339,7 @@ export default function Home() {
   const [uploadBatches, setUploadBatches] = useState([]);
   const [savedFilterView, setSavedFilterView] = useState("default");
   const [showHedgesOnly, setShowHedgesOnly] = useState(false);
+  const [showGuaranteedProfitOnly, setShowGuaranteedProfitOnly] = useState(false);
   const [columnWidths, setColumnWidths] = useState({
     select: 52,
     edit: 84,
@@ -427,11 +442,12 @@ export default function Home() {
   if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
   if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
   if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
+  if (showGuaranteedProfitOnly) next = next.filter((row) => row.guaranteedProfit === "Y");
   if (reviewMode) {
     next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
   }
 
-  return next;
+  return groupHedgeRowsTogether(next);
 }, [
   rowsWithWarnings,
   showArchivedRows,
@@ -440,6 +456,7 @@ export default function Home() {
   showLikelyParserIssuesOnly,
   showNeedsReviewOnly,
   showHedgesOnly,
+  showGuaranteedProfitOnly,
   reviewMode,
 ]);
 
@@ -459,6 +476,8 @@ const counts = {
   lowConfidence: rowsWithWarnings.filter((row) => row.confidenceFlag === "Low").length,
   parserIssues: rowsWithWarnings.filter((row) => row.likelyParserIssue === "Y").length,
   archived: rowsWithWarnings.filter((row) => row.archived === "Y").length,
+  hedges: rowsWithWarnings.filter((row) => row.likelyHedge === "Y").length,
+  guaranteedProfit: rowsWithWarnings.filter((row) => row.guaranteedProfit === "Y").length,
   selected: selectedIds.length,
   reviewed: reviewedCount,
   exportable: exportableCount,
@@ -573,35 +592,45 @@ const counts = {
   function areLikelyOpposites(rowA, rowB) {
   if (!rowA || !rowB) return false;
   if (rowA.id === rowB.id) return false;
+  if (rowA.canonicalResultTarget !== rowB.canonicalResultTarget) return false;
+  if (rowA.canonicalSubjectType !== rowB.canonicalSubjectType) return false;
 
-  const eventA = String(rowA.fixtureEvent || "").toLowerCase().trim();
-  const eventB = String(rowB.fixtureEvent || "").toLowerCase().trim();
-  if (!eventA || !eventB || eventA !== eventB) return false;
+  const bookmakerA = String(rowA.bookmaker || "").trim().toLowerCase();
+  const bookmakerB = String(rowB.bookmaker || "").trim().toLowerCase();
+  if (bookmakerA && bookmakerB && bookmakerA === bookmakerB) return false;
 
-  const typeA = String(rowA.betType || "").toLowerCase().trim();
-  const typeB = String(rowB.betType || "").toLowerCase().trim();
-  if (!typeA || !typeB || typeA !== typeB) return false;
+  const sideA = String(rowA.canonicalSide || "").toLowerCase();
+  const sideB = String(rowB.canonicalSide || "").toLowerCase();
 
-  const keyA = classifySideKey(rowA);
-  const keyB = classifySideKey(rowB);
-  if (!keyA || !keyB || keyA === keyB) return false;
-
-  if (typeA === "total") {
-    const pair =
-      (keyA.startsWith("total:over:") && keyB === keyA.replace("total:over:", "total:under:")) ||
-      (keyA.startsWith("total:under:") && keyB === keyA.replace("total:under:", "total:over:"));
-    if (pair) return true;
+  // Exact hedge: opposite side, same exact selection line/market
+  if (
+    rowA.canonicalOppositeKey &&
+    rowB.canonicalSelectionKey &&
+    rowA.canonicalOppositeKey === rowB.canonicalSelectionKey
+  ) {
+    if (sideA === sideB) return false;
+    return "EXACT_HEDGE";
   }
 
-  if (typeA === "moneyline") {
-    return true;
-  }
+  // Middle: same market shell, opposite O/U sides, different lines
+  if (
+    rowA.canonicalHedgeKey &&
+    rowB.canonicalHedgeKey &&
+    rowA.canonicalHedgeKey === rowB.canonicalHedgeKey
+  ) {
+    const lineA = parseFloat(rowA.canonicalLine);
+    const lineB = parseFloat(rowB.canonicalLine);
 
-  if (typeA === "spread") {
-    const spreadA = String(rowA.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
-    const spreadB = String(rowB.selection || "").match(/([+-]\d+(?:\.\d+)?)/);
-    if (spreadA && spreadB) {
-      return Number(spreadA[1]) === -Number(spreadB[1]);
+    if (
+      Number.isFinite(lineA) &&
+      Number.isFinite(lineB) &&
+      lineA !== lineB &&
+      (
+        (sideA === "over" && sideB === "under") ||
+        (sideA === "under" && sideB === "over")
+      )
+    ) {
+      return "MIDDLE";
     }
   }
 
@@ -615,40 +644,57 @@ function addLikelyHedgeFlags(rowsInput) {
     return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
   }
 
+  function makeClusterId(rowA, rowB) {
+    return [rowA.id, rowB.id].sort().join("__");
+  }
+
   return rowsInput.map((row) => {
-    const match = rowsInput.find((other) => areLikelyOpposites(row, other));
+    const match = rowsInput.find((other) => {
+      if (!other || other.id === row.id) return false;
+      return !!areLikelyOpposites(row, other);
+    });
 
     if (!match) {
       return {
         ...row,
         likelyHedge: "N",
+        autoLikelyHedge: "N",
+        hedgePartnerId: "",
         hedgePartnerBookmaker: "",
+        hedgeClusterId: "",
+        hedgeConfidence: "",
         hedgeQuality: "",
+        guaranteedProfit: "N",
+        guaranteedProfitAmount: "",
         hedgeStake: "",
         hedgeProfitLow: "",
         hedgeProfitHigh: "",
+        hedgeProfitIfThisWins: "",
+        hedgeProfitIfOtherWins: "",
       };
     }
+
+    const hedgeType = areLikelyOpposites(row, match);
 
     const oddsA = Number(row.oddsUS);
     const oddsB = Number(match.oddsUS);
     const stakeA = Number(row.stake);
 
-    let hedgeQuality = "Basic";
+    let hedgeConfidence = hedgeType === "MIDDLE" ? "Medium" : "High";
+    let hedgeQuality = hedgeType === "MIDDLE" ? "Middle" : "Likely Hedge";
+    let guaranteedProfit = "N";
+    let guaranteedProfitAmount = "";
     let hedgeStake = "";
     let hedgeProfitLow = "";
     let hedgeProfitHigh = "";
+    let hedgeProfitIfThisWins = "";
+    let hedgeProfitIfOtherWins = "";
 
-    if (oddsA && oddsB && stakeA) {
+    if (hedgeType === "EXACT_HEDGE" && oddsA && oddsB && stakeA) {
       const probA = impliedProb(oddsA);
       const probB = impliedProb(oddsB);
       const total = probA + probB;
 
-      if (total < 0.98) hedgeQuality = "🔥 Arb";
-      else if (total < 1.02) hedgeQuality = "Strong";
-      else hedgeQuality = "Weak";
-
-      // --- hedge sizing ---
       const decimalA = oddsA > 0 ? 1 + oddsA / 100 : 1 + 100 / Math.abs(oddsA);
       const decimalB = oddsB > 0 ? 1 + oddsB / 100 : 1 + 100 / Math.abs(oddsB);
 
@@ -661,20 +707,70 @@ function addLikelyHedgeFlags(rowsInput) {
       const profitIfB = payoutB - stakeA - hedge;
 
       hedgeStake = hedge.toFixed(2);
+      hedgeProfitIfThisWins = profitIfA.toFixed(2);
+      hedgeProfitIfOtherWins = profitIfB.toFixed(2);
       hedgeProfitLow = Math.min(profitIfA, profitIfB).toFixed(2);
       hedgeProfitHigh = Math.max(profitIfA, profitIfB).toFixed(2);
+
+      if (profitIfA > 0 && profitIfB > 0) {
+        guaranteedProfit = "Y";
+        guaranteedProfitAmount = Math.min(profitIfA, profitIfB).toFixed(2);
+        hedgeQuality = "Guaranteed Profit";
+        hedgeConfidence = "High";
+      } else {
+        hedgeQuality = "Likely Hedge";
+        hedgeConfidence = total <= 1.03 ? "High" : "Medium";
+      }
     }
 
     return {
       ...row,
       likelyHedge: "Y",
+      autoLikelyHedge: "Y",
+      hedgePartnerId: match.id || "",
       hedgePartnerBookmaker: getDisplayedBookmaker(match),
+      hedgeClusterId: makeClusterId(row, match),
+      hedgeConfidence,
       hedgeQuality,
+      guaranteedProfit,
+      guaranteedProfitAmount,
       hedgeStake,
       hedgeProfitLow,
       hedgeProfitHigh,
+      hedgeProfitIfThisWins,
+      hedgeProfitIfOtherWins,
     };
   });
+}
+
+function groupHedgeRowsTogether(rowsInput) {
+  const byId = new Map(rowsInput.map((row) => [row.id, row]));
+  const used = new Set();
+  const grouped = [];
+
+  for (const row of rowsInput) {
+    if (used.has(row.id)) continue;
+
+    const partnerId = row.hedgePartnerId;
+    const partner = partnerId ? byId.get(partnerId) : null;
+
+    if (
+      row.likelyHedge === "Y" &&
+      partner &&
+      partner.likelyHedge === "Y" &&
+      !used.has(partner.id)
+    ) {
+      grouped.push(row, partner);
+      used.add(row.id);
+      used.add(partner.id);
+      continue;
+    }
+
+    grouped.push(row);
+    used.add(row.id);
+  }
+
+  return grouped;
 }
 
   useEffect(() => {
@@ -1062,11 +1158,17 @@ function addLikelyHedgeFlags(rowsInput) {
         "Likely Hedge",
         "Auto Likely Hedge",
         "Hedge Override",
+        "Hedge Cluster ID",
+        "Hedge Confidence",
         "Hedge Quality",
+        "Guaranteed Profit",
+        "Guaranteed Profit Amount",
         "Hedge Partner Bookmaker",
         "Hedge Stake",
         "Hedge Profit Low",
         "Hedge Profit High",
+        "Hedge Profit If This Wins",
+        "Hedge Profit If Other Wins",
         "Market Detail",
         "Payout",
         "To Win",
@@ -1105,11 +1207,17 @@ function addLikelyHedgeFlags(rowsInput) {
         escapeCsv(row.likelyHedge),
         escapeCsv(row.autoLikelyHedge),
         escapeCsv(row.hedgeOverride),
+        escapeCsv(row.hedgeClusterId),
+        escapeCsv(row.hedgeConfidence),
         escapeCsv(row.hedgeQuality),
+        escapeCsv(row.guaranteedProfit),
+        escapeCsv(row.guaranteedProfitAmount),
         escapeCsv(row.hedgePartnerBookmaker),
         escapeCsv(row.hedgeStake),
         escapeCsv(row.hedgeProfitLow),
         escapeCsv(row.hedgeProfitHigh),
+        escapeCsv(row.hedgeProfitIfThisWins),
+        escapeCsv(row.hedgeProfitIfOtherWins),
         escapeCsv(row.marketDetail),
         escapeCsv(row.payout),
         escapeCsv(row.toWin),
@@ -1125,24 +1233,31 @@ function addLikelyHedgeFlags(rowsInput) {
       return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
     }
 
-    const headers = [
-      "EventDate",
-      "Bet Date",
-      "Bookmaker",
-      "Sport / League",
-      "Selection",
-      "Bet Type",
-      "Bet Source Tag",
-      "Fixture / Event",
-      "Stake",
-      "Odds (US)",
-      "Odds Source",
-      "Odds Missing Reason",
-      "Implied Probability",
-      "Confidence",
-      "Live",
-      "Bonus Bet",
-      "Win",
+        const headers = [
+      "eventDate",
+      "betDate",
+      "bookmaker",
+      "sportLeague",
+      "selection",
+      "betType",
+      "fixtureEvent",
+      "stake",
+      "oddsUS",
+      "payout",
+      "toWin",
+      "betId",
+      "betSourceTag",
+      "accountOwner",
+      "likelyHedge",
+      "hedgeClusterId",
+      "hedgeConfidence",
+      "hedgeQuality",
+      "guaranteedProfit",
+      "guaranteedProfitAmount",
+      "hedgePartnerBookmaker",
+      "hedgeStake",
+      "hedgeProfitIfThisWins",
+      "hedgeProfitIfOtherWins",
     ];
 
     const csvRows = rowsToExport.map((row) => [
@@ -1180,24 +1295,29 @@ function addLikelyHedgeFlags(rowsInput) {
 
   const exportStandardCsv = () => {
     if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
-    downloadCsv("bet-slip-data.csv", buildCsvData(rowsWithWarnings, false));
+    const groupedRows = groupHedgeRowsTogether(rowsWithWarnings);
+    downloadCsv("bet-slip-data.csv", buildCsvData(groupedRows, false));
     showNotice("Standard CSV exported");
   };
 
   const exportDebugCsv = () => {
     if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
-    downloadCsv("bet-slip-debug-data.csv", buildCsvData(rowsWithWarnings, true));
+    const groupedRows = groupHedgeRowsTogether(rowsWithWarnings);
+    downloadCsv("bet-slip-debug-data.csv", buildCsvData(groupedRows, true));
     showNotice("Debug CSV exported");
   };
 
   const exportSelectedCsv = (debug = false) => {
     const rowsToExport = rowsWithWarnings.filter((row) => selectedIds.includes(row.id));
     if (rowsToExport.length === 0) return showNotice("No selected rows to export");
+
+    const groupedRows = groupHedgeRowsTogether(rowsToExport);
+
     downloadCsv(
       debug ? "bet-slip-selected-debug-data.csv" : "bet-slip-selected-data.csv",
-      buildCsvData(rowsToExport, debug)
+      buildCsvData(groupedRows, debug)
     );
-    showNotice(`Exported ${rowsToExport.length} selected row${rowsToExport.length === 1 ? "" : "s"}`);
+    showNotice(`Exported ${groupedRows.length} selected row${groupedRows.length === 1 ? "" : "s"}`);
   };
 
   const copySelectedOcr = async () => {
@@ -1344,13 +1464,15 @@ function addLikelyHedgeFlags(rowsInput) {
 
     if (!selectedRows.length) return showNotice("No selected active rows to export");
 
-    const unreviewed = selectedRows.filter(
-        (row) => row.reviewResolved !== "Y"
-      );
+    const groupedRows = groupHedgeRowsTogether(selectedRows);
 
-      if (unreviewed.length > 0) {
-        showNotice(`⚠️ ${unreviewed.length} rows not reviewed`);
-      }
+    const unreviewed = groupedRows.filter(
+      (row) => row.reviewResolved !== "Y"
+    );
+
+    if (unreviewed.length > 0) {
+      showNotice(`⚠️ ${unreviewed.length} rows not reviewed`);
+    }
 
     const headers = [
       "eventDate",
@@ -1367,11 +1489,17 @@ function addLikelyHedgeFlags(rowsInput) {
       "betId",
       "betSourceTag",
       "accountOwner",
+      "likelyHedge",
+      "hedgeQuality",
+      "hedgePartnerBookmaker",
+      "hedgeStake",
+      "hedgeProfitIfThisWins",
+      "hedgeProfitIfOtherWins",
     ];
 
     const csv = [
       headers.join(","),
-      ...selectedRows.map((row) =>
+      ...groupedRows.map((row) =>
         headers.map((header) => escapeCsv(row[header])).join(",")
       ),
     ].join("\n");
@@ -1387,7 +1515,7 @@ function addLikelyHedgeFlags(rowsInput) {
     URL.revokeObjectURL(url);
 
     markSelectedRowsExported();
-    showNotice(`Exported ${selectedRows.length} row${selectedRows.length === 1 ? "" : "s"} in current batch`);
+    showNotice(`Exported ${groupedRows.length} row${groupedRows.length === 1 ? "" : "s"} in current batch`);
   }
 
   return (
@@ -1402,7 +1530,27 @@ function addLikelyHedgeFlags(rowsInput) {
         minHeight: "100vh",
       }}
     >
-      <h1>Bet Slip Reader</h1>
+      <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  }}
+>
+  <div>
+    <h1 style={{ margin: 0 }}>Bet Slip Reader</h1>
+    <p style={{ margin: "4px 0 0 0", color: "#555" }}>
+      Upload bet slips, review parsed data, detect hedges, and export clean records.
+    </p>
+  </div>
+
+  <Link href="/ev-parlay-lab" style={evLabButtonStyle}>
+    Open EV Parlay Lab →
+  </Link>
+</div>
 
             <div
         style={{
@@ -1469,7 +1617,7 @@ function addLikelyHedgeFlags(rowsInput) {
           marginBottom: 12,
         }}
       >
-  
+        
         <TopActionGrid
           hasRows={rowsWithWarnings.length > 0}
           hasSelectedRows={selectedIds.length > 0}
@@ -1487,7 +1635,7 @@ function addLikelyHedgeFlags(rowsInput) {
           onClearAll={clearAll}
         />
 
-        <FilterBar
+                <FilterBar
           tableMode={tableMode}
           setTableMode={setTableMode}
           showReviewLaterOnly={showReviewLaterOnly}
@@ -1500,6 +1648,8 @@ function addLikelyHedgeFlags(rowsInput) {
           setShowNeedsReviewOnly={setShowNeedsReviewOnly}
           showHedgesOnly={showHedgesOnly}
           setShowHedgesOnly={setShowHedgesOnly}
+          showGuaranteedProfitOnly={showGuaranteedProfitOnly}
+          setShowGuaranteedProfitOnly={setShowGuaranteedProfitOnly}
           showArchivedRows={showArchivedRows}
           setShowArchivedRows={setShowArchivedRows}
           reviewMode={reviewMode}
@@ -1899,4 +2049,4 @@ function addLikelyHedgeFlags(rowsInput) {
       </div>
     </div>
   );
-}
+  }

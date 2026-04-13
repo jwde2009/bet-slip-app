@@ -642,10 +642,10 @@ useEffect(() => {
       );
     }
 
-        if (colKey === "likelyHedge") {
+               if (colKey === "likelyHedge") {
       const override = String(row.hedgeOverride || "").toUpperCase();
       const isLikely = row.likelyHedge === "Y";
-      const isAuto = row.autoLikelyHedge === "Y";
+      const guaranteedProfit = row.guaranteedProfit === "Y";
 
       let badgeBg = "#e5e7eb";
       let badgeColor = "#374151";
@@ -660,9 +660,21 @@ useEffect(() => {
         badgeColor = "#fff7ed";
         badgeText = "Denied";
       } else if (isLikely) {
-        badgeBg = "#2563eb";
-        badgeColor = "#eff6ff";
-        badgeText = row.hedgeQuality ? `Likely • ${row.hedgeQuality}` : "Likely";
+        const quality = String(row.hedgeQuality || "").trim();
+
+        if (quality === "Guaranteed Profit") {
+          badgeBg = "#065f46";
+          badgeColor = "#ecfdf5";
+          badgeText = "Guaranteed Profit";
+        } else if (quality === "Middle") {
+          badgeBg = "#7c3aed";
+          badgeColor = "#f5f3ff";
+          badgeText = "Middle";
+        } else {
+          badgeBg = "#2563eb";
+          badgeColor = "#eff6ff";
+          badgeText = "Likely Hedge";
+        }
       }
 
       return (
@@ -677,7 +689,7 @@ useEffect(() => {
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  minWidth: 88,
+                  minWidth: 110,
                   padding: "4px 10px",
                   borderRadius: 999,
                   fontWeight: 800,
@@ -693,15 +705,45 @@ useEffect(() => {
             <div style={{ marginBottom: 8, color: "#6b7280" }}>—</div>
           )}
 
+          {row.hedgeClusterId && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Cluster:</strong> {row.hedgeClusterId.slice(0, 8)}
+            </div>
+          )}
+
+          {row.hedgeConfidence && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Confidence:</strong> {row.hedgeConfidence}
+            </div>
+          )}
+
           {row.hedgePartnerBookmaker && (
             <div style={{ fontSize: 12, marginBottom: 6 }}>
               <strong>Pair:</strong> {row.hedgePartnerBookmaker}
             </div>
           )}
 
-          {(row.hedgeProfitLow || row.hedgeProfitHigh) && (
+          {row.hedgeStake && row.hedgeQuality !== "Middle" && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Hedge Stake:</strong> ${row.hedgeStake}
+            </div>
+          )}
+
+          {guaranteedProfit && row.guaranteedProfitAmount && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Guaranteed:</strong> ${row.guaranteedProfitAmount}
+            </div>
+          )}
+
+          {row.hedgeProfitIfThisWins && row.hedgeQuality !== "Middle" && (
+            <div style={{ fontSize: 12, marginBottom: 4 }}>
+              <strong>This wins:</strong> ${row.hedgeProfitIfThisWins}
+            </div>
+          )}
+
+          {row.hedgeProfitIfOtherWins && row.hedgeQuality !== "Middle" && (
             <div style={{ fontSize: 12, marginBottom: 8 }}>
-              <strong>P/L:</strong> ${row.hedgeProfitLow || "0.00"} → ${row.hedgeProfitHigh || "0.00"}
+              <strong>Other wins:</strong> ${row.hedgeProfitIfOtherWins}
             </div>
           )}
 
@@ -710,7 +752,11 @@ useEffect(() => {
               onClick={(e) => {
                 e.stopPropagation();
                 handleRowFieldChange(row.id, "hedgeOverride", "Y");
-                handleRowFieldChange(row.id, "betSourceTag", "Hedge");
+                handleRowFieldChange(
+                  row.id,
+                  "betSourceTag",
+                  row.hedgeQuality === "Middle" ? "Middle" : "Hedge"
+                );
               }}
               style={smallButtonStyle}
             >
@@ -1254,6 +1300,8 @@ useEffect(() => {
 
               const isSelected = row.id === selectedRowId;
 
+              const isHedgeRow = row.likelyHedge === "Y";
+
               const rowBg =
                 isSelected
                   ? "#e0f2fe"
@@ -1265,6 +1313,8 @@ useEffect(() => {
                   ? "#fdecea"
                   : needsReview
                   ? "#fff8e1"
+                  : isHedgeRow
+                  ? "#faf5ff"
                   : zebra;
 
               return (
@@ -1312,6 +1362,8 @@ useEffect(() => {
                     ? "6px solid #f0b429"
                     : attentionLevel === "duplicate"
                     ? "6px solid #dc2626"
+                    : row.likelyHedge === "Y"
+                    ? "6px solid #7c3aed"
                     : "none",
 
                   // 🔥 Glow pulse effect
