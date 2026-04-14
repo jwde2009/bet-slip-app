@@ -62,6 +62,21 @@ addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "San Antonio Spurs", ["sa", "sas", "san
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Toronto Raptors", ["tor", "toronto", "raptors", "tor raptors"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Utah Jazz", ["utah", "uta", "jazz", "uta jazz"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Washington Wizards", ["wsh", "was", "washington", "wizards", "was wizards"]);
+// TheScore-style abbreviations (CRITICAL)
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Golden State Warriors", ["gs warriors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Cleveland Cavaliers", ["cle cavaliers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "San Antonio Spurs", ["sa spurs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New York Knicks", ["ny knicks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New Orleans Pelicans", ["no pelicans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Oklahoma City Thunder", ["okc thunder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Clippers", ["la clippers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Lakers", ["la lakers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Phoenix Suns", ["phx suns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Portland Trail Blazers", ["por trail blazers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha hornets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Philadelphia 76ers", ["phi 76ers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Orlando Magic", ["orl magic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Miami Heat", ["mia heat"]);
 
 /* =========================
    NHL

@@ -96,32 +96,63 @@ export default function ParlayFilters({ filters, setFilters }) {
       </div>
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 12 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={filters.allowSameGame === true}
-            onChange={(e) => updateField("allowSameGame", e.target.checked)}
-          />{" "}
-          Allow same game
-        </label>
+  <label>
+    <input
+      type="checkbox"
+      checked={filters.forceSameGame === true}
+      onChange={(e) => {
+        const checked = e.target.checked;
+        updateField("forceSameGame", checked);
+        if (checked) {
+          updateField("allowSameGame", true);
+        }
+      }}
+    />{" "}
+    Force same-game parlay
+  </label>
 
-        <label>
-          <input
-            type="checkbox"
-            checked={filters.allowRepeats === true}
-            onChange={(e) => updateField("allowRepeats", e.target.checked)}
-          />{" "}
-          Allow repeated teams
-        </label>
+  <label>
+    <input
+      type="checkbox"
+      checked={filters.allowSameGame === true}
+      onChange={(e) => {
+        const checked = e.target.checked;
+        updateField("allowSameGame", checked);
+        if (!checked) {
+          updateField("forceSameGame", false);
+        }
+      }}
+    />{" "}
+    Allow same game
+  </label>
 
-        <label>
+  <label>
+    <input
+      type="checkbox"
+      checked={filters.allowRepeats === true}
+      onChange={(e) => updateField("allowRepeats", e.target.checked)}
+    />{" "}
+    Allow repeated teams
+  </label>
+</div>
+
+      <div style={{ marginTop: 12 }}>
+                <label style={labelStyle}>
+          Minimum Leg EV %
           <input
-            type="checkbox"
-            checked={filters.onlyPositiveEdgeLegs === true}
-            onChange={(e) => updateField("onlyPositiveEdgeLegs", e.target.checked)}
-          />{" "}
-          Only positive-edge legs
+            type="number"
+            step="0.5"
+            value={(((Number.isFinite(filters.minLegEvPct) ? filters.minLegEvPct : -0.02) * 100)).toFixed(1)}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              updateField("minLegEvPct", Number.isFinite(raw) ? raw / 100 : -0.02);
+            }}
+            style={inputStyle}
+          />
         </label>
+        <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
+          Example: -2 allows slightly negative legs; 0 requires each leg to be positive EV.
+        </div>
       </div>
     </section>
   );

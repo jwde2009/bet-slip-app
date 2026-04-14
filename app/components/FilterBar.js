@@ -113,6 +113,8 @@ export default function FilterBar({
   setShowArchivedRows,
   reviewMode,
   setReviewMode,
+  smartReviewMode,
+  setSmartReviewMode,
   counts,
 }) {
   return (
@@ -193,6 +195,21 @@ export default function FilterBar({
             <option value="simplified">Simplified</option>
           </select>
         </label>
+
+      <button
+        onClick={() => setSmartReviewMode((v) => !v)}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          cursor: "pointer",
+          border: "1px solid #86efac",
+          background: smartReviewMode ? "#166534" : "#ffffff",
+          color: smartReviewMode ? "#f0fdf4" : "#14532d",
+          fontWeight: 800,
+        }}
+      >
+        Smart Review {smartReviewMode ? "On" : "Off"}
+      </button>
 
         <label style={checkboxLabelStyle}>
           <input

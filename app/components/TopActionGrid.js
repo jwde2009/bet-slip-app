@@ -87,6 +87,8 @@ export default function TopActionGrid({
   onMarkSelectedWin,
   onMarkSelectedLoss,
   onClearAll,
+  nextBestReviewRow,
+  jumpToNextBestReviewRow,
 }) {
   return (
     <div style={gridWrapStyle}>
@@ -131,10 +133,16 @@ export default function TopActionGrid({
         variant="danger"
       />
       <GridButton
+        label="Next Best Row"
+        onClick={jumpToNextBestReviewRow}
+        disabled={!nextBestReviewRow}
+      />
+      <GridButton
         label="Mark Win"
         onClick={onMarkSelectedWin}
         disabled={!hasSelectedRows}
       />
+      
       <GridButton
         label="Mark Loss"
         onClick={onMarkSelectedLoss}

@@ -64,7 +64,7 @@ export const EXTRACTION_GUIDES = {
     ],
   },
 
-  TheScoreBet: {
+  TheScore: {
     bestMethod: "Browser console innerText from the main odds area",
     fallbackMethod: "Copy visible page text from the odds list",
     avoid: "Full-page copy with promos, nav, and unrelated article text",

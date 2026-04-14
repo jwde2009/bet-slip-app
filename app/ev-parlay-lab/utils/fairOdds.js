@@ -15,8 +15,6 @@ export function calculateFairOddsForMarkets(markets) {
 
         if (!sharpQuotes.length) return null;
 
-        // Use best available sharp quote for this selection.
-        // For decimal odds, the highest price implies the lowest hold.
         const bestSharpQuote = [...sharpQuotes].sort(
           (a, b) => b.oddsDecimal - a.oddsDecimal
         )[0];
@@ -30,8 +28,7 @@ export function calculateFairOddsForMarkets(markets) {
       })
       .filter(Boolean);
 
-    const expectedOutcomes =
-      market.marketType === "moneyline_3way" ? 3 : 2;
+    const expectedOutcomes = getExpectedOutcomeCount(market);
 
     if (sharpSelections.length !== expectedOutcomes) continue;
 
@@ -70,4 +67,25 @@ export function calculateFairOddsForMarkets(markets) {
   }
 
   return results;
+}
+
+function getExpectedOutcomeCount(market) {
+  const marketType = String(market.marketType || "").trim().toLowerCase();
+
+  if (marketType === "moneyline_3way") return 3;
+
+  if (
+    marketType === "moneyline_2way" ||
+    marketType === "spread" ||
+    marketType === "total" ||
+    marketType === "player_points" ||
+    marketType === "player_assists" ||
+    marketType === "player_rebounds" ||
+    marketType === "player_threes" ||
+    marketType === "player_pra"
+  ) {
+    return 2;
+  }
+
+  return 2;
 }

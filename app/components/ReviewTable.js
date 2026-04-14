@@ -240,6 +240,8 @@ useEffect(() => {
     { key: "oddsMissingReason", label: "Odds Note", sortable: true },
     { key: "impliedProbability", label: "Imp Prob", sortable: true },
     { key: "confidenceFlag", label: "Confidence", sortable: true },
+    { key: "reviewBucket", label: "Priority", sortable: true },
+    { key: "reviewReasons", label: "Review Reasons", sortable: false },
     { key: "likelyParserIssue", label: "QA", sortable: true },
     { key: "live", label: "Live", sortable: true },
     { key: "bonusBet", label: "Bonus", sortable: true },
@@ -479,6 +481,22 @@ useEffect(() => {
   }
 
   const renderCell = (row, rowBg, colKey, reactKey) => {
+    if (colKey === "reviewBucket") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.reviewBucket || ""}
+          {row.reviewPriority ? ` (${row.reviewPriority})` : ""}
+        </td>
+      );
+    }
+
+    if (colKey === "reviewReasons") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          {row.reviewReasons || ""}
+        </td>
+      );
+    }
     if (colKey === "select") {
       return (
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
@@ -634,6 +652,7 @@ useEffect(() => {
         </td>
       );
     }
+      
     if (colKey === "likelyParserIssue") {
       return (
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
@@ -708,6 +727,7 @@ useEffect(() => {
           {row.hedgeClusterId && (
             <div style={{ fontSize: 12, marginBottom: 6 }}>
               <strong>Cluster:</strong> {row.hedgeClusterId.slice(0, 8)}
+               ({row.hedgeClusterSize || 2})
             </div>
           )}
 
@@ -1213,8 +1233,7 @@ useEffect(() => {
               {reviewColumns.map((col, idx) => {
                 const isSorted = sortConfig.key === col.key;
                 const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
-
-                return (
+                 return (
                   <th
                     key={col.key}
                     style={{
@@ -1362,6 +1381,8 @@ useEffect(() => {
                     ? "6px solid #f0b429"
                     : attentionLevel === "duplicate"
                     ? "6px solid #dc2626"
+                    : row.guaranteedProfit === "Y"
+                    ? "6px solid #16a34a"
                     : row.likelyHedge === "Y"
                     ? "6px solid #7c3aed"
                     : "none",

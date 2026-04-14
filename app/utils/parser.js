@@ -82,12 +82,107 @@ const emptyParsed = {
     canonicalOppositeKey: ""
 };
 
+function computeConfidenceFlag(row) {
+  let score = 0;
+
+  // positive signals
+  if (row.selection) score += 3;
+  if (row.fixtureEvent) score += 2;
+  if (row.betType) score += 1;
+  if (row.sportLeague) score += 1;
+  if (row.oddsUS) score += 2;
+
+  // negative signals
+  if (!row.selection) score -= 4;
+  if (!row.fixtureEvent) score -= 3;
+  if (!row.sportLeague) score -= 2;
+
+  if (row.parseWarning && String(row.parseWarning).trim()) score -= 2;
+
+  // noisy OCR / UI junk
+  const badText = /today|share|betslip|my bets|quick deposit|reward available/i;
+
+  if (badText.test(String(row.selection || ""))) score -= 3;
+  if (badText.test(String(row.fixtureEvent || ""))) score -= 3;
+
+  // weak / short values
+  if (String(row.selection || "").length < 4) score -= 2;
+
+  // classification
+  if (score >= 6) return "High";
+  if (score >= 3) return "Medium";
+  return "Low";
+}
+
+function computeLikelyParserIssue(row) {
+  if (!row.selection) return "Y";
+  if (!row.fixtureEvent) return "Y";
+  if (!row.sportLeague) return "Y";
+  if (!row.oddsUS && String(row.bookmaker || "") !== "Kalshi") return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.selection || ""))) return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.fixtureEvent || ""))) return "Y";
+  if (String(row.parseWarning || "").trim()) return "Y";
+  return "N";
+}
+
+function computeReviewPriority(row) {
+  let score = 0;
+  const warnings = String(row.parseWarning || "").trim();
+
+  if (row.likelyParserIssue === "Y") score += 5;
+  if (row.confidenceFlag === "Low") score += 4;
+  if (row.confidenceFlag === "Medium") score += 2;
+
+  if (!row.selection) score += 4;
+  if (!row.fixtureEvent) score += 3;
+  if (!row.oddsUS) score += 3;
+  if (!row.sportLeague) score += 2;
+
+  if (warnings) score += 2;
+  if (row.duplicateWarning) score += 2;
+
+  if (row.hedgeGroupId) score += 4;
+if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) score += 6;
+
+  if (row.reviewed === "Y" || row.reviewStatus === "Reviewed") score -= 4;
+  if (row.archived === "Y") score -= 10;
+
+  return score;
+}
+
+function computeReviewBucket(row) {
+  const score = Number(row.reviewPriority || 0);
+
+  if (score >= 10) return "Critical";
+  if (score >= 6) return "High";
+  if (score >= 3) return "Standard";
+  return "Later";
+}
+
+function computeReviewReasons(row) {
+  const reasons = [];
+
+  if (row.likelyParserIssue === "Y") reasons.push("Parser issue");
+  if (row.confidenceFlag === "Low") reasons.push("Low confidence");
+  else if (row.confidenceFlag === "Medium") reasons.push("Medium confidence");
+
+  if (!row.selection) reasons.push("Missing selection");
+  if (!row.fixtureEvent) reasons.push("Missing fixture");
+  if (!row.oddsUS) reasons.push("Missing odds");
+  if (!row.sportLeague) reasons.push("Missing league");
+
+  if (row.duplicateWarning) reasons.push("Possible duplicate");
+  if (row.hedgeGroupId) reasons.push("In hedge group");
+  if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) reasons.push("Guaranteed profit");
+
+  return reasons.slice(0, 4).join(" • ");
+}
+
 export function enrichRow(row) {
   const normalizedFixture = normalizeTeamNames(row.fixtureEvent);
   const normalizedSelection = normalizeTeamNames(row.selection);
   const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
-
-  const canonical = canonicalizeSelectionFields({
+    const canonical = canonicalizeSelectionFields({
     ...row,
     bookmaker: normalizedBookmaker,
     fixtureEvent: normalizedFixture,
@@ -106,6 +201,19 @@ export function enrichRow(row) {
       !!row.parseWarning
     );
 
+  const confidenceFlag = computeConfidenceFlag(row);
+  const likelyParserIssue = computeLikelyParserIssue(row);
+
+  const scoredRow = {
+    ...row,
+    confidenceFlag,
+    likelyParserIssue,
+  };
+
+  const reviewPriority = computeReviewPriority(scoredRow);
+  const reviewBucket = computeReviewBucket({ ...scoredRow, reviewPriority });
+  const reviewReasons = computeReviewReasons({ ...scoredRow, reviewPriority });
+
   return {
     ...row,
     bookmaker: normalizedBookmaker,
@@ -118,8 +226,14 @@ export function enrichRow(row) {
       selection: normalizedSelection,
       marketDetail: row.marketDetail,
       fixtureEvent: normalizedFixture,
+      confidenceFlag,
+      likelyParserIssue,
+      reviewLater:
+        needsReview || likelyParserIssue === "Y" || confidenceFlag !== "High"
+          ? "Y"
+          : (row.reviewLater || "N"),
     }),
-
+    
     canonicalBookmaker: canonical.canonicalBookmaker || normalizedBookmaker,
     canonicalFixture: canonical.canonicalFixture || canonicalizeFixture(normalizedFixture),
     canonicalFixtureKey: getCanonicalFixtureKey(normalizedFixture),
@@ -137,12 +251,22 @@ export function enrichRow(row) {
     canonicalSelectionKey: canonical.canonicalSelectionKey || "",
     canonicalHedgeKey: canonical.canonicalHedgeKey || "",
     canonicalOppositeKey: canonical.canonicalOppositeKey || "",
-
+    confidenceFlag,
+    likelyParserIssue,
+    reviewPriority,
+    reviewBucket,
+    reviewReasons,
+    reviewLater:
+      needsReview || likelyParserIssue === "Y" || confidenceFlag !== "High"
+        ? "Y"
+        : (row.reviewLater || "N"),
     reviewLater: needsReview ? "Y" : (row.reviewLater || "N"),
     exported: row.exported || "N",
     archived: row.archived || "N",
   };
 }
+
+
 
 const shared = {
   emptyParsed,

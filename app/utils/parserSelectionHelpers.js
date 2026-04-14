@@ -9,6 +9,18 @@ export function singularizeStat(label) {
   return label;
 }
 
+export function normalizePlayerName(name = "") {
+  return cleanTextLine(name)
+    .replace(/\bJr\b\.?/gi, "Jr")
+    .replace(/\bSr\b\.?/gi, "Sr")
+    .replace(/\bIII\b/gi, "III")
+    .replace(/\bII\b/gi, "II")
+    .replace(/\bIV\b/gi, "IV")
+    .replace(/\s*,\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function buildPlayerPropSelection(rawSelection, marketDetail) {
   const cleanedSelection = cleanTextLine(rawSelection);
   const cleanedMarket = cleanTextLine(marketDetail);
@@ -41,7 +53,10 @@ export function buildPlayerPropSelection(rawSelection, marketDetail) {
 
     for (const item of propPatterns) {
       const m = cleanedMarket.match(item.regex);
-      if (m) return `${m[1]} ${direction} ${line} ${item.label}`.trim();
+      if (m) {
+        const player = normalizePlayerName(m[1]);
+        return `${player} ${direction} ${line} ${item.label}`.trim();
+      }
     }
   }
 
@@ -66,7 +81,10 @@ export function buildPlayerPropSelection(rawSelection, marketDetail) {
 
     for (const item of propPatterns) {
       const m = cleanedMarket.match(item.regex);
-      if (m) return `${m[1]} ${n}+ ${singularizeStat(item.label)}`.trim();
+      if (m) {
+        const player = normalizePlayerName(m[1]);
+        return `${player} ${n}+ ${singularizeStat(item.label)}`.trim();
+      }
     }
   }
 

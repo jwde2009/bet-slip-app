@@ -7,6 +7,11 @@ const MARKET_ORDER = {
   moneyline_3way: 2,
   spread: 3,
   total: 4,
+  player_points: 10,
+  player_assists: 11,
+  player_rebounds: 12,
+  player_threes: 13,
+  player_pra: 14,
 };
 
 export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
@@ -161,8 +166,16 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
 
         return (
           <tr key={row.id} style={{ background: zebraBg }}>
-            <td style={{ ...tdStyle, background: zebraBg }}>{row.sportsbook}</td>
-            <td style={{ ...tdStyle, background: zebraBg }}>{row.sport}</td>
+            <td style={{ ...tdStyle, background: zebraBg }}>
+  {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
+</td>
+
+      <td style={{ ...tdStyle, background: zebraBg }}>
+  {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
+</td>
+
+<td style={{ ...tdStyle, background: zebraBg }}>{row.sportsbook}</td>
+<td style={{ ...tdStyle, background: zebraBg }}>{row.sport}</td>
 
                         <td style={{ ...tdStyle, background: zebraBg }}>
               <div style={eventCellStyle}>
@@ -191,6 +204,11 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
                 <option value="moneyline_3way">moneyline_3way</option>
                 <option value="spread">spread</option>
                 <option value="total">total</option>
+                <option value="player_points">player_points</option>
+                <option value="player_assists">player_assists</option>
+                <option value="player_rebounds">player_rebounds</option>
+                <option value="player_threes">player_threes</option>
+                <option value="player_pra">player_pra</option>
               </select>
             </td>
 
@@ -206,33 +224,52 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
 
             <td style={{ ...tdStyle, background: zebraBg }}>
               <input
+                type="text"
                 value={
-                  row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
-                    ? "ML"
-                    : Number.isFinite(row.lineValue)
-                    ? row.lineValue
-                    : "—"
-                }
-                onChange={(e) =>
+  row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
+    ? "ML"
+    : typeof row.lineValueInput === "string"
+    ? row.lineValueInput
+    : Number.isFinite(row.lineValue)
+    ? String(row.lineValue)
+    : ""
+}
+                onChange={(e) => {
+                  if (row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way") {
+                    return;
+                  }
+
+                  const next = parseEditableSignedNumberState(e.target.value);
+
                   onUpdateRow(row.id, {
-                    lineValue:
-                      e.target.value === "" || e.target.value === "—" || e.target.value === "ML"
-                        ? null
-                        : Number(e.target.value),
-                  })
-                }
+                    lineValueInput: next.text,
+                    lineValue: next.value,
+                  });
+                }}
+                placeholder="e.g. -1.5"
                 style={smallInputStyle}
               />
             </td>
 
             <td style={{ ...tdStyle, background: zebraBg }}>
               <input
-                value={Number.isFinite(row.oddsAmerican) ? row.oddsAmerican : ""}
-                onChange={(e) =>
+                type="text"
+                value={
+  typeof row.oddsAmericanInput === "string"
+    ? row.oddsAmericanInput
+    : Number.isFinite(row.oddsAmerican)
+    ? String(row.oddsAmerican)
+    : ""
+}
+                onChange={(e) => {
+                  const next = parseEditableAmericanOddsState(e.target.value);
+
                   onUpdateRow(row.id, {
-                    oddsAmerican: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
+                    oddsAmericanInput: next.text,
+                    oddsAmerican: next.value,
+                  });
+                }}
+                placeholder="+150 or -200"
                 style={smallInputStyle}
               />
             </td>
@@ -333,6 +370,55 @@ function buildCanonicalEventPreview(row) {
   }
 
   return event;
+}
+
+function parseEditableSignedNumberState(raw) {
+  const text = String(raw ?? "").replace(/−/g, "-").trim();
+
+  if (text === "") {
+    return { text: "", value: null };
+  }
+
+  if (text === "-" || text === "+" || text === "." || text === "-." || text === "+.") {
+    return { text, value: null };
+  }
+
+  if (!/^[+-]?\d*(\.\d*)?$/.test(text)) {
+    return { text, value: null };
+  }
+
+  const value = Number(text);
+  return {
+    text,
+    value: Number.isFinite(value) ? value : null,
+  };
+}
+
+function parseEditableAmericanOddsState(raw) {
+  const text = String(raw ?? "").replace(/−/g, "-").trim();
+
+  if (text === "") {
+    return { text: "", value: null };
+  }
+
+  if (text === "-" || text === "+") {
+    return { text, value: null };
+  }
+
+  if (!/^[+-]?\d+$/.test(text)) {
+    return { text, value: null };
+  }
+
+  const value = Number(text);
+
+  if (!Number.isFinite(value) || value === 0) {
+    return { text, value: null };
+  }
+
+  return {
+    text,
+    value,
+  };
 }
 
 function getConfidencePillStyle(confidence) {

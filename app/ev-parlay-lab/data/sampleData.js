@@ -8,6 +8,7 @@ export const SAMPLE_FILTERS = {
   bankroll: 6000,
   kellyFraction: 0.25,
   allowSameGame: false,
+  forceSameGame: false,
   allowRepeats: false,
-  onlyPositiveEdgeLegs: true,
+  minLegEvPct: -0.02,
 };

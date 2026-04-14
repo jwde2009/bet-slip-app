@@ -41,6 +41,7 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
                     const bookCounts = buildBookCounts(selection.quotes);
                     const sharpQuotes = selection.quotes.filter((q) => q.isSharpSource);
                     const targetQuotes = selection.quotes.filter((q) => q.isTargetBook);
+                    const comparison = buildBestQuoteComparison(selection.quotes);
 
                     return (
                       <div key={selection.id} style={selectionCardStyle}>
@@ -50,12 +51,8 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
                           <span style={metaPillStyle}>
                             {selection.quotes.length} quote{selection.quotes.length === 1 ? "" : "s"}
                           </span>
-                          <span style={metaPillStyle}>
-                            Sharp: {sharpQuotes.length}
-                          </span>
-                          <span style={metaPillStyle}>
-                            Target: {targetQuotes.length}
-                          </span>
+                          <span style={metaPillStyle}>Sharp: {sharpQuotes.length}</span>
+                          <span style={metaPillStyle}>Target: {targetQuotes.length}</span>
                         </div>
 
                         <div style={{ marginTop: 8 }}>
@@ -69,6 +66,47 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
                           </div>
                         </div>
 
+                        <div style={{ marginTop: 10 }}>
+                          <div style={subLabelStyle}>Best Target vs Best Sharp</div>
+
+                          {comparison ? (
+                            <div style={comparisonCardStyle}>
+                                                            <div style={comparisonGridStyle}>
+                                <ComparisonCell
+                                  label="Best Target"
+                                  value={`${comparison.bestTarget.sportsbook} ${formatAmerican(
+                                    comparison.bestTarget.oddsAmerican
+                                  )}`}
+                                />
+                                <ComparisonCell
+                                  label="Best Sharp"
+                                  value={`${comparison.bestSharp.sportsbook} ${formatAmerican(
+                                    comparison.bestSharp.oddsAmerican
+                                  )}`}
+                                />
+                                <ComparisonCell
+                                  label="Edge (Cents)"
+                                  value={formatEdgeText(comparison.edgeAmerican)}
+                                />
+                                <ComparisonCell
+                                  label="Edge %"
+                                  value={formatPct(comparison.edgePct)}
+                                />
+                                <ComparisonCell
+                                  label="Fair Prob"
+                                  value={`${(comparison.fairProbability * 100).toFixed(2)}%`}
+                                />
+                                <ComparisonCell
+                                  label="Leg EV %"
+                                  value={formatPct(comparison.legEvPct)}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={mutedStyle}>Need at least one target quote and one sharp quote.</div>
+                          )}
+                        </div>
+
                         <div style={{ marginTop: 8 }}>
                           <div style={subLabelStyle}>Quotes</div>
                           <div style={{ display: "grid", gap: 6 }}>
@@ -77,6 +115,7 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
                                 <span>
                                   <strong>{quote.sportsbook}</strong> — {formatAmerican(quote.oddsAmerican)}
                                 </span>
+
                                 <span style={quoteBadgeWrapStyle}>
                                   {quote.isSharpSource ? (
                                     <span style={sharpBadgeStyle}>Sharp</span>
@@ -101,6 +140,15 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
   );
 }
 
+function ComparisonCell({ label, value }) {
+  return (
+    <div style={comparisonCellStyle}>
+      <div style={comparisonLabelStyle}>{label}</div>
+      <div style={comparisonValueStyle}>{value}</div>
+    </div>
+  );
+}
+
 function buildBookCounts(quotes) {
   const counts = {};
 
@@ -110,6 +158,65 @@ function buildBookCounts(quotes) {
   }
 
   return counts;
+}
+
+function buildBestQuoteComparison(quotes) {
+  const targetQuotes = quotes.filter(
+    (q) => q.isTargetBook && Number.isFinite(q.oddsAmerican)
+  );
+  const sharpQuotes = quotes.filter(
+    (q) => q.isSharpSource && Number.isFinite(q.oddsAmerican)
+  );
+
+  if (!targetQuotes.length || !sharpQuotes.length) return null;
+
+  const bestTarget = [...targetQuotes].sort((a, b) => {
+    const aDec = americanToDecimal(a.oddsAmerican);
+    const bDec = americanToDecimal(b.oddsAmerican);
+    return bDec - aDec;
+  })[0];
+
+  const bestSharp = [...sharpQuotes].sort((a, b) => {
+    const aDec = americanToDecimal(a.oddsAmerican);
+    const bDec = americanToDecimal(b.oddsAmerican);
+    return bDec - aDec;
+  })[0];
+
+  const bestTargetDecimal = americanToDecimal(bestTarget.oddsAmerican);
+  const bestSharpDecimal = americanToDecimal(bestSharp.oddsAmerican);
+  const fairProbability = 1 / bestSharpDecimal;
+  const edgeAmerican = bestTarget.oddsAmerican - bestSharp.oddsAmerican;
+
+  const edgePct = (bestTargetDecimal / bestSharpDecimal) - 1;
+  const legEvPct = fairProbability * (bestTargetDecimal - 1) - (1 - fairProbability);
+
+  return {
+    bestTarget,
+    bestSharp,
+    fairProbability,
+    edgeAmerican,
+    edgePct,
+    legEvPct,
+  };
+}
+
+function americanToDecimal(american) {
+  const value = Number(american);
+  if (!Number.isFinite(value)) return NaN;
+  if (value > 0) return 1 + value / 100;
+  return 1 + 100 / Math.abs(value);
+}
+
+function formatPct(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatEdgeText(edge) {
+  if (!Number.isFinite(edge)) return "—";
+  if (edge > 0) return `+${Math.round(edge)} cents`;
+  if (edge < 0) return `${Math.round(edge)} cents`;
+  return "0 cents";
 }
 
 function formatAmerican(value) {
@@ -189,6 +296,40 @@ const bookPillStyle = {
   padding: "4px 8px",
   fontSize: 12,
   fontWeight: 700,
+};
+
+const comparisonCardStyle = {
+  border: "1px solid #dbeafe",
+  background: "#f8fbff",
+  borderRadius: 8,
+  padding: 10,
+};
+
+const comparisonGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: 8,
+};
+
+const comparisonCellStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 8,
+  background: "#fff",
+  padding: 8,
+};
+
+const comparisonLabelStyle = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#6b7280",
+  marginBottom: 4,
+  textTransform: "uppercase",
+};
+
+const comparisonValueStyle = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#111827",
 };
 
 const quoteRowStyle = {

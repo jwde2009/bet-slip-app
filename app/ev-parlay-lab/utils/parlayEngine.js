@@ -7,17 +7,31 @@ export function buildParlayCandidates({ rows, markets, fairOddsResults, filters 
   );
 
   const candidateLegs = [];
+  const rejectionCounts = {
+    noFairOdds: 0,
+    noTargetQuote: 0,
+    belowLegThreshold: 0,
+    sameGameBlocked: 0,
+    repeatsBlocked: 0,
+    nonPositiveParlayEv: 0,
+  };
 
   for (const market of markets) {
     for (const selection of market.selections) {
       const fair = fairMap.get(`${market.id}::${selection.id}`);
-      if (!fair) continue;
+      if (!fair) {
+        rejectionCounts.noFairOdds += 1;
+        continue;
+      }
 
       const targetQuotes = selection.quotes.filter(
         (q) => q.isTargetBook === true && Number.isFinite(q.oddsDecimal) && q.oddsDecimal > 1
       );
 
-      if (!targetQuotes.length) continue;
+      if (!targetQuotes.length) {
+        rejectionCounts.noTargetQuote += 1;
+        continue;
+      }
 
       const bestTargetQuote = [...targetQuotes].sort(
         (a, b) => b.oddsDecimal - a.oddsDecimal
@@ -27,7 +41,14 @@ export function buildParlayCandidates({ rows, markets, fairOddsResults, filters 
       const legEvPct =
         fair.fairProbability * legWinProfitMultiple - (1 - fair.fairProbability);
 
-      if (filters.onlyPositiveEdgeLegs && legEvPct <= 0) continue;
+      const minLegEvPct = Number.isFinite(filters.minLegEvPct)
+        ? filters.minLegEvPct
+        : -0.02;
+
+      if (legEvPct < minLegEvPct) {
+        rejectionCounts.belowLegThreshold += 1;
+        continue;
+      }
 
       candidateLegs.push({
         marketId: market.id,
@@ -46,31 +67,60 @@ export function buildParlayCandidates({ rows, markets, fairOddsResults, filters 
   }
 
   const desiredLegCount = Number(filters.maxLegs) || 2;
+  const rawCombinations = generateCombinations(candidateLegs, desiredLegCount).filter(
+    (combo) => combo.length === desiredLegCount
+  );
 
-  const combinations = generateCombinations(candidateLegs, desiredLegCount)
-    .filter((combo) => combo.length === desiredLegCount)
-    .filter((combo) => {
-      if (filters.allowSameGame) return true;
-      const uniqueMarkets = new Set(combo.map((leg) => leg.marketId));
-      return uniqueMarkets.size === combo.length;
-    })
-    .filter((combo) => {
-      if (filters.allowRepeats) return true;
-      const names = combo.map((leg) => String(leg.selectionLabel || "").toLowerCase());
-      return new Set(names).size === names.length;
-    });
+  const combinations = rawCombinations.filter((combo) => {
+  const eventKeys = combo.map((leg) => normalizeEventNameForSameGame(leg.eventName));
+  const uniqueEvents = new Set(eventKeys);
+
+  if (filters.forceSameGame) {
+    if (uniqueEvents.size !== 1) {
+      rejectionCounts.sameGameBlocked += 1;
+      return false;
+    }
+  } else if (!filters.allowSameGame) {
+    if (uniqueEvents.size !== combo.length) {
+      rejectionCounts.sameGameBlocked += 1;
+      return false;
+    }
+  }
+
+  if (!filters.allowRepeats) {
+    const names = combo.map((leg) => String(leg.selectionLabel || "").toLowerCase());
+    if (new Set(names).size !== names.length) {
+      rejectionCounts.repeatsBlocked += 1;
+      return false;
+    }
+  }
+
+  return true;
+});
 
   const parlays = combinations
     .map((legs, idx) => buildSingleParlayCandidate({ legs, idx, filters }))
     .filter(Boolean)
-    .filter((parlay) => parlay.expectedValuePct > 0)
+    .filter((parlay) => {
+      if (parlay.expectedValuePct > 0) return true;
+      rejectionCounts.nonPositiveParlayEv += 1;
+      return false;
+    })
     .sort((a, b) => {
       if (b.gradeScore !== a.gradeScore) return b.gradeScore - a.gradeScore;
       if (b.expectedValuePct !== a.expectedValuePct) return b.expectedValuePct - a.expectedValuePct;
       return b.fairHitProbability - a.fairHitProbability;
     });
 
-  return parlays;
+  return {
+    parlays,
+    counts: {
+      eligibleLegs: candidateLegs.length,
+      eligibleMarkets: new Set(candidateLegs.map((leg) => leg.marketId)).size,
+      generatedCombos: combinations.length,
+      rejections: rejectionCounts,
+    },
+  };
 }
 
 function buildSingleParlayCandidate({ legs, idx, filters }) {
@@ -143,7 +193,7 @@ function buildSingleParlayCandidate({ legs, idx, filters }) {
     legs,
     legDescriptions: legs.map(
       (leg) =>
-        `${leg.eventName} — ${leg.selectionLabel} (${formatAmerican(leg.oddsAmerican)} at ${leg.sportsbook})`
+        `${leg.eventName} — ${leg.selectionLabel} (${formatAmerican(leg.oddsAmerican)} at ${leg.sportsbook}, leg EV ${formatPct(leg.legEvPct)})`
     ),
     rawParlayDecimal,
     boostedParlayDecimal,
@@ -160,6 +210,7 @@ function buildSingleParlayCandidate({ legs, idx, filters }) {
     gradeScore: grade.score,
     gradeTier: grade.tier,
     playLabel: grade.label,
+    boostPctUsed: Number(filters.boostPct) || 0,
     notes,
   };
 }
@@ -346,6 +397,13 @@ function calculateSuggestedKellyStake({ bankroll, kellyFraction, winProbability,
   return bankroll * fullKelly * kellyFraction;
 }
 
+function normalizeEventNameForSameGame(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 function generateCombinations(items, size) {
   const results = [];
 
@@ -369,6 +427,11 @@ function generateCombinations(items, size) {
 function average(nums) {
   if (!nums.length) return 0;
   return nums.reduce((acc, n) => acc + n, 0) / nums.length;
+}
+
+function formatPct(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
 }
 
 function formatAmerican(value) {

@@ -7,7 +7,7 @@ const SPORTSBOOK_OPTIONS = [
   "BetMGM",
   "Caesars",
   "Pinnacle",
-  "TheScoreBet",
+  "TheScore",
   "Manual",
 ];
 
@@ -70,22 +70,28 @@ export default function ImportPanel({
       </div>
 
       <textarea
-        value={rawText}
+        value={rawText || ""}
         onChange={(e) => setRawText(e.target.value)}
         style={textareaStyle}
         placeholder="Paste odds text here..."
+        spellCheck={false}
       />
 
+      <div style={{ marginTop: 8, fontSize: 12, color: "#166534", fontWeight: 700 }}>
+        Input chars: {(rawText || "").length}
+      </div>
+
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
-        <button onClick={onParse} style={primaryButtonStyle}>
+        <button type="button" onClick={onParse} style={primaryButtonStyle}>
           Parse Input
         </button>
 
-        <button onClick={onClearInput} style={secondaryButtonStyle}>
+        <button type="button" onClick={onClearInput} style={secondaryButtonStyle}>
           Clear Input
         </button>
 
         <button
+          type="button"
           onClick={onClearParsedRows}
           style={{
             ...dangerButtonStyle,

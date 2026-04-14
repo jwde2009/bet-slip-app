@@ -30,7 +30,7 @@ function inferTeamsFromEvent(eventLabelRaw = "") {
   }
 
   if (/\bvs\b/i.test(label)) {
-    const [home, away] = label.split(/\bvs\b/i).map((s) => s.trim());
+    const [away, home] = label.split(/\bvs\b/i).map((s) => s.trim());
     return { homeTeam: home || "", awayTeam: away || "" };
   }
 

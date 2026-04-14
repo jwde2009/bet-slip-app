@@ -28,6 +28,140 @@ function getLines(text = "") {
     .filter(Boolean);
 }
 
+function repairCommonOcrPlayerNoise(text = "") {
+  return cleanLine(text)
+    .replace(/\b0ver\b/gi, "Over")
+    .replace(/\bUnd3r\b/gi, "Under")
+    .replace(/\b0\b/g, "O")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function isLikelyUiNoise(line = "") {
+  const s = cleanLine(line);
+  if (!s) return true;
+
+  return (
+    /^(home|my bets|live|search|share|betslip|open|settled)$/i.test(s) ||
+    /^(straight|parlay|teaser)$/i.test(s) ||
+    /^(quick deposit|reward available|keep picks in betslip)$/i.test(s) ||
+    /^id:\s*[a-z0-9]+$/i.test(s) ||
+    /^placed:/i.test(s) ||
+    /^bet to win\b/i.test(s) ||
+    /^bonus bet to win\b/i.test(s) ||
+    /^credits to win\b/i.test(s) ||
+    /^[x×]$/i.test(s) ||
+    /^[+-]?\d{2,5}$/.test(s) ||
+    /^\$?\d+(?:\.\d{1,2})?$/.test(s)
+  );
+}
+
+function isLikelyFixtureLine(line = "") {
+  const s = cleanLine(line);
+  if (!s || isLikelyUiNoise(s)) return false;
+  if (/\d/.test(s)) return false;
+
+  return (
+    /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s*@\s*[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\b/.test(s) ||
+    /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s+vs\.?\s+[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\b/i.test(s)
+  );
+}
+
+function normalizeFixtureLine(line = "") {
+  const s = cleanLine(line)
+    .replace(/\s+[x×]\s*$/i, "")
+    .replace(/\bToday\b.*$/i, "")
+    .trim();
+    if (!/[A-Za-z]{3,}/.test(s)) return "";
+    if (/\d/.test(s)) return "";
+
+  let m = s.match(/\b(.+?)\s*@\s*(.+?)\b/i);
+  if (m) return `${cleanLine(m[1])} @ ${cleanLine(m[2])}`;
+
+  m = s.match(/\b(.+?)\s+vs\.?\s+(.+?)\b/i);
+  if (m) return `${cleanLine(m[1])} @ ${cleanLine(m[2])}`;
+
+  return "";
+}
+
+function isLikelySelectionLine(line = "") {
+  const s = cleanLine(line);
+  if (!s || isLikelyUiNoise(s)) return false;
+
+  return (
+    /\b(over|under)\b/i.test(s) ||
+    /\b\d+\+\b/.test(s) ||
+    /\bmoneyline\b/i.test(s) ||
+    /\bgame spread\b/i.test(s) ||
+    /\b(points|rebounds|assists|pra|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases)\b/i.test(s)
+  );
+}
+
+function scoreSelectionLine(line = "") {
+  const s = cleanLine(line);
+  let score = 0;
+
+  if (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(s)) score += 2;
+  if (/\b(over|under)\b/i.test(s)) score += 3;
+  if (/\b\d+(?:\.\d+)?\b/.test(s)) score += 2;
+  if (/\b[+-]\d{2,5}\b|\bEven\b/i.test(s)) score += 2;
+
+  if (
+    /\b(points|rebounds|assists|pra|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases|moneyline|game spread)\b/i.test(s)
+  ) {
+    score += 3;
+  }
+
+  if (/^[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+){0,4}\b/.test(s)) {
+    score += 1;
+  }
+
+  if (/\bplaced:|bet to win|credits to win|quick deposit|my bets|share\b/i.test(s)) {
+    score -= 5;
+  }
+
+  return score;
+}
+
+function findBestFixtureLine(lines = []) {
+  const fixtures = lines
+    .filter(isLikelyFixtureLine)
+    .map((line) => ({
+      line,
+      fixture: normalizeFixtureLine(line),
+      score: /\bvs\.?\b/i.test(line) ? 2 : 3,
+    }))
+    .filter((x) => x.fixture);
+
+  fixtures.sort((a, b) => b.score - a.score || a.line.length - b.line.length);
+  return fixtures[0]?.fixture || "";
+}
+
+function findBestSelectionChunk(lines = []) {
+  const scored = lines
+    .map((line, idx) => ({ idx, line: cleanLine(line), score: scoreSelectionLine(line) }))
+    .filter((x) => x.score >= 2);
+
+  if (!scored.length) return "";
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const next = lines[best.idx + 1] ? cleanLine(lines[best.idx + 1]) : "";
+  const prev = lines[best.idx - 1] ? cleanLine(lines[best.idx - 1]) : "";
+
+  // Sometimes player + market are split across adjacent lines.
+  const candidates = [
+  `${best.line} ${next}`.trim(),
+  `${prev} ${best.line}`.trim(),
+  `${prev} ${best.line} ${next}`.trim(),
+  `${next} ${best.line}`.trim(),
+  best.line,
+];
+
+  candidates.sort((a, b) => b.length - a.length);
+  return candidates[0];
+}
+
 function stripNoise(text = "") {
   return clean(text)
     .replace(/\bQuick Deposit\b/gi, " ")
@@ -89,23 +223,6 @@ function extractToWin(text = "") {
 
   for (const m of candidates) {
     if (m) return m[2];
-  }
-
-  return "";
-}
-
-function extractFixture(text = "") {
-  const patterns = [
-    /\b([A-Za-z0-9.'& -]+?)\s*@\s*([A-Za-z0-9.'& -]+?)\s+X\b/i,
-    /\b([A-Za-z0-9.'& -]+?)\s*@\s*([A-Za-z0-9.'& -]+?)\b/i,
-    /\b([A-Za-z0-9.'& -]+?)\s+vs\.?\s+([A-Za-z0-9.'& -]+?)\b/i,
-  ];
-
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m) {
-      return `${cleanLine(m[1])} @ ${cleanLine(m[2])}`;
-    }
   }
 
   return "";
@@ -223,22 +340,91 @@ export function parseTheScoreSlip({
     enrichRow,
   } = shared;
 
-  const cleanedAdjusted = cleaned
-    .replace(/\s-\s/g, " ")
+  const cleanedForLines = cleaned
+  .replace(/\s-\s/g, " ")
+  .replace(/\r/g, "\n");
+
+  const cleanedAdjusted = cleanedForLines
     .replace(/\s+/g, " ")
     .trim();
-
-  const text = stripNoise(cleanedAdjusted);
-  const lines = getLines(cleanedAdjusted);
 
   const betId = extractBetId(cleanedAdjusted);
   const placed = extractBetDate(cleanedAdjusted, parsePlacedDate);
 
-  const fixtureEvent = extractFixture(text);
-  const extracted = extractSelectionAndMarket(text);
+  const text = stripNoise(cleanedAdjusted);
+const lines = getLines(cleanedForLines).filter((line) => !isLikelyUiNoise(line));
 
-  let rawSelection = cleanTextLine(extracted.rawSelection || "");
-  let marketDetail = cleanTextLine(extracted.marketDetail || "");
+let finalFixture = findBestFixtureLine(lines);
+
+if (finalFixture) {
+  const parts = finalFixture.split("@").map((s) => s.trim());
+
+  if (parts.length !== 2 || parts.some((p) => p.length < 3)) {
+    finalFixture = "";
+  }
+}
+
+const selectionChunk = findBestSelectionChunk(lines);
+
+let finalSelectionChunk = selectionChunk;
+
+if (!finalSelectionChunk) {
+  const fallback = lines.find((line) =>
+  /\b(over|under|moneyline|spread|total|points|rebounds|assists|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases)\b/i.test(line)
+  ||
+  /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(line)
+);
+
+  finalSelectionChunk = fallback || "";
+}
+
+const extracted = extractSelectionAndMarket(
+  repairCommonOcrPlayerNoise(finalSelectionChunk || text)
+);
+
+let rawSelection = cleanTextLine(extracted.rawSelection || "");
+let marketDetail = cleanTextLine(extracted.marketDetail || "");
+
+if (!rawSelection && finalFixture) {
+  const [teamA, teamB] = finalFixture.split("@").map((s) => s.trim());
+
+  if (teamA && teamB) {
+    const matchingLine = lines.find((line) => {
+      const lower = line.toLowerCase();
+      const aKey = teamA.toLowerCase().split(" ")[0];
+      const bKey = teamB.toLowerCase().split(" ")[0];
+      return lower.includes(aKey) || lower.includes(bKey);
+    });
+
+    if (matchingLine) {
+      const lowerLine = matchingLine.toLowerCase();
+      const aKey = teamA.toLowerCase().split(" ")[0];
+      const bKey = teamB.toLowerCase().split(" ")[0];
+
+      const hasA = lowerLine.includes(aKey);
+      const hasB = lowerLine.includes(bKey);
+
+      if (hasA && !hasB) rawSelection = teamA;
+      else if (hasB && !hasA) rawSelection = teamB;
+      else rawSelection = teamA;
+    } else {
+      rawSelection = teamA;
+    }
+
+    if (/[+-]\d{2,5}/.test(text) && !/over|under/i.test(text)) {
+      marketDetail = "Game Spread";
+    } else if (/over|under|total/i.test(text)) {
+      marketDetail = "Total";
+    } else {
+      marketDetail = "Moneyline";
+    }
+  }
+}
+
+if (!rawSelection && finalSelectionChunk) {
+  rawSelection = finalSelectionChunk.split(" ")[0];
+}
+
   let oddsUS = cleanTextLine(extracted.oddsUS || "");
 
   const payoutInfo = extractPayouts(text);
@@ -246,7 +432,7 @@ export function parseTheScoreSlip({
   const toWin = extractToWin(text) || payoutInfo.toWin || "";
   const stake = extractStake(text) || "";
 
-  const betType = classifyBetType(rawSelection, marketDetail, fixtureEvent);
+  const betType = classifyBetType(rawSelection, marketDetail, finalFixture);
 
   let selection =
     betType === "player prop"
@@ -260,14 +446,14 @@ export function parseTheScoreSlip({
 
   const eventDate = inferEventDate({
     cleaned: text,
-    fixtureEvent,
+    fixtureEvent: finalFixture,
     betDate: placed.dateOnly || "",
   });
 
   const sportLeague = detectLeague({
     cleaned: text,
     marketDetail,
-    fixtureEvent,
+    fixtureEvent: finalFixture,
     selection,
     isParlay: false,
   });
@@ -279,8 +465,19 @@ export function parseTheScoreSlip({
   const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
   const bonusBet = /\bbonus bet\b|credits:/i.test(cleanedAdjusted) ? "Y" : "N";
 
+  let oddsSource = oddsUS ? "OCR" : "";
+
   const bestOdds = extractBestOdds(text, rawSelection, marketDetail);
-  if (!oddsUS) oddsUS = bestOdds;
+
+  if (!oddsUS) {
+    if (typeof bestOdds === "string") {
+      oddsUS = bestOdds;
+      oddsSource = oddsUS ? "Derived" : "";
+    } else if (bestOdds && typeof bestOdds === "object") {
+      oddsUS = bestOdds.oddsUS || "";
+      oddsSource = bestOdds.oddsSource || (oddsUS ? "Derived" : "");
+    }
+  }
 
   const oddsMissingReason = detectOddsMissingReason({
     oddsUS,
@@ -291,11 +488,12 @@ export function parseTheScoreSlip({
   });
 
   const additionalWarnings = [];
-  additionalWarnings.push("theScore parser");
-
+  if (finalSelectionChunk && !rawSelection) additionalWarnings.push("thescore_selection_unparsed");
+  if (finalFixture && !/@/.test(finalFixture)) additionalWarnings.push("thescore_fixture_shape_suspect");
+  if (rawSelection && /today|share|betslip|my bets/i.test(rawSelection)) additionalWarnings.push("thescore_selection_contains_ui_noise");
   if (!betId) additionalWarnings.push("thescore_bet_id_missing");
   if (!selection) additionalWarnings.push("thescore_selection_missing");
-  if (!fixtureEvent) additionalWarnings.push("thescore_fixture_missing");
+  if (!finalFixture) additionalWarnings.push("thescore_fixture_missing");
   if (!oddsUS) additionalWarnings.push("receipt_detected_but_odds_missing");
   if (!payout && !toWin) additionalWarnings.push("receipt_detected_but_payout_missing");
   if (!stake) additionalWarnings.push("stake_missing");
@@ -312,10 +510,10 @@ export function parseTheScoreSlip({
     sportLeague,
     selection,
     betType,
-    fixtureEvent,
+    fixtureEvent: finalFixture,
     stake,
     oddsUS,
-    oddsSource: oddsUS ? "OCR" : "",
+    oddsSource,
     oddsMissingReason,
     live: detectLive(text),
     bonusBet,

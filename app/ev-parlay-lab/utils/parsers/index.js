@@ -3,7 +3,7 @@ import { parseFanDuelText } from "./parseFanDuelText";
 import { parseBetMGMText } from "./parseBetMGMText";
 import { parseCaesarsText } from "./parseCaesarsText";
 import { parsePinnacleText } from "./parsePinnacleText";
-import { parseTheScoreBetText } from "./parseTheScoreBetText";
+import { parseTheScoreText } from "./parseTheScoreText";
 
 export function parseOddsText(rawText, context = {}) {
   const sportsbook = String(context.sportsbook || "Manual").trim().toLowerCase();
@@ -28,8 +28,8 @@ export function parseOddsText(rawText, context = {}) {
     return parsePinnacleText(rawText, context);
   }
 
-  if (sportsbook === "thescorebet") {
-  return parseTheScoreBetText(rawText, context);
+    if (sportsbook === "thescore") {
+    return parseTheScoreText(rawText, context);
   }
 
   if (

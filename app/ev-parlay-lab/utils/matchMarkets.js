@@ -13,11 +13,14 @@ export function buildCanonicalMarkets(rows) {
   for (const row of eligibleRows) {
     const eventKey = buildCanonicalEventKey(row);
     const normalizedLineValue = normalizeLineValueForMarket(row);
+    const normalizedMarketType = normalizeMarketType(row.marketType);
+    const subjectKey = buildSubjectKey(row);
 
     const marketKey = [
       String(row.sport || "").trim().toUpperCase(),
       eventKey,
-      String(row.marketType || "").trim().toLowerCase(),
+      normalizedMarketType,
+      subjectKey,
       normalizedLineValue,
     ].join("||");
 
@@ -27,7 +30,8 @@ export function buildCanonicalMarkets(rows) {
         displayName: buildCanonicalDisplayName(row),
         eventKey,
         sport: row.sport,
-        marketType: row.marketType,
+        marketType: normalizedMarketType,
+        subjectKey,
         lineValue: normalizedLineValue === "" ? null : Number(normalizedLineValue),
         selections: [],
       });
@@ -57,6 +61,9 @@ export function buildCanonicalMarkets(rows) {
       batchRole: row.batchRole || "",
       originalEventLabelRaw: row.eventLabelRaw,
       originalSelectionNormalized: row.selectionNormalized,
+      originalMarketType: row.marketType,
+      lineValue: row.lineValue,
+      subjectKey,
     });
   }
 
@@ -66,6 +73,9 @@ export function buildCanonicalMarkets(rows) {
     }
     if (a.marketType !== b.marketType) {
       return a.marketType.localeCompare(b.marketType);
+    }
+    if (a.subjectKey !== b.subjectKey) {
+      return a.subjectKey.localeCompare(b.subjectKey);
     }
     return String(a.lineValue ?? "").localeCompare(String(b.lineValue ?? ""));
   });
@@ -124,7 +134,7 @@ function splitEventLabel(eventLabelRaw = "") {
 }
 
 function normalizeSelectionLabel(row) {
-  const marketType = String(row.marketType || "").trim().toLowerCase();
+  const marketType = normalizeMarketType(row.marketType);
   const selection = cleanText(row.selectionNormalized || row.selectionRaw);
 
   if (marketType === "total") {
@@ -132,11 +142,16 @@ function normalizeSelectionLabel(row) {
     if (/^under$/i.test(selection)) return "Under";
   }
 
+  if (isPlayerPropMarket(marketType)) {
+    if (/\bover$/i.test(selection)) return "Over";
+    if (/\bunder$/i.test(selection)) return "Under";
+  }
+
   return selection;
 }
 
 function normalizeLineValueForMarket(row) {
-  const marketType = String(row.marketType || "").trim().toLowerCase();
+  const marketType = normalizeMarketType(row.marketType);
 
   if (marketType === "moneyline_2way" || marketType === "moneyline_3way") {
     return "";
@@ -146,8 +161,45 @@ function normalizeLineValueForMarket(row) {
     return "";
   }
 
-  // Keep half-points distinct, but normalize formatting.
   return Number(row.lineValue).toFixed(1);
+}
+
+function normalizeMarketType(value = "") {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "player_points") return "player_points";
+  if (text === "player_assists") return "player_assists";
+  if (text === "player_rebounds") return "player_rebounds";
+  if (text === "player_threes") return "player_threes";
+  if (text === "player_pra") return "player_pra";
+
+  return text;
+}
+
+function isPlayerPropMarket(marketType = "") {
+  return [
+    "player_points",
+    "player_assists",
+    "player_rebounds",
+    "player_threes",
+    "player_pra",
+  ].includes(marketType);
+}
+
+function buildSubjectKey(row) {
+  const marketType = normalizeMarketType(row.marketType);
+
+  if (!isPlayerPropMarket(marketType)) {
+    return "";
+  }
+
+  const selection = cleanText(row.selectionNormalized || row.selectionRaw)
+    .replace(/\b(over|under)\b/gi, " ")
+    .replace(/[+-]?\d+(\.\d+)?/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return selection.toLowerCase();
 }
 
 function cleanTeam(value = "") {

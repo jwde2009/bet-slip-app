@@ -339,6 +339,7 @@ export default function Home() {
   const [uploadBatches, setUploadBatches] = useState([]);
   const [savedFilterView, setSavedFilterView] = useState("default");
   const [showHedgesOnly, setShowHedgesOnly] = useState(false);
+  const [smartReviewMode, setSmartReviewMode] = useState(true);
   const [showGuaranteedProfitOnly, setShowGuaranteedProfitOnly] = useState(false);
   const [columnWidths, setColumnWidths] = useState({
     select: 52,
@@ -434,33 +435,63 @@ export default function Home() {
   }
 
   const visibleRows = useMemo(() => {
-  let next = rowsWithWarnings;
+    let next = rowsWithWarnings;
 
-  if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
-  if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
-  if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
-  if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
-  if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
-  if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
-  if (showGuaranteedProfitOnly) next = next.filter((row) => row.guaranteedProfit === "Y");
-  if (reviewMode) {
-    next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
-  }
+    if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
+    if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
+    if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
+    if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
+    if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
+    if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
+    if (showGuaranteedProfitOnly) next = next.filter((row) => row.guaranteedProfit === "Y");
 
-  return groupHedgeRowsTogether(next);
-}, [
-  rowsWithWarnings,
-  showArchivedRows,
-  showReviewLaterOnly,
-  showLowConfidenceOnly,
-  showLikelyParserIssuesOnly,
-  showNeedsReviewOnly,
-  showHedgesOnly,
-  showGuaranteedProfitOnly,
-  reviewMode,
-]);
+    if (reviewMode) {
+      next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
+    }
 
-  const reviewedCount = rowsWithWarnings.filter(
+    if (smartReviewMode) {
+      next = next.filter(
+        (row) => row.reviewLater === "Y" || Number(row.reviewPriority || 0) >= 3
+      );
+    }
+
+    next = [...next].sort((a, b) => {
+      const bucketOrder = { Critical: 0, High: 1, Standard: 2, Later: 3 };
+
+      const bucketA = bucketOrder[a.reviewBucket] ?? 99;
+      const bucketB = bucketOrder[b.reviewBucket] ?? 99;
+      if (bucketA !== bucketB) return bucketA - bucketB;
+
+      const priorityA = Number(a.reviewPriority || 0);
+      const priorityB = Number(b.reviewPriority || 0);
+      if (priorityA !== priorityB) return priorityB - priorityA;
+
+      const dateA = String(a.betDate || a.eventDate || "");
+      const dateB = String(b.betDate || b.eventDate || "");
+      return dateB.localeCompare(dateA);
+    });
+
+    return groupHedgeRowsTogether(next);
+
+    return groupHedgeRowsTogether(next);
+  }, [
+    rowsWithWarnings,
+    showArchivedRows,
+    showReviewLaterOnly,
+    showLowConfidenceOnly,
+    showLikelyParserIssuesOnly,
+    showNeedsReviewOnly,
+    showHedgesOnly,
+    showGuaranteedProfitOnly,
+    reviewMode,
+    smartReviewMode,
+  ]);
+
+const nextBestReviewRow = useMemo(() => {
+  return visibleRows.find((row) => row.reviewLater === "Y") || visibleRows[0] || null;
+}, [visibleRows]);
+
+const reviewedCount = rowsWithWarnings.filter(
   (row) => row.reviewResolved === "Y"
 ).length;
 
@@ -671,6 +702,8 @@ function addLikelyHedgeFlags(rowsInput) {
         hedgeProfitHigh: "",
         hedgeProfitIfThisWins: "",
         hedgeProfitIfOtherWins: "",
+        hedgeClusterLabel: "",
+        hedgeClusterSize: "",
       };
     }
 
@@ -732,6 +765,8 @@ function addLikelyHedgeFlags(rowsInput) {
       hedgeClusterId: makeClusterId(row, match),
       hedgeConfidence,
       hedgeQuality,
+      hedgeClusterLabel: guaranteedProfit === "Y" ? "Guaranteed Profit" : "Likely Hedge",
+      hedgeClusterSize: 2,
       guaranteedProfit,
       guaranteedProfitAmount,
       hedgeStake,
@@ -1633,6 +1668,10 @@ function groupHedgeRowsTogether(rowsInput) {
           onMarkSelectedWin={() => setWinStatusForSelected("Y")}
           onMarkSelectedLoss={() => setWinStatusForSelected("N")}
           onClearAll={clearAll}
+          nextBestReviewRow={nextBestReviewRow}
+          jumpToNextBestReviewRow={() => {
+            if (nextBestReviewRow) setSelectedRowId(nextBestReviewRow.id);
+          }}
         />
 
                 <FilterBar
@@ -1654,6 +1693,8 @@ function groupHedgeRowsTogether(rowsInput) {
           setShowArchivedRows={setShowArchivedRows}
           reviewMode={reviewMode}
           setReviewMode={setReviewMode}
+          smartReviewMode={smartReviewMode}
+          setSmartReviewMode={setSmartReviewMode}
           counts={counts}
         />
       </div>
@@ -1869,6 +1910,14 @@ function groupHedgeRowsTogether(rowsInput) {
               style={smallButtonStyle}
             >
               Mark Loss + Next
+            </button>
+
+            <button
+              onClick={jumpToNextBestReviewRow}
+              style={buttonStyle}
+              disabled={!nextBestReviewRow}
+            >
+              Next Best Row
             </button>
 
             <button

@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# debug exports
+all-code.txt
+all-code-clean.txt
+ev-parlay-lab-full-export.txt
+
