@@ -169,7 +169,14 @@ function extractPlayerName(selection = "", marketDetail = "") {
 }
 
 export function canonicalizeSelectionFields(row = {}) {
-  const selection = cleanValue(row.selection || "");
+  let selection = cleanValue(row.selection || "");
+
+  selection = selection
+    .toLowerCase()
+    .replace(/\bpts\b/g, "points")
+    .replace(/\brebs\b/g, "rebounds")
+    .replace(/\basts\b/g, "assists");
+    selection = selection.replace(/\s+/g, " ").trim();
   const marketDetail = cleanValue(row.marketDetail || "");
   const betType = cleanValue(row.betType || "").toLowerCase();
   const fixtureEvent = cleanValue(row.fixtureEvent || "");
@@ -228,7 +235,7 @@ export function canonicalizeSelectionFields(row = {}) {
     const total = extractOverUnder(selection, marketDetail);
     const spreadLine = extractSpreadLine(selection, marketDetail);
 
-    result.canonicalPlayer = player || "";
+    result.canonicalPlayer = (player || "").toLowerCase();
     result.canonicalTeam = !player ? extractTeamFromSelection(selection, fixtureEvent) : "";
     result.canonicalSide = total.direction || (spreadLine ? "team" : "");
     result.canonicalLine = total.line || spreadLine || "";

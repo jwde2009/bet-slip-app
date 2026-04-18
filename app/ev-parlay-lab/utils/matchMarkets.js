@@ -130,6 +130,11 @@ function splitEventLabel(eventLabelRaw = "") {
     return { away, home };
   }
 
+  if (/\bv\b/i.test(text)) {
+    const [away, home] = text.split(/\bv\b/i).map((s) => cleanTeam(s));
+    return { away, home };
+  }
+
   return { away: "", home: "" };
 }
 
@@ -147,13 +152,24 @@ function normalizeSelectionLabel(row) {
     if (/\bunder$/i.test(selection)) return "Under";
   }
 
+  if (marketType === "both_teams_to_score") {
+    if (/^yes$/i.test(selection)) return "Yes";
+    if (/^no$/i.test(selection)) return "No";
+  }
+
   return selection;
 }
 
 function normalizeLineValueForMarket(row) {
   const marketType = normalizeMarketType(row.marketType);
 
-  if (marketType === "moneyline_2way" || marketType === "moneyline_3way") {
+  if (
+    marketType === "moneyline_2way" ||
+    marketType === "moneyline_3way" ||
+    marketType === "both_teams_to_score" ||
+    marketType === "anytime_goalscorer" ||
+    marketType === "anytime_goal_scorer"
+  ) {
     return "";
   }
 
@@ -172,6 +188,15 @@ function normalizeMarketType(value = "") {
   if (text === "player_rebounds") return "player_rebounds";
   if (text === "player_threes") return "player_threes";
   if (text === "player_pra") return "player_pra";
+  if (text === "player_hits") return "player_hits";
+  if (text === "player_total_bases") return "player_total_bases";
+  if (text === "player_home_runs") return "player_home_runs";
+  if (text === "player_rbis") return "player_rbis";
+  if (text === "player_strikeouts") return "player_strikeouts";
+  if (text === "player_shots_on_goal") return "player_shots_on_goal";
+  if (text === "anytime_goalscorer") return "anytime_goalscorer";
+  if (text === "anytime_goal_scorer") return "anytime_goalscorer";
+  if (text === "both_teams_to_score") return "both_teams_to_score";
 
   return text;
 }
@@ -183,6 +208,12 @@ function isPlayerPropMarket(marketType = "") {
     "player_rebounds",
     "player_threes",
     "player_pra",
+    "player_hits",
+    "player_total_bases",
+    "player_home_runs",
+    "player_rbis",
+    "player_strikeouts",
+    "player_shots_on_goal",
   ].includes(marketType);
 }
 
@@ -195,6 +226,7 @@ function buildSubjectKey(row) {
 
   const selection = cleanText(row.selectionNormalized || row.selectionRaw)
     .replace(/\b(over|under)\b/gi, " ")
+    .replace(/\bto score\b/gi, " ")
     .replace(/[+-]?\d+(\.\d+)?/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -211,3 +243,4 @@ function cleanText(value = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
+

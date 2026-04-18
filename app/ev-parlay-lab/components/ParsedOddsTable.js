@@ -180,11 +180,12 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
                         <td style={{ ...tdStyle, background: zebraBg }}>
               <div style={eventCellStyle}>
                 <div style={eventTextStyle}>{row.eventLabelRaw || "—"}</div>
-                <input
-                  value={row.eventLabelRaw || ""}
-                  onChange={(e) => onUpdateRow(row.id, { eventLabelRaw: e.target.value })}
-                  style={eventInputStyle}
-                />
+                  <textarea
+                    value={row.eventLabelRaw || ""}
+                    onChange={(e) => onUpdateRow(row.id, { eventLabelRaw: e.target.value })}
+                    style={eventTextAreaStyle}
+                    rows={2}
+                  />
               </div>
             </td>
 
@@ -213,14 +214,16 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
             </td>
 
             <td style={{ ...tdStyle, background: zebraBg }}>
-              <input
+              <textarea
                 value={row.selectionNormalized || ""}
                 onChange={(e) =>
                   onUpdateRow(row.id, { selectionNormalized: e.target.value })
                 }
-                style={inputStyle}
+                style={multiLineInputStyle}
+                rows={2}
               />
             </td>
+
 
             <td style={{ ...tdStyle, background: zebraBg }}>
               <input
@@ -580,6 +583,22 @@ const inputStyle = {
   background: "#fff",
 };
 
+  const multiLineInputStyle = {
+    width: "100%",
+    minWidth: 140,
+    minHeight: 56,
+    padding: 6,
+    borderRadius: 6,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    font: "inherit",
+    lineHeight: 1.25,
+    resize: "vertical",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+  };
+
+
 const smallInputStyle = {
   width: 90,
   padding: 6,
@@ -618,6 +637,21 @@ const eventInputStyle = {
   border: "1px solid #ccc",
   background: "#fff",
 };
+
+const eventTextAreaStyle = {
+  width: "100%",
+  minHeight: 56,
+  padding: 6,
+  borderRadius: 6,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  font: "inherit",
+  lineHeight: 1.25,
+  resize: "vertical",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+};
+
 
 const dangerButtonStyle = {
   background: "#fef2f2",

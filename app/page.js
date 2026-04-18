@@ -409,11 +409,24 @@ export default function Home() {
     }
   }, [rows, uploadOwner, uploadBookmaker, changelog]);
 
-  const rowsWithWarnings = useMemo(() => {
+    const rowsWithWarnings = useMemo(() => {
     const enriched = rows.map(enrichRow);
+
+    // Step 1: duplicates
     const withDuplicates = addDuplicateWarnings(enriched);
-    return addLikelyHedgeFlags(withDuplicates);
+
+    // Step 2: hedge detection (CRITICAL FIX)
+    const withHedges = addLikelyHedgeFlags(withDuplicates);
+
+    // Step 3: GUARANTEE hedge fields persist
+    return withHedges.map(row => ({
+      ...row,
+      likelyHedge: row.likelyHedge || "N",
+      hedgeGroupId: row.hedgeGroupId || "",
+      guaranteedProfit: row.guaranteedProfit || "N",
+    }));
   }, [rows]);
+
   
   function rowNeedsReview(row) {
     const parseWarningText = String(row?.parseWarning || "").toLowerCase();

@@ -175,65 +175,57 @@ function computeReviewReasons(row) {
   if (row.hedgeGroupId) reasons.push("In hedge group");
   if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) reasons.push("Guaranteed profit");
 
-  return reasons.slice(0, 4).join(" • ");
+  return reasons.slice(0, 4).join(" â€¢ ");
 }
 
 export function enrichRow(row) {
   const normalizedFixture = normalizeTeamNames(row.fixtureEvent);
   const normalizedSelection = normalizeTeamNames(row.selection);
   const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
-    const canonical = canonicalizeSelectionFields({
+
+  const canonical = canonicalizeSelectionFields({
     ...row,
     bookmaker: normalizedBookmaker,
     fixtureEvent: normalizedFixture,
     selection: normalizedSelection,
   });
 
-  
+  const confidenceFlag = computeConfidenceFlag(row);
+  const likelyParserIssue = computeLikelyParserIssue(row);
 
   const needsReview =
     row.reviewResolved !== "Y" &&
     (
       row.likelyParserIssue === "Y" ||
+      likelyParserIssue === "Y" ||
       !row.sportLeague ||
-      (!row.oddsUS && String(row.bookmaker || "") !== "Kalshi") ||
+      (!row.oddsUS && String(normalizedBookmaker || "") !== "Kalshi") ||
       row.oddsSource === "Calculated" ||
       !!row.parseWarning
     );
 
-  const confidenceFlag = computeConfidenceFlag(row);
-  const likelyParserIssue = computeLikelyParserIssue(row);
+  const resolvedSportLeague =
+    row.sportLeague ||
+    detectLeague({
+      cleaned: row.sourceText || "",
+      selection: normalizedSelection,
+      marketDetail: row.marketDetail || "",
+      fixtureEvent: normalizedFixture,
+      isParlay: String(row.betType || "").toLowerCase() === "parlay",
+    });
+
+  const finalReviewLater =
+    needsReview || confidenceFlag !== "High" ? "Y" : (row.reviewLater || "N");
 
   const scoredRow = {
-    ...row,
-    confidenceFlag,
-    likelyParserIssue,
-  };
-
-  const reviewPriority = computeReviewPriority(scoredRow);
-  const reviewBucket = computeReviewBucket({ ...scoredRow, reviewPriority });
-  const reviewReasons = computeReviewReasons({ ...scoredRow, reviewPriority });
-
-  return {
     ...row,
     bookmaker: normalizedBookmaker,
     fixtureEvent: normalizedFixture,
     selection: normalizedSelection,
-    
-    sportLeague:
-    row.sportLeague ||
-    detectLeague({
-      selection: normalizedSelection,
-      marketDetail: row.marketDetail,
-      fixtureEvent: normalizedFixture,
-      confidenceFlag,
-      likelyParserIssue,
-      reviewLater:
-        needsReview || likelyParserIssue === "Y" || confidenceFlag !== "High"
-          ? "Y"
-          : (row.reviewLater || "N"),
-    }),
-    
+    sportLeague: resolvedSportLeague,
+    confidenceFlag,
+    likelyParserIssue,
+    reviewLater: finalReviewLater,
     canonicalBookmaker: canonical.canonicalBookmaker || normalizedBookmaker,
     canonicalFixture: canonical.canonicalFixture || canonicalizeFixture(normalizedFixture),
     canonicalFixtureKey: getCanonicalFixtureKey(normalizedFixture),
@@ -251,22 +243,22 @@ export function enrichRow(row) {
     canonicalSelectionKey: canonical.canonicalSelectionKey || "",
     canonicalHedgeKey: canonical.canonicalHedgeKey || "",
     canonicalOppositeKey: canonical.canonicalOppositeKey || "",
-    confidenceFlag,
-    likelyParserIssue,
+  };
+
+  const reviewPriority = computeReviewPriority(scoredRow);
+  const reviewBucket = computeReviewBucket({ ...scoredRow, reviewPriority });
+  const reviewReasons = computeReviewReasons({ ...scoredRow, reviewPriority });
+
+  return {
+    ...scoredRow,
     reviewPriority,
     reviewBucket,
     reviewReasons,
-    reviewLater:
-      needsReview || likelyParserIssue === "Y" || confidenceFlag !== "High"
-        ? "Y"
-        : (row.reviewLater || "N"),
-    reviewLater: needsReview ? "Y" : (row.reviewLater || "N"),
+    reviewLater: finalReviewLater,
     exported: row.exported || "N",
     archived: row.archived || "N",
   };
 }
-
-
 
 const shared = {
   emptyParsed,

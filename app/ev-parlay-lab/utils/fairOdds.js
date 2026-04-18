@@ -82,10 +82,18 @@ function getExpectedOutcomeCount(market) {
     marketType === "player_assists" ||
     marketType === "player_rebounds" ||
     marketType === "player_threes" ||
-    marketType === "player_pra"
+    marketType === "player_pra" ||
+    marketType === "player_hits" ||
+    marketType === "player_total_bases" ||
+    marketType === "player_home_runs" ||
+    marketType === "player_rbis" ||
+    marketType === "player_strikeouts" ||
+    marketType === "player_shots_on_goal" ||
+    marketType === "both_teams_to_score"
   ) {
     return 2;
   }
 
   return 2;
 }
+

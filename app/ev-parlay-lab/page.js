@@ -238,6 +238,7 @@ const marketBundle = useMemo(() => buildCanonicalMarkets(rowsWithManualMatches),
     });
   }, [rowsWithManualMatches, marketBundle.markets, fairOddsBundle, filters]);
 
+
   const parlayCandidates = Array.isArray(parlayEngineOutput)
     ? parlayEngineOutput
     : parlayEngineOutput?.parlays || [];
@@ -409,6 +410,7 @@ function applyManualMatchOverrides(rows, manualMatches) {
   });
 }
 
+
 function buildManualMatchCandidates(rows, manualMatches) {
   if (!Array.isArray(rows) || !rows.length) return [];
 
@@ -467,6 +469,7 @@ function buildManualMatchCandidates(rows, manualMatches) {
         thresholdSortValue: buildThresholdSortValue(row),
         matchScore: computeMatchScore(sourceRow, row),
       });
+
     }
 
     const targetBooks = Array.from(groupedByBook.entries()).map(([sportsbook, options]) => ({
@@ -591,15 +594,13 @@ function computeMatchScore(sourceRow, targetRow) {
     return Number.POSITIVE_INFINITY;
   }
 
-  // Key logic:
-  // Prefer closest ladder ABOVE source (e.g. 4.5 → 5)
   if (targetVal >= sourceVal) {
     return targetVal - sourceVal;
   }
 
-  // Penalize undershooting ladder (e.g. 4.5 → 4)
   return (sourceVal - targetVal) + 0.5;
 }
+
 
 function hasMeaningfulBaseOverlap(a, b) {
   if (!a || !b) return false;

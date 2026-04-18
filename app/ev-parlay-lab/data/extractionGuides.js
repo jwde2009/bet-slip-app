@@ -70,7 +70,7 @@ export const EXTRACTION_GUIDES = {
     avoid: "Full-page copy with promos, nav, and unrelated article text",
     command: 'copy(document.querySelector("main")?.innerText || document.body.innerText)',
     steps: [
-      "Open the TheScoreBet odds page.",
+      "Open the TheScore odds page.",
       "Open browser DevTools, then go to the Console tab.",
       "Click Copy Command below, then paste it into the console.",
       "Paste the copied sportsbook text into EV Parlay Lab.",

@@ -1,4 +1,4 @@
-import { decimalToAmerican } from "../odds";
+﻿import { decimalToAmerican } from "../odds";
 
 let nextId = 1;
 
@@ -125,7 +125,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
   for (let i = startIndex; i < lines.length; i += 1) {
     const line = normalizeLine(lines[i]);
 
-    if (/^Money Line\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Money Line\s*[â€“-]\s*(Match|Game)$/i.test(line)) {
       const parsed = parseMoneyLineSection(lines, i + 1, away, home);
       if (parsed) {
         result.mlAwayDec = parsed.awayDec;
@@ -135,7 +135,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Handicap\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Handicap\s*[â€“-]\s*(Match|Game)$/i.test(line)) {
       const parsed = parseHandicapSection(lines, i + 1, away, home);
       if (parsed) {
         result.spreadAwayLine = parsed.awayLine;
@@ -146,7 +146,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Total\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Total\s*[â€“-]\s*(Match|Game)$/i.test(line)) {
       const parsed = parseTotalSection(lines, i + 1);
       if (parsed) {
         result.totalLine = parsed.totalLine;
@@ -305,17 +305,8 @@ function findPlayerPropEnd(lines, startIndex) {
 
 function findFirstPinnacleSectionHeader(lines, startIndex) {
   for (let i = startIndex; i < lines.length; i += 1) {
-    const text = normalizeLine(lines[i]);
-
-    if (
-      /money line/i.test(text) ||
-      /handicap/i.test(text) ||
-      /^total\b/i.test(text)
-    ) {
-      return i;
-    }
+    if (isSectionHeader(lines[i])) return i;
   }
-
   return startIndex;
 }
 
@@ -411,7 +402,7 @@ function inferSportFromText(text = "") {
 
 function normalizeLine(value) {
   return String(value || "")
-    .replace(/âˆ’|−|\u2212/g, "-")
+    .replace(/Ã¢Ë†â€™|âˆ’|\u2212/g, "-")
     .replace(/\u00A0/g, " ")
     .replace(/\t+/g, " ")
     .replace(/\s+/g, " ")
@@ -459,7 +450,7 @@ function looksLikeTeamName(value) {
   }
 
   if (
-    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|español|suomi|français|italian|日本語|한국어|português|русский|svenska|简体中文|繁體中文|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|see more|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss)$/i.test(
+    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|espaÃ±ol|suomi|franÃ§ais|italian|æ—¥æœ¬èªž|í•œêµ­ì–´|portuguÃªs|Ñ€ÑƒÑÑÐºÐ¸Ð¹|svenska|ç®€ä½“ä¸­æ–‡|ç¹é«”ä¸­æ–‡|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|see more|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss)$/i.test(
       text
     )
   ) {
