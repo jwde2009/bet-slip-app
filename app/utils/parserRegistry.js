@@ -1,6 +1,6 @@
 // app/utils/parserRegistry.js
 
-import { parseBetMgmSlip } from "./parseBetMgm";
+import { parseBetMgmSlip } from "./parseBetMGM";
 import { parseDraftKingsLikeSlip } from "./parseDraftKings";
 import { parseFanDuelSlip } from "./parseFanDuel";
 import { parseCaesarsSlip } from "./parseCaesars";

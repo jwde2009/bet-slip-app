@@ -321,15 +321,69 @@ function parseGameBlock(block, event = "") {
     mlAway: null,
     mlHome: null,
     mlDraw: null,
+    playerPropRows: [],
   };
 
   const cleaned = block
     .map((line) => normalizeLine(line))
     .filter((line) => !isIgnorableMarketLine(line));
 
+  // Landing-page grid format:
+  // Team A / AT / Team B / spread / odds / O / total / odds / ML / spread / odds / U / total / odds / ML
+  for (let i = 0; i < cleaned.length - 13; i += 1) {
+    const maybeAway = cleaned[i];
+    const maybeAt = cleaned[i + 1];
+    const maybeHome = cleaned[i + 2];
+
+    if (!looksLikeTeamLine(maybeAway) || !isAtMarker(maybeAt) || !looksLikeTeamLine(maybeHome)) {
+      continue;
+    }
+
+    const spreadA = parseSpreadLine(cleaned[i + 3]);
+    const spreadAOdds = parseAmericanOdds(cleaned[i + 4]);
+    const overMarker = cleaned[i + 5];
+    const totalLine = parseTotalNumber(cleaned[i + 6]);
+    const overOdds = parseAmericanOdds(cleaned[i + 7]);
+    const mlA = parseAmericanOdds(cleaned[i + 8]);
+
+    const spreadB = parseSpreadLine(cleaned[i + 9]);
+    const spreadBOdds = parseAmericanOdds(cleaned[i + 10]);
+    const underMarker = cleaned[i + 11];
+    const totalLine2 = parseTotalNumber(cleaned[i + 12]);
+    const underOdds = parseAmericanOdds(cleaned[i + 13]);
+    const mlB = parseAmericanOdds(cleaned[i + 14]);
+
+    if (
+      spreadA !== null &&
+      spreadAOdds !== null &&
+      /^O$/i.test(overMarker) &&
+      totalLine !== null &&
+      overOdds !== null &&
+      mlA !== null &&
+      spreadB !== null &&
+      spreadBOdds !== null &&
+      /^U$/i.test(underMarker) &&
+      totalLine2 !== null &&
+      underOdds !== null &&
+      mlB !== null
+    ) {
+      result.spreadAwayLine = spreadA;
+      result.spreadAwayOdds = spreadAOdds;
+      result.totalLine = totalLine;
+      result.overOdds = overOdds;
+      result.mlAway = mlA;
+
+      result.spreadHomeLine = spreadB;
+      result.spreadHomeOdds = spreadBOdds;
+      result.underOdds = underOdds;
+      result.mlHome = mlB;
+
+      return result;
+    }
+  }
+
   for (let i = 0; i < cleaned.length - 1; i += 1) {
     const current = cleaned[i];
-    const next = cleaned[i + 1];
 
     if (/^Game$/i.test(current) && sport !== "SOCCER") {
       const awayLine = parseSpreadLine(cleaned[i + 3]);
@@ -365,6 +419,7 @@ function parseGameBlock(block, event = "") {
         result.totalLine = totalLine;
         result.overOdds = overOdds;
         result.mlAway = awayMl;
+
         result.spreadHomeLine = homeLine;
         result.spreadHomeOdds = homeSpreadOdds;
         result.underOdds = underOdds;
@@ -396,7 +451,7 @@ function parseGameBlock(block, event = "") {
       const player = current.replace(/\s+O\/U$/i, "").trim();
       const marketMeta = inferDraftKingsOuMarketType(cleaned, i);
 
-      for (let j = i + 1; j < Math.min(cleaned.length - 5, i + 120); j += 1) {
+      for (let j = i + 1; j < Math.min(cleaned.length - 6, i + 120); j += 1) {
         if (normalizeLine(cleaned[j]) !== player) continue;
 
         const markerOver = cleaned[j + 1];
@@ -415,7 +470,6 @@ function parseGameBlock(block, event = "") {
           oddsUnder !== null &&
           Math.abs(lineOver - lineUnder) < 0.001
         ) {
-          result.playerPropRows = result.playerPropRows || [];
           result.playerPropRows.push({
             player,
             marketType: marketMeta,

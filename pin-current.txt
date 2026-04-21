@@ -305,8 +305,17 @@ function findPlayerPropEnd(lines, startIndex) {
 
 function findFirstPinnacleSectionHeader(lines, startIndex) {
   for (let i = startIndex; i < lines.length; i += 1) {
-    if (isSectionHeader(lines[i])) return i;
+    const text = normalizeLine(lines[i]);
+
+    if (
+      /money line/i.test(text) ||
+      /handicap/i.test(text) ||
+      /^total\b/i.test(text)
+    ) {
+      return i;
+    }
   }
+
   return startIndex;
 }
 

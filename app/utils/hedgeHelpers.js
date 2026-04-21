@@ -87,7 +87,7 @@ export function classifyHedgeQuality(a, b) {
 
   const sum = impliedA + impliedB;
 
-  if (sum < 0.985) return "Arb";
+  if (sum < 0.98) return "Arb";
   if (sum <= 1.04) return "Strong";
   return "Basic";
 }

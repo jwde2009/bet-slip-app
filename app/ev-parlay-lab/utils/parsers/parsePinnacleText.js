@@ -125,7 +125,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
   for (let i = startIndex; i < lines.length; i += 1) {
     const line = normalizeLine(lines[i]);
 
-    if (/^Money Line\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Money Line\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseMoneyLineSection(lines, i + 1, away, home);
       if (parsed) {
         result.mlAwayDec = parsed.awayDec;
@@ -135,7 +135,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Handicap\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Handicap\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseHandicapSection(lines, i + 1, away, home);
       if (parsed) {
         result.spreadAwayLine = parsed.awayLine;
@@ -146,7 +146,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Total\s*[–-]\s*(Match|Game)$/i.test(line)) {
+    if (/^Total\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseTotalSection(lines, i + 1);
       if (parsed) {
         result.totalLine = parsed.totalLine;

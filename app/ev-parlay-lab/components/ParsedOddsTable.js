@@ -12,7 +12,10 @@ const MARKET_ORDER = {
   player_rebounds: 12,
   player_threes: 13,
   player_pra: 14,
-};
+  player_goals: 15,
+  player_shots_on_goal: 16,
+  player_saves: 17,
+  };
 
 export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
   const groupedRows = useMemo(() => buildGroupedRows(rows), [rows]);
@@ -80,7 +83,7 @@ export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
                   <th style={thStyle}>Selection</th>
                   <th style={thStyle}>Line</th>
                   <th style={thStyle}>Odds</th>
-                  <th style={thStyle}>Sharp</th>
+                  <th style={thStyle}>Sharp?</th>
                   <th style={thStyle}>Confidence</th>
                   <th style={thStyle}>Warnings</th>
                   <th style={thStyle}>Delete</th>
@@ -157,7 +160,7 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
     <>
       <tr>
         <td colSpan={13} style={marketHeaderStyle}>
-          {marketGroup.market}
+          {formatMarketLabel(marketGroup.market)}
         </td>
       </tr>
 
@@ -167,15 +170,16 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
         return (
           <tr key={row.id} style={{ background: zebraBg }}>
             <td style={{ ...tdStyle, background: zebraBg }}>
-  {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
-</td>
+              {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
+            </td>
 
-      <td style={{ ...tdStyle, background: zebraBg }}>
-  {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
-</td>
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              {row.sportsbook || "—"}
+            </td>
 
-<td style={{ ...tdStyle, background: zebraBg }}>{row.sportsbook}</td>
-<td style={{ ...tdStyle, background: zebraBg }}>{row.sport}</td>
+            <td style={{ ...tdStyle, background: zebraBg }}>
+              {row.sport || "—"}
+            </td>
 
                         <td style={{ ...tdStyle, background: zebraBg }}>
               <div style={eventCellStyle}>
@@ -201,27 +205,32 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
                 onChange={(e) => onUpdateRow(row.id, { marketType: e.target.value })}
                 style={inputStyle}
               >
-                <option value="moneyline_2way">moneyline_2way</option>
-                <option value="moneyline_3way">moneyline_3way</option>
-                <option value="spread">spread</option>
-                <option value="total">total</option>
-                <option value="player_points">player_points</option>
-                <option value="player_assists">player_assists</option>
-                <option value="player_rebounds">player_rebounds</option>
-                <option value="player_threes">player_threes</option>
-                <option value="player_pra">player_pra</option>
+                <option value="moneyline_2way">Moneyline</option>
+                <option value="moneyline_3way">Moneyline (3-way)</option>
+                <option value="spread">Spread</option>
+                <option value="total">Total</option>
+                <option value="player_points">Points</option>
+                <option value="player_assists">Assists</option>
+                <option value="player_rebounds">Rebounds</option>
+                <option value="player_threes">Threes</option>
+                <option value="player_pra">PRA</option>
+                <option value="player_goals">Goals</option>
+                <option value="player_shots_on_goal">Shots on Goal</option>
+                <option value="player_saves">Saves</option>
               </select>
             </td>
 
             <td style={{ ...tdStyle, background: zebraBg }}>
-              <textarea
-                value={row.selectionNormalized || ""}
-                onChange={(e) =>
-                  onUpdateRow(row.id, { selectionNormalized: e.target.value })
-                }
-                style={multiLineInputStyle}
-                rows={2}
-              />
+              {(() => {
+                const [player, side] = (row.selectionNormalized || "").split(" | ");
+
+                return (
+                  <div style={{ lineHeight: 1.2 }}>
+                    <div>{player || row.selectionNormalized || ""}</div>
+                    <div>{side || ""}</div>
+                  </div>
+                );
+              })()}
             </td>
 
 
@@ -229,14 +238,14 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
               <input
                 type="text"
                 value={
-  row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
-    ? "ML"
-    : typeof row.lineValueInput === "string"
-    ? row.lineValueInput
-    : Number.isFinite(row.lineValue)
-    ? String(row.lineValue)
-    : ""
-}
+                row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
+                  ? "ML"
+                  : typeof row.lineValueInput === "string"
+                  ? row.lineValueInput
+                  : Number.isFinite(row.lineValue)
+                  ? String(row.lineValue)
+                  : ""
+              }
                 onChange={(e) => {
                   if (row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way") {
                     return;
@@ -257,13 +266,15 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
             <td style={{ ...tdStyle, background: zebraBg }}>
               <input
                 type="text"
-                value={
-  typeof row.oddsAmericanInput === "string"
-    ? row.oddsAmericanInput
-    : Number.isFinite(row.oddsAmerican)
-    ? String(row.oddsAmerican)
-    : ""
-}
+                  value={
+                    typeof row.oddsAmericanInput === "string"
+                      ? row.oddsAmericanInput
+                      : Number.isFinite(row.oddsAmerican)
+                      ? row.oddsAmerican > 0
+                        ? `+${row.oddsAmerican}`
+                        : String(row.oddsAmerican)
+                      : ""
+                  }
                 onChange={(e) => {
                   const next = parseEditableAmericanOddsState(e.target.value);
 
@@ -451,6 +462,25 @@ function getConfidencePillStyle(confidence) {
   }
 
   return { ...base, background: "#374151", color: "#f9fafb" };
+}
+
+function formatMarketLabel(value) {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "moneyline_2way") return "Moneyline";
+  if (text === "moneyline_3way") return "Moneyline (3-way)";
+  if (text === "spread") return "Spread";
+  if (text === "total") return "Total";
+  if (text === "player_points") return "Points";
+  if (text === "player_assists") return "Assists";
+  if (text === "player_rebounds") return "Rebounds";
+  if (text === "player_threes") return "Threes";
+  if (text === "player_pra") return "PRA";
+  if (text === "player_goals") return "Goals";
+  if (text === "player_shots_on_goal") return "Shots on Goal";
+  if (text === "player_saves") return "Saves";
+
+  return value || "";
 }
 
 const sectionStyle = {

@@ -18,7 +18,23 @@ function cleanValue(value = "") {
 
 function toNumberString(value = "") {
   const m = String(value || "").match(/[+-]?\d+(\.\d+)?/);
-  return m ? m[0] : "";
+  if (m) return m[0];
+
+  // 🔥 NEW: handle words like "five and a half"
+  const text = String(value || "").toLowerCase();
+
+  if (text.includes("half")) {
+    const base = text.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    if (base) {
+      const map = {
+        one: 1, two: 2, three: 3, four: 4, five: 5,
+        six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+      };
+      return `${map[base[1]] + 0.5}`;
+    }
+  }
+
+  return "";
 }
 
 function inferMarketLabel(selection = "", marketDetail = "", betType = "") {
