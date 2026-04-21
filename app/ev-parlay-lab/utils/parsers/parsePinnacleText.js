@@ -37,28 +37,104 @@ export function parsePinnacleText(rawText = "", context = {}) {
 function parsePinnacleLandingGames(lines) {
   const rows = [];
 
-  for (let i = 0; i < lines.length - 14; i += 1) {
+  for (let i = 0; i < lines.length - 8; i += 1) {
     const away = lines[i];
     const home = lines[i + 1];
 
     if (!looksLikeTeamName(away) || !looksLikeTeamName(home)) continue;
 
-    const parsed = tryParseMainGameBlock(lines, i + 2);
-    if (!parsed) continue;
-
     const event = `${away} @ ${home}`;
     const sport = inferSportFromText(event);
 
-    rows.push(
-      makeRow({ event, selection: away, marketType: "spread", lineValue: parsed.spreadAwayLine, decimalOdds: parsed.spreadAwayDec, sport, league: "" }),
-      makeRow({ event, selection: away, marketType: "moneyline_2way", lineValue: null, decimalOdds: parsed.mlAwayDec, sport, league: "" }),
-      makeRow({ event, selection: "Over", marketType: "total", lineValue: parsed.totalLine, decimalOdds: parsed.overDec, sport, league: "" }),
-      makeRow({ event, selection: home, marketType: "spread", lineValue: parsed.spreadHomeLine, decimalOdds: parsed.spreadHomeDec, sport, league: "" }),
-      makeRow({ event, selection: home, marketType: "moneyline_2way", lineValue: null, decimalOdds: parsed.mlHomeDec, sport, league: "" }),
-      makeRow({ event, selection: "Under", marketType: "total", lineValue: parsed.totalLine, decimalOdds: parsed.underDec, sport, league: "" }),
-    );
+    const parsed =
+      tryParseMainGameBlock(lines, i + 2) ||
+      tryParseNhlLandingBlock(lines, i + 2);
 
-    i += 8;
+    if (!parsed) continue;
+
+    if (parsed.mlAwayDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: away,
+          marketType: "moneyline_2way",
+          lineValue: null,
+          decimalOdds: parsed.mlAwayDec,
+          sport,
+          league: "",
+        })
+      );
+    }
+
+    if (parsed.mlHomeDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: home,
+          marketType: "moneyline_2way",
+          lineValue: null,
+          decimalOdds: parsed.mlHomeDec,
+          sport,
+          league: "",
+        })
+      );
+    }
+
+    if (parsed.spreadAwayLine !== null && parsed.spreadAwayDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: away,
+          marketType: "spread",
+          lineValue: parsed.spreadAwayLine,
+          decimalOdds: parsed.spreadAwayDec,
+          sport,
+          league: "",
+        })
+      );
+    }
+
+    if (parsed.spreadHomeLine !== null && parsed.spreadHomeDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: home,
+          marketType: "spread",
+          lineValue: parsed.spreadHomeLine,
+          decimalOdds: parsed.spreadHomeDec,
+          sport,
+          league: "",
+        })
+      );
+    }
+
+    if (parsed.totalLine !== null && parsed.overDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Over",
+          marketType: "total",
+          lineValue: parsed.totalLine,
+          decimalOdds: parsed.overDec,
+          sport,
+          league: "",
+        })
+      );
+    }
+
+    if (parsed.totalLine !== null && parsed.underDec !== null) {
+      rows.push(
+        makeRow({
+          event,
+          selection: "Under",
+          marketType: "total",
+          lineValue: parsed.totalLine,
+          decimalOdds: parsed.underDec,
+          sport,
+          league: "",
+        })
+      );
+    }
   }
 
   return rows;
@@ -125,7 +201,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
   for (let i = startIndex; i < lines.length; i += 1) {
     const line = normalizeLine(lines[i]);
 
-    if (/^Money Line\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^Money Line\s*[â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseMoneyLineSection(lines, i + 1, away, home);
       if (parsed) {
         result.mlAwayDec = parsed.awayDec;
@@ -135,7 +211,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Handicap\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^Handicap\s*[â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseHandicapSection(lines, i + 1, away, home);
       if (parsed) {
         result.spreadAwayLine = parsed.awayLine;
@@ -146,7 +222,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
 
-    if (/^Total\s*[–-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^Total\s*[â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
       const parsed = parseTotalSection(lines, i + 1);
       if (parsed) {
         result.totalLine = parsed.totalLine;
@@ -320,8 +396,9 @@ function findFirstPinnacleSectionHeader(lines, startIndex) {
 }
 
 function tryParseMainGameBlock(lines, startIndex) {
-  for (let shift = 0; shift <= 6; shift += 1) {
+  for (let shift = 0; shift <= 8; shift += 1) {
     const j = startIndex + shift;
+
     const spreadAwayLine = parseSignedNumber(lines[j]);
     const spreadAwayDec = parseDecimal(lines[j + 1]);
     const spreadHomeLine = parseSignedNumber(lines[j + 2]);
@@ -334,21 +411,144 @@ function tryParseMainGameBlock(lines, startIndex) {
     const underDec = parseDecimal(lines[j + 9]);
 
     if (
-      spreadAwayLine !== null && spreadAwayDec !== null &&
-      spreadHomeLine !== null && spreadHomeDec !== null &&
-      mlAwayDec !== null && mlHomeDec !== null &&
-      total1 !== null && overDec !== null &&
-      total2 !== null && underDec !== null
+      spreadAwayLine !== null &&
+      spreadAwayDec !== null &&
+      spreadHomeLine !== null &&
+      spreadHomeDec !== null &&
+      mlAwayDec !== null &&
+      mlHomeDec !== null &&
+      total1 !== null &&
+      overDec !== null &&
+      total2 !== null &&
+      underDec !== null &&
+      Math.abs(total1 - total2) < 0.0001
     ) {
-      return { spreadAwayLine, spreadAwayDec, spreadHomeLine, spreadHomeDec, mlAwayDec, mlHomeDec, totalLine: total1, overDec, underDec };
+      return {
+        spreadAwayLine,
+        spreadAwayDec,
+        spreadHomeLine,
+        spreadHomeDec,
+        mlAwayDec,
+        mlHomeDec,
+        totalLine: total1,
+        overDec,
+        underDec,
+      };
     }
   }
+
   return null;
+}
+
+function tryParseNhlLandingBlock(lines, startIndex) {
+  const window = lines.slice(startIndex, startIndex + 18).map(normalizeLine);
+
+  let mlAwayDec = null;
+  let mlHomeDec = null;
+  let mlIndex = -1;
+
+  for (let i = 0; i < window.length - 1; i += 1) {
+    const first = parseDecimal(window[i]);
+    const second = parseDecimal(window[i + 1]);
+
+    if (first !== null && second !== null) {
+      mlAwayDec = first;
+      mlHomeDec = second;
+      mlIndex = i;
+      break;
+    }
+  }
+
+  if (mlAwayDec === null || mlHomeDec === null) return null;
+
+  let spreadAwayLine = null;
+  let spreadAwayDec = null;
+  let spreadHomeLine = null;
+  let spreadHomeDec = null;
+  let totalLine = null;
+  let overDec = null;
+  let underDec = null;
+
+  for (let i = mlIndex + 2; i < window.length - 3; i += 1) {
+    const maybeSpreadAwayLine = parseSignedNumber(window[i]);
+    const maybeSpreadAwayDec = parseDecimal(window[i + 1]);
+    const maybeSpreadHomeLine = parseSignedNumber(window[i + 2]);
+    const maybeSpreadHomeDec = parseDecimal(window[i + 3]);
+
+    if (
+      maybeSpreadAwayLine !== null &&
+      maybeSpreadAwayDec !== null &&
+      maybeSpreadHomeLine !== null &&
+      maybeSpreadHomeDec !== null
+    ) {
+      spreadAwayLine = maybeSpreadAwayLine;
+      spreadAwayDec = maybeSpreadAwayDec;
+      spreadHomeLine = maybeSpreadHomeLine;
+      spreadHomeDec = maybeSpreadHomeDec;
+
+      for (let k = i + 4; k < window.length - 3; k += 1) {
+        const total1 = parseUnsignedNumber(window[k]);
+        const over = parseDecimal(window[k + 1]);
+        const total2 = parseUnsignedNumber(window[k + 2]);
+        const under = parseDecimal(window[k + 3]);
+
+        if (
+          total1 !== null &&
+          over !== null &&
+          total2 !== null &&
+          under !== null &&
+          Math.abs(total1 - total2) < 0.0001
+        ) {
+          totalLine = total1;
+          overDec = over;
+          underDec = under;
+          break;
+        }
+      }
+
+      return {
+        spreadAwayLine,
+        spreadAwayDec,
+        spreadHomeLine,
+        spreadHomeDec,
+        mlAwayDec,
+        mlHomeDec,
+        totalLine,
+        overDec,
+        underDec,
+      };
+    }
+  }
+
+  return {
+    spreadAwayLine: null,
+    spreadAwayDec: null,
+    spreadHomeLine: null,
+    spreadHomeDec: null,
+    mlAwayDec,
+    mlHomeDec,
+    totalLine: null,
+    overDec: null,
+    underDec: null,
+  };
 }
 
 function looksLikeSupportedPlayerPropHeader(value) {
   const text = normalizeLine(value);
-  return /\bTotal Points$/i.test(text) || /\bTotal Assists$/i.test(text) || /\bTotal Rebounds$/i.test(text) || /\bTotal Threes Made$/i.test(text) || /\bTotal Pts & Rebs & Asts$/i.test(text);
+
+  return (
+    /\bTotal Points$/i.test(text) ||
+    /\bTotal Assists$/i.test(text) ||
+    /\bTotal Rebounds$/i.test(text) ||
+    /\bTotal Threes Made$/i.test(text) ||
+    /\bTotal Pts & Rebs & Asts$/i.test(text) ||
+    /\bTotal Goals$/i.test(text) ||
+    /\bTotal Saves$/i.test(text) ||
+    /\bTotal Hits$/i.test(text) ||
+    /\bTotal Shots On Goal$/i.test(text) ||
+    /\bTotal Power Play Points$/i.test(text) ||
+    /^(.*?)\s+\((Points|Assists|Rebounds|Goals|Shots On Goal|ShotsOnGoal|Saves)\)(?:\(must start\))?$/i.test(text)
+  );
 }
 
 function parsePlayerPropHeader(value) {
@@ -359,11 +559,26 @@ function parsePlayerPropHeader(value) {
     { regex: /^(.*?)\s+Total Rebounds$/i, marketType: "player_rebounds" },
     { regex: /^(.*?)\s+Total Threes Made$/i, marketType: "player_threes" },
     { regex: /^(.*?)\s+Total Pts & Rebs & Asts$/i, marketType: "player_pra" },
+    { regex: /^(.*?)\s+Total Goals$/i, marketType: "player_goals" },
+    { regex: /^(.*?)\s+Total Saves$/i, marketType: "player_saves" },
+    { regex: /^(.*?)\s+Total Hits$/i, marketType: "player_hits" },
+    { regex: /^(.*?)\s+Total Shots On Goal$/i, marketType: "player_shots_on_goal" },
+    { regex: /^(.*?)\s+Total Power Play Points$/i, marketType: "player_power_play_points" },
+
+    { regex: /^(.*?)\s+\(Points\)(?:\(must start\))?$/i, marketType: "player_points" },
+    { regex: /^(.*?)\s+\(Assists\)(?:\(must start\))?$/i, marketType: "player_assists" },
+    { regex: /^(.*?)\s+\(Rebounds\)(?:\(must start\))?$/i, marketType: "player_rebounds" },
+    { regex: /^(.*?)\s+\(Goals\)(?:\(must start\))?$/i, marketType: "player_goals" },
+    { regex: /^(.*?)\s+\(Shots On Goal\)(?:\(must start\))?$/i, marketType: "player_shots_on_goal" },
+    { regex: /^(.*?)\s+\(ShotsOnGoal\)(?:\(must start\))?$/i, marketType: "player_shots_on_goal" },
+    { regex: /^(.*?)\s+\(Saves\)(?:\(must start\))?$/i, marketType: "player_saves" },
   ];
 
   for (const pattern of patterns) {
     const match = text.match(pattern.regex);
-    if (match) return { player: normalizeLine(match[1]), marketType: pattern.marketType };
+    if (match) {
+      return { player: normalizeLine(match[1]), marketType: pattern.marketType };
+    }
   }
 
   return null;
@@ -371,7 +586,12 @@ function parsePlayerPropHeader(value) {
 
 function parsePlayerOverUnderLabel(value, side) {
   const text = normalizeLine(value);
-  const regex = side === "over" ? /^Over\s+(\d+(?:\.\d+)?)\b/i : /^Under\s+(\d+(?:\.\d+)?)\b/i;
+
+  const regex =
+    side === "over"
+      ? /^(?:Over|O)\s+(\d+(?:\.\d+)?)\b/i
+      : /^(?:Under|U)\s+(\d+(?:\.\d+)?)\b/i;
+
   const match = text.match(regex);
   return match ? Number(match[1]) : null;
 }
@@ -402,16 +622,21 @@ function makeRow({ event, selection, marketType, lineValue, decimalOdds, sport, 
 
 function inferSportFromText(text = "") {
   const value = String(text).toLowerCase();
+
   if (/soccer|serie a|premier league|internazionale|cagliari|arsenal|chelsea|tottenham|liverpool|man city|man utd/i.test(value)) return "SOCCER";
-  if (/heat|hornets|magic|warriors|suns|knicks|hawks|lakers|rockets|celtics|76ers|spurs|trail blazers|nuggets|timberwolves|cavaliers|raptors/i.test(value)) return "NBA";
-  if (/rangers|bruins|canucks|oilers|leafs|devils|stars|panthers|kraken|lightning|hurricanes/i.test(value)) return "NHL";
+
+  if (/heat|hornets|magic|warriors|suns|knicks|hawks|lakers|rockets|celtics|76ers|spurs|trail blazers|nuggets|timberwolves|cavaliers|raptors|bulls|pacers|bucks|pistons|clippers|kings|mavericks|nets|pelicans|thunder|jazz|wizards/i.test(value)) return "NBA";
+
+  if (/wild|stars|ducks|oilers|canadiens|lightning|bruins|sabres|mammoth|golden knights|kings|avalanche|penguins|flyers|kraken|panthers|hurricanes|leafs|devils|canucks|rangers/i.test(value)) return "NHL";
+
   if (/yankees|dodgers|mets|cubs|astros|braves|phillies|diamondbacks|orioles/i.test(value)) return "MLB";
+
   return "";
 }
 
 function normalizeLine(value) {
   return String(value || "")
-    .replace(/âˆ’|−|\u2212/g, "-")
+    .replace(/Ã¢Ë†â€™|âˆ’|\u2212/g, "-")
     .replace(/\u00A0/g, " ")
     .replace(/\t+/g, " ")
     .replace(/\s+/g, " ")
@@ -459,7 +684,7 @@ function looksLikeTeamName(value) {
   }
 
   if (
-    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|español|suomi|français|italian|日本語|한국어|português|русский|svenska|简体中文|繁體中文|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|see more|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss)$/i.test(
+    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|espaÃ±ol|suomi|franÃ§ais|italian|æ—¥æœ¬èªž|í•œêµ­ì–´|portuguÃªs|Ñ€ÑƒÑÑÐºÐ¸Ð¹|svenska|ç®€ä½“ä¸­æ–‡|ç¹é«”ä¸­æ–‡|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|see more|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss|live|series prices|over|under)$/i.test(
       text
     )
   ) {
@@ -482,7 +707,21 @@ function isSectionHeader(line) {
 }
 
 function parseDecimal(value) {
-  const n = Number(normalizeLine(value));
+  const text = normalizeLine(value);
+
+  if (!text) return null;
+
+  if (/^even$/i.test(text)) return 2.0;
+
+  if (/^[+-]\d+$/.test(text)) {
+    const american = Number(text);
+    if (!Number.isFinite(american) || american === 0) return null;
+
+    if (american > 0) return 1 + american / 100;
+    return 1 + 100 / Math.abs(american);
+  }
+
+  const n = Number(text);
   if (!Number.isFinite(n) || n < 1.01 || n > 100) return null;
   return n;
 }
@@ -512,6 +751,12 @@ function isUnderLabel(value) {
 function parseTotalLabelValue(value) {
   const text = normalizeLine(value);
   const match = text.match(/^(?:Over|Under)\s+(\d+(?:\.\d+)?)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function parseTotalShortLabelValue(value) {
+  const text = normalizeLine(value);
+  const match = text.match(/^[OU]\s*(\d+(?:\.\d+)?)/i);
   return match ? Number(match[1]) : null;
 }
 

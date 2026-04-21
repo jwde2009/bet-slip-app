@@ -34,6 +34,10 @@ export function parseOddsText(rawText, context = {}) {
     console.log("NO RAW TEXT PROVIDED");
     return [];
   }
+  
+  if (sportsbook === "Pinnacle") {
+    return parsePinnacleText(rawText);
+  }
 
   if (sportsbook === "draftkings") {
     const rows = parseDraftKingsText(normalizedRawText, context);
