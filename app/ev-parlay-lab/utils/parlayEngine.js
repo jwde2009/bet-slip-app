@@ -72,31 +72,65 @@ export function buildParlayCandidates({ rows, markets, fairOddsResults, filters 
   );
 
   const combinations = rawCombinations.filter((combo) => {
-  const eventKeys = combo.map((leg) => normalizeEventNameForSameGame(leg.eventName));
-  const uniqueEvents = new Set(eventKeys);
+    const eventKeys = combo.map((leg) => normalizeEventNameForSameGame(leg.eventName));
+    const uniqueEvents = new Set(eventKeys);
 
-  if (filters.forceSameGame) {
-    if (uniqueEvents.size !== 1) {
+    if (filters.forceSameGame) {
+      if (uniqueEvents.size !== 1) {
+        rejectionCounts.sameGameBlocked += 1;
+        return false;
+      }
+    } else if (!filters.allowSameGame) {
+      if (uniqueEvents.size !== combo.length) {
+        rejectionCounts.sameGameBlocked += 1;
+        return false;
+      }
+    }
+
+    const hasOppositeSideConflict = combo.some((leg, idx) =>
+      combo.slice(idx + 1).some((other) => {
+        if (normalizeEventNameForSameGame(leg.eventName) !== normalizeEventNameForSameGame(other.eventName)) {
+          return false;
+        }
+
+        if (String(leg.marketType || "").trim().toLowerCase() !== String(other.marketType || "").trim().toLowerCase()) {
+          return false;
+        }
+
+        const legLabel = String(leg.selectionLabel || "").toLowerCase();
+        const otherLabel = String(other.selectionLabel || "").toLowerCase();
+
+        const legIsOver = /\bover\b/.test(legLabel);
+        const legIsUnder = /\bunder\b/.test(legLabel);
+        const otherIsOver = /\bover\b/.test(otherLabel);
+        const otherIsUnder = /\bunder\b/.test(otherLabel);
+
+        if (!((legIsOver && otherIsUnder) || (legIsUnder && otherIsOver))) {
+          return false;
+        }
+
+        const legLine = Number.isFinite(leg.lineValue) ? Number(leg.lineValue) : null;
+        const otherLine = Number.isFinite(other.lineValue) ? Number(other.lineValue) : null;
+
+        return legLine !== null && otherLine !== null && legLine === otherLine;
+      })
+    );
+
+    if (hasOppositeSideConflict) {
       rejectionCounts.sameGameBlocked += 1;
       return false;
     }
-  } else if (!filters.allowSameGame) {
-    if (uniqueEvents.size !== combo.length) {
-      rejectionCounts.sameGameBlocked += 1;
-      return false;
-    }
-  }
 
-  if (!filters.allowRepeats) {
-    const names = combo.map((leg) => String(leg.selectionLabel || "").toLowerCase());
-    if (new Set(names).size !== names.length) {
-      rejectionCounts.repeatsBlocked += 1;
-      return false;
+    if (!filters.allowRepeats) {
+      const names = combo.map((leg) => String(leg.selectionLabel || "").toLowerCase());
+      if (new Set(names).size !== names.length) {
+        rejectionCounts.repeatsBlocked += 1;
+        return false;
+      }
     }
-  }
 
-  return true;
-});
+    return true;
+  });
 
   const parlays = combinations
     .map((legs, idx) => buildSingleParlayCandidate({ legs, idx, filters }))

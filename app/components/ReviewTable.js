@@ -125,17 +125,26 @@ export default function ReviewTable({
   });
 
   const imageScrollRef = useRef(null);
-useEffect(() => {
-  if (!selectedRowId) return;
+  const selectedRowRef = useRef(null);
+  useEffect(() => {
+    if (!selectedRowId) return;
 
-  setPulseRowId(selectedRowId);
+    setPulseRowId(selectedRowId);
 
-  const timeout = setTimeout(() => {
-    setPulseRowId(null);
-  }, 450);
+    if (selectedRowRef.current) {
+      selectedRowRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
 
-  return () => clearTimeout(timeout);
-}, [selectedRowId]);
+    const timeout = setTimeout(() => {
+      setPulseRowId(null);
+    }, 450);
+
+    return () => clearTimeout(timeout);
+  }, [selectedRowId]);
+
   const closeHoverPreview = () => {
     setHoverPreview({
       rowId: "",
@@ -213,7 +222,7 @@ useEffect(() => {
     { key: "betDate", label: "Bet Date", sortable: true },
     { key: "sportLeague", label: "Sport / League", sortable: true },
     { key: "selection", label: "Selection", sortable: true },
-    { key: "betType", label: "Bet Type", sortable: true },
+    { key: "marketType", label: "Market", sortable: true },
     { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
     { key: "stake", label: "Stake", sortable: true },
     { key: "oddsUS", label: "Odds", sortable: true },
@@ -232,7 +241,7 @@ useEffect(() => {
     { key: "betDate", label: "Bet Date", sortable: true },
     { key: "sportLeague", label: "Sport / League", sortable: true },
     { key: "selection", label: "Selection", sortable: true },
-    { key: "betType", label: "Bet Type", sortable: true },
+    { key: "marketType", label: "Market", sortable: true },
     { key: "betSourceTag", label: "Source Tag", sortable: true },
     { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
     { key: "stake", label: "Stake", sortable: true },
@@ -1339,6 +1348,7 @@ useEffect(() => {
               return (
                 <tr
                   key={row.id}
+                  ref={row.id === selectedRowId ? selectedRowRef : null}
                   onClick={() => {
                     setSelectedRowId(row.id);
 

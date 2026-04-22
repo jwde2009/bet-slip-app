@@ -422,7 +422,7 @@ export default function Home() {
     return withHedges.map(row => ({
       ...row,
       likelyHedge: row.likelyHedge || "N",
-      hedgeGroupId: row.hedgeGroupId || "",
+      hedgeClusterId: row.hedgeClusterId || "",
       guaranteedProfit: row.guaranteedProfit || "N",
     }));
   }, [rows]);
@@ -636,8 +636,13 @@ const counts = {
   function areLikelyOpposites(rowA, rowB) {
   if (!rowA || !rowB) return false;
   if (rowA.id === rowB.id) return false;
-  if (rowA.canonicalResultTarget !== rowB.canonicalResultTarget) return false;
+  if (
+  rowA.canonicalResultTarget &&
+  rowB.canonicalResultTarget &&
+  rowA.canonicalResultTarget !== rowB.canonicalResultTarget
+) return false;
   if (rowA.canonicalSubjectType !== rowB.canonicalSubjectType) return false;
+  if (rowA.canonicalMarketFamily !== rowB.canonicalMarketFamily) return false;
 
   const bookmakerA = String(rowA.bookmaker || "").trim().toLowerCase();
   const bookmakerB = String(rowB.bookmaker || "").trim().toLowerCase();
@@ -681,6 +686,14 @@ const counts = {
   return false;
 }
 
+function makeHedgeDedupKey(row) {
+  return [
+    row.canonicalSelectionKey || "",
+    row.bookmaker || "",
+    row.betId || `${row.stake}|${row.oddsUS}`
+  ].join("|");
+}
+
 function addLikelyHedgeFlags(rowsInput) {
   function impliedProb(odds) {
     const o = Number(odds);
@@ -717,6 +730,31 @@ function addLikelyHedgeFlags(rowsInput) {
         hedgeProfitIfOtherWins: "",
         hedgeClusterLabel: "",
         hedgeClusterSize: "",
+      };
+    }
+
+    const rowDedupKey = makeHedgeDedupKey(row);
+    const matchDedupKey = makeHedgeDedupKey(match);
+
+    if (rowDedupKey === matchDedupKey) {
+      return {
+        ...row,
+        likelyHedge: "N",
+        autoLikelyHedge: "N",
+        hedgePartnerId: "",
+        hedgePartnerBookmaker: "",
+        hedgeClusterId: "",
+        hedgeConfidence: "",
+        hedgeQuality: "",
+        hedgeClusterLabel: "",
+        hedgeClusterSize: "",
+        guaranteedProfit: "N",
+        guaranteedProfitAmount: "",
+        hedgeStake: "",
+        hedgeProfitLow: "",
+        hedgeProfitHigh: "",
+        hedgeProfitIfThisWins: "",
+        hedgeProfitIfOtherWins: "",
       };
     }
 
@@ -839,6 +877,36 @@ function groupHedgeRowsTogether(rowsInput) {
       } else if (event.key.toLowerCase() === "l") {
         event.preventDefault();
         setWinStatusForRow(selectedRowId, "N", true);
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed ✓");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewLater: row.reviewLater === "Y" ? "N" : "Y",
+                  reviewResolved: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Review later toggled");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
       }
     };
 
@@ -1765,6 +1833,8 @@ function groupHedgeRowsTogether(rowsInput) {
 
           <button
             onClick={() => {
+              const currentSelectedRowId = selectedRowId;
+
               setRows((prev) =>
                 prev.map((row) =>
                   selectedIds.includes(row.id)
@@ -1772,7 +1842,12 @@ function groupHedgeRowsTogether(rowsInput) {
                     : row
                 )
               );
+
               showNotice("Selected rows marked reviewed");
+
+              if (currentSelectedRowId) {
+                setTimeout(() => selectNextNeedsReviewAfter(currentSelectedRowId), 0);
+              }
             }}
             style={smallButtonStyle}
           >

@@ -109,6 +109,7 @@ addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "St. Louis Blues", ["stl", "st louis", 
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Tampa Bay Lightning", ["tb", "tbl", "tampa bay", "lightning", "bolts"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Toronto Maple Leafs", ["tor", "toronto", "maple leafs", "leafs"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["utah", "utah hockey club", "utah hc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["utah mammoth", "mammoth"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vancouver Canucks", ["van", "vancouver", "canucks"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vegas Golden Knights", ["vgk", "vegas", "golden knights", "knights"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Washington Capitals", ["wsh", "was", "washington", "capitals", "caps"]);

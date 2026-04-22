@@ -33,20 +33,21 @@ export function parseBetMGMText(rawText = "", context = {}) {
 }
 
 function parseLandingGames(lines, sport) {
+  console.log("LANDING LOOP HIT");
   const rows = [];
 
-  for (let i = 0; i < lines.length - 12; i += 1) {
-    const away = lines[i];
-    const home = lines[i + 1];
+  for (let i = 0; i < lines.length - 14; i += 1) {
+    if (!isLikelyVsLine(lines[i])) continue;
 
-    if (!isLikelyTeamName(away) || !isLikelyTeamName(home)) continue;
+    const parsedEvent = parseVsLine(lines[i]);
+    if (!parsedEvent.away || !parsedEvent.home) continue;
 
-    const block = lines.slice(i + 2, i + 16);
+    const block = lines.slice(i, i + 20);
     const parsed = parseMainBlock(block);
     if (!parsed) continue;
 
-    const event = `${away} @ ${home}`;
-    rows.push(...buildMainRows(event, away, home, sport, parsed));
+    const event = `${parsedEvent.away} @ ${parsedEvent.home}`;
+    rows.push(...buildMainRows(event, parsedEvent.away, parsedEvent.home, sport, parsed));
     i += 10;
   }
 
@@ -77,15 +78,40 @@ function findDetailEvent(lines) {
     }
   }
 
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    if (isLikelyVsLine(lines[i])) {
+      const parsed = parseVsLine(lines[i]);
+      if (parsed.away && parsed.home) {
+        return { away: parsed.away, home: parsed.home, startIndex: i + 1 };
+      }
+    }
+  }
+
+  for (let i = 0; i < lines.length - 4; i += 1) {
+    if (
+      isLikelyTimeLine(lines[i]) &&
+      isLikelyBroadcastLine(lines[i + 1]) &&
+      isLikelyTeamName(lines[i + 2]) &&
+      isLikelyTeamName(lines[i + 3]) &&
+      lines[i + 2] !== lines[i + 3]
+    ) {
+      return { away: lines[i + 2], home: lines[i + 3], startIndex: i + 4 };
+    }
+  }
+
   return null;
 }
 
 function parseMainLines(lines, startIndex, event, away, home, sport) {
-  const gameIdx = findLineIndexAfter(lines, startIndex, /^(Game|Match)$/i);
-  const teamIdx = gameIdx === -1 ? findNextTeamPair(lines, startIndex) : findNextTeamPair(lines, gameIdx);
-  if (teamIdx === -1) return [];
+  console.log("MAIN LINES SEARCH", { startIndex });
+  const spreadIdx = findLineIndexAfter(lines, startIndex, /^Spread$/i);
+  const totalIdx = findLineIndexAfter(lines, startIndex, /^Total$/i);
+  const moneyIdx = findLineIndexAfter(lines, startIndex, /^Money$/i);
 
-  const block = lines.slice(teamIdx, teamIdx + 16);
+  if (spreadIdx === -1 || totalIdx === -1 || moneyIdx === -1) return [];
+
+  const blockStart = Math.max(0, spreadIdx - 2);
+  const block = lines.slice(blockStart, Math.min(lines.length, moneyIdx + 12));
   const parsed = parseMainBlock(block);
   if (!parsed) return [];
 
@@ -96,19 +122,59 @@ function parseMainBlock(block) {
   const working = block.filter((line) => !isSkippableLine(line));
 
   const atIdx = working.findIndex((line) => isAtMarker(line));
-  if (atIdx === -1 || atIdx + 10 >= working.length) return null;
+  if (atIdx !== -1 && atIdx + 11 < working.length) {
+    const spreadA = parseSignedNumber(working[atIdx + 2]);
+    const spreadAOdds = parseAmericanOdds(working[atIdx + 3]);
+    const totalOver = parseTotalToken(working[atIdx + 4], "O");
+    const totalOverOdds = parseAmericanOdds(working[atIdx + 5]);
+    const moneylineA = parseAmericanOdds(working[atIdx + 6]);
 
-  const spreadA = parseSignedNumber(working[atIdx + 2]);
-  const spreadAOdds = parseAmericanOdds(working[atIdx + 3]);
-  const totalOver = parseTotalToken(working[atIdx + 4], "O");
-  const totalOverOdds = parseAmericanOdds(working[atIdx + 5]);
-  const moneylineA = parseAmericanOdds(working[atIdx + 6]);
+    const spreadB = parseSignedNumber(working[atIdx + 7]);
+    const spreadBOdds = parseAmericanOdds(working[atIdx + 8]);
+    const totalUnder = parseTotalToken(working[atIdx + 9], "U");
+    const totalUnderOdds = parseAmericanOdds(working[atIdx + 10]);
+    const moneylineB = parseAmericanOdds(working[atIdx + 11]);
 
-  const spreadB = parseSignedNumber(working[atIdx + 7]);
-  const spreadBOdds = parseAmericanOdds(working[atIdx + 8]);
-  const totalUnder = parseTotalToken(working[atIdx + 9], "U");
-  const totalUnderOdds = parseAmericanOdds(working[atIdx + 10]);
-  const moneylineB = parseAmericanOdds(working[atIdx + 11]);
+    if (
+      spreadA !== null && spreadAOdds !== null &&
+      totalOver !== null && totalOverOdds !== null &&
+      moneylineA !== null && spreadB !== null && spreadBOdds !== null &&
+      totalUnder !== null && totalUnderOdds !== null && moneylineB !== null
+    ) {
+      return {
+        spreadA,
+        spreadAOdds,
+        moneylineA,
+        spreadB,
+        spreadBOdds,
+        moneylineB,
+        totalLine: totalOver,
+        totalOverOdds,
+        totalUnderOdds,
+      };
+    }
+  }
+
+  const spreadIdx = working.findIndex((line) => /^Spread$/i.test(line));
+  const totalIdx = working.findIndex((line) => /^Total$/i.test(line));
+  const moneyIdx = working.findIndex((line) => /^Money$/i.test(line));
+
+  if (spreadIdx === -1 || totalIdx === -1 || moneyIdx === -1) return null;
+
+  const teamStart = moneyIdx + 1;
+  if (teamStart + 7 >= working.length) return null;
+
+  const spreadA = parseSignedNumber(working[teamStart + 1]);
+  const spreadAOdds = parseAmericanOdds(working[teamStart + 2]);
+  const totalOver = parseTotalToken(working[teamStart + 3], "O");
+  const totalOverOdds = parseAmericanOdds(working[teamStart + 4]);
+  const moneylineA = parseAmericanOdds(working[teamStart + 5]);
+
+  const spreadB = parseSignedNumber(working[teamStart + 6]);
+  const spreadBOdds = parseAmericanOdds(working[teamStart + 7]);
+  const totalUnder = parseTotalToken(working[teamStart + 8], "U");
+  const totalUnderOdds = parseAmericanOdds(working[teamStart + 9]);
+  const moneylineB = parseAmericanOdds(working[teamStart + 10]);
 
   if (
     spreadA === null || spreadAOdds === null ||
@@ -291,6 +357,28 @@ function isAtMarker(value) {
   return /^(AT|@|vs\.?|v\.?)$/i.test(normalizeLine(value));
 }
 
+function isLikelyVsLine(value) {
+  const text = normalizeLine(value);
+  return /^.+\s+vs\.?\s+.+$/i.test(text);
+}
+
+function parseVsLine(value) {
+  const text = normalizeLine(value);
+  const parts = text.split(/\s+vs\.?\s+/i).map((item) => item.trim()).filter(Boolean);
+  if (parts.length !== 2) return { away: "", home: "" };
+  return { away: parts[0], home: parts[1] };
+}
+
+function isLikelyTimeLine(value) {
+  const text = normalizeLine(value);
+  return /^(Today|Tomorrow)?\s*•?\s*\d{1,2}:\d{2}\s*(AM|PM)$/i.test(text) || /^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(text);
+}
+
+function isLikelyBroadcastLine(value) {
+  const text = normalizeLine(value);
+  return /^(Amazon|ESPN|TNT|ABC|NBC|CBS|FOX|ESPN2|NHL Network|NBA TV)$/i.test(text);
+}
+
 function isSkippableLine(value) {
   const text = normalizeLine(value);
   return /^Starts In:?$/i.test(text) ||
@@ -302,7 +390,7 @@ function isSkippableLine(value) {
 
 function isLikelySectionHeader(value) {
   const text = normalizeLine(value);
-  return /^(all odds|sgp|builder|stats|quick sgp|popular|game lines|player props|points|rebounds|assists|threes|combos|shots|goals|points o\/u|rebounds o\/u|assists o\/u|threes o\/u|pts \+ reb \+ ast o\/u|shots on goal o\/u|betting news)$/i.test(text);
+  return /^(all odds|sgp|builder|stats|quick sgp|popular|game lines|player props|points|rebounds|assists|threes|three-pointers|combo stats|defense|shots|goals|player points|player rebounds|player assists|player three-pointers|player shots|player points o\/u|player rebounds o\/u|player assists o\/u|player three-pointers o\/u|points o\/u|rebounds o\/u|assists o\/u|threes o\/u|pts \+ reb \+ ast o\/u|shots on goal o\/u|betting news|first field goal scorer|first player to record an assist|first player to record a rebound|first player to make a three-pointer|player to score 2\+ goals|player to score 3\+ goals|anytime goalscorer|first goalscorer|goalie saves|goals against|goalie shutouts)$/i.test(text);
 }
 
 function findLineIndexAfter(lines, startIndex, pattern) {

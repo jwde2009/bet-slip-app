@@ -1,4 +1,4 @@
-import { americanToDecimal } from "../odds";
+﻿import { americanToDecimal } from "../odds";
 
 let nextId = 1;
 
@@ -175,14 +175,6 @@ function parseDraftKingsDetailPage(lines, game, context) {
     }
   }
 
-    const dkComboRows = parseDraftKingsComboSections(block, event, context);
-    console.log("DK COMBO ROWS", dkComboRows);
-    rows.push(...dkComboRows);
-
-    const dkYesNoRows = parseDraftKingsYesNoSections(block, event, context);
-    console.log("DK YES/NO ROWS", dkYesNoRows);
-    rows.push(...dkYesNoRows);
-
     const nhlGoalRows = parseDraftKingsNhlGoalsSection(block, event, context);
     console.log("DK NHL GOALS ROWS", nhlGoalRows);
     rows.push(...nhlGoalRows);
@@ -322,9 +314,6 @@ function inferOuMarketType(text) {
   if (/^Assists O\/U$/i.test(value)) return "player_assists";
   if (/^Threes O\/U$/i.test(value)) return "player_threes";
   if (/^Pts \+ Reb \+ Ast O\/U$/i.test(value)) return "player_pra";
-  if (/^Pts \+ Reb O\/U$/i.test(value)) return "player_points_rebounds";
-  if (/^Pts \+ Ast O\/U$/i.test(value)) return "player_points_assists";
-  if (/^Reb \+ Ast O\/U$/i.test(value)) return "player_rebounds_assists";
 
   // NHL
   if (/^Shots on Goal O\/U$/i.test(value)) return "player_shots_on_goal";
@@ -332,128 +321,8 @@ function inferOuMarketType(text) {
   if (/^Points O\/U$/i.test(value)) return "player_points";
   if (/^Assists O\/U$/i.test(value)) return "player_assists";
   if (/^Saves O\/U$/i.test(value)) return "player_saves";
-  if (/^Power Play Points$/i.test(value)) return "player_power_play_points";
 
   return "";
-}
-
-function parseDraftKingsComboSections(block, event, context) {
-  const rows = [];
-  const sections = [
-    ["Pts + Reb + Ast", "player_pra"],
-    ["Pts + Reb", "player_points_rebounds"],
-    ["Pts + Ast", "player_points_assists"],
-    ["Reb + Ast", "player_rebounds_assists"],
-  ];
-
-  for (const [header, marketType] of sections) {
-    const idx = block.findIndex((line) => {
-    const text = normalizeLine(line);
-    return new RegExp(`^${escapeRegExp(header)}$`, "i").test(text);
-  });
-    if (idx === -1) continue;
-
-    const end = findNextDraftKingsSectionEnd(block, idx + 1);
-
-    for (let i = idx + 1; i < end; i += 1) {
-      const player = normalizeLine(block[i]);
-
-      // 🚫 Skip section headers
-      if (isSectionBreak(player)) continue;
-
-      if (!looksLikePlayerName(player)) continue;
-
-      let lastPlus = null;
-
-      for (let j = i + 1; j < end; j += 1) {
-        const token = normalizeLine(block[j]);
-
-        if (looksLikePlayerName(token)) break;
-        if (isSectionBreak(token) || isHardStopLine(token)) break;
-
-        const plus = parsePlusNumber(token);
-        if (plus !== null) {
-          lastPlus = plus;
-          continue;
-        }
-
-        const odds = parseAmericanOdds(token);
-        if (odds !== null && lastPlus !== null) {
-          rows.push(
-            makeRow({
-              event,
-              selection: `${player} | Over`,
-              marketType: String(marketType),
-              lineValue: lastPlus - 0.5,
-              oddsAmerican: odds,
-              context,
-            })
-          );
-        }
-      }
-    }
-  }
-
-  return rows;
-}
-
-function parseDraftKingsYesNoSections(block, event, context) {
-  const rows = [];
-  const sections = [
-    ["Double-Double", "double_double"],
-    ["Triple-Double", "triple_double"],
-  ];
-
-  for (const [header, marketType] of sections) {
-    const idx = block.findIndex((line) => new RegExp(`^${escapeRegExp(header)}$`, "i").test(line));
-    if (idx === -1) continue;
-
-    const end = findNextDraftKingsSectionEnd(block, idx + 1);
-
-    for (let i = idx + 1; i < end - 2; i += 1) {
-      const playerLabel = normalizeLine(block[i]);
-
-      // 🚫 Skip headers
-      if (isSectionBreak(playerLabel)) continue;
-      const yesLabel = normalizeLine(block[i + 1]);
-      const odds = parseAmericanOdds(block[i + 2]);
-
-      if (!new RegExp(`${header}$`, "i").test(playerLabel)) continue;
-      if (!/^Yes$/i.test(yesLabel)) continue;
-      if (odds === null) continue;
-
-      const player = playerLabel.replace(new RegExp(`\\s*${header}$`, "i"), "").trim();
-
-      rows.push(
-        makeRow({
-          event,
-          selection: player,
-          marketType: String(marketType),
-          lineValue: null,
-          oddsAmerican: odds,
-          context,
-        })
-      );
-
-      i += 2;
-    }
-  }
-
-  return rows;
-}
-
-function findNextDraftKingsSectionEnd(block, startIndex) {
-  for (let i = startIndex; i < block.length; i += 1) {
-    const text = normalizeLine(block[i]);
-    if (isSectionBreak(text) || isHardStopLine(text)) return i;
-  }
-  return block.length;
-}
-
-function parsePlusNumber(text) {
-  const value = normalizeLine(text);
-  const match = value.match(/^(\d+(?:\.\d+)?)\+$/);
-  return match ? Number(match[1]) : null;
 }
 
 function parseDraftKingsNhlGoalsSection(block, event, context) {
@@ -546,7 +415,7 @@ function parseDraftKingsNhlGoalsSection(block, event, context) {
 function isSectionBreak(text) {
   const value = normalizeLine(text);
 
-  return /^(Points|Rebounds|Assists|Threes|Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Pts \+ Reb \+ Ast O\/U|Pts \+ Reb O\/U|Pts \+ Ast O\/U|Reb \+ Ast O\/U|Shots on Goal|Shots on Goal O\/U|Goals|Goals O\/U|Points O\/U|Assists O\/U|Saves O\/U|Power Play Points|Goalscorer|Double-Double|Triple-Double|Alternate Spread|Alternate Total|1st Half|1st Quarter|2nd Quarter|2nd Half|3rd Quarter|4th Quarter|Team Totals|Winning Margin|Most Points|Game Props|Team Props|Player Goal Milestones)$/i.test(
+  return /^(Points|Rebounds|Assists|Threes|Pts \+ Reb \+ Ast|Shots on Goal|Goals|Goalscorer|Double-Double|Triple-Double|Alternate Spread|Alternate Total|1st Half|1st Quarter|2nd Quarter|2nd Half|3rd Quarter|4th Quarter|Team Totals|Winning Margin|Most Points|Game Props|Team Props|Player Goal Milestones)$/i.test(
     value
   );
 }
@@ -593,7 +462,7 @@ function inferSportFromText(text) {
 
 function normalizeLine(value) {
   return String(value || "")
-    .replace(/âˆ’/g, "-")
+    .replace(/Ã¢Ë†â€™/g, "-")
     .replace(/\u2212/g, "-")
     .replace(/\u00A0/g, " ")
     .replace(/\s+/g, " ")
@@ -661,10 +530,6 @@ function isLikelyNonGameLabel(text) {
 
 function isHardStopLine(text) {
   return /view full article|author|draftkings inc|about draftkings|privacy policy|responsible gaming/i.test(normalizeLine(text));
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function dedupeRows(rows) {

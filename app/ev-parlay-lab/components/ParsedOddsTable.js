@@ -12,36 +12,90 @@ const MARKET_ORDER = {
   player_rebounds: 12,
   player_threes: 13,
   player_pra: 14,
-  player_goals: 15,
-  player_shots_on_goal: 16,
-  player_saves: 17,
-  };
+  player_points_rebounds: 15,
+  player_points_assists: 16,
+  player_rebounds_assists: 17,
+  double_double: 18,
+  triple_double: 19,
+  player_goals: 20,
+  player_shots_on_goal: 21,
+  player_saves: 22,
+  player_hits: 23,
+  player_power_play_points: 24,
+  player_shutout: 25,
+};
 
 export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
   const groupedRows = useMemo(() => buildGroupedRows(rows), [rows]);
   const [collapsedEvents, setCollapsedEvents] = useState({});
+  const [collapsedMarkets, setCollapsedMarkets] = useState({});
+  const [collapsedPlayers, setCollapsedPlayers] = useState({});
 
-  function toggleEvent(eventName) {
+  function toggleEvent(eventKey) {
     setCollapsedEvents((prev) => ({
       ...prev,
-      [eventName]: !prev[eventName],
+      [eventKey]: !prev[eventKey],
+    }));
+  }
+
+  function toggleMarket(eventKey, marketName) {
+    const key = `${eventKey}__${marketName}`;
+    setCollapsedMarkets((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
+
+  function togglePlayer(eventKey, marketName, playerName) {
+    const key = `${eventKey}__${marketName}__${playerName}`;
+    setCollapsedPlayers((prev) => ({
+      ...prev,
+      [key]: !prev[key],
     }));
   }
 
   function collapseAll() {
-    const next = {};
-    for (const group of groupedRows) {
-      next[group.event] = true;
+    const nextEvents = {};
+    const nextMarkets = {};
+    const nextPlayers = {};
+
+    for (const eventGroup of groupedRows) {
+      nextEvents[eventGroup.key] = true;
+
+      for (const marketGroup of eventGroup.markets) {
+        nextMarkets[`${eventGroup.key}__${marketGroup.market}`] = true;
+
+        for (const playerGroup of marketGroup.players) {
+          nextPlayers[`${eventGroup.key}__${marketGroup.market}__${playerGroup.player}`] = true;
+        }
+      }
     }
-    setCollapsedEvents(next);
+
+    setCollapsedEvents(nextEvents);
+    setCollapsedMarkets(nextMarkets);
+    setCollapsedPlayers(nextPlayers);
   }
 
   function expandAll() {
-    const next = {};
-    for (const group of groupedRows) {
-      next[group.event] = false;
+    const nextEvents = {};
+    const nextMarkets = {};
+    const nextPlayers = {};
+
+    for (const eventGroup of groupedRows) {
+      nextEvents[eventGroup.key] = false;
+
+      for (const marketGroup of eventGroup.markets) {
+        nextMarkets[`${eventGroup.key}__${marketGroup.market}`] = false;
+
+        for (const playerGroup of marketGroup.players) {
+          nextPlayers[`${eventGroup.key}__${marketGroup.market}__${playerGroup.player}`] = false;
+        }
+      }
     }
-    setCollapsedEvents(next);
+
+    setCollapsedEvents(nextEvents);
+    setCollapsedMarkets(nextMarkets);
+    setCollapsedPlayers(nextPlayers);
   }
 
   return (
@@ -92,10 +146,14 @@ export default function ParsedOddsTable({ rows, onUpdateRow, onDeleteRow }) {
               <tbody>
                 {groupedRows.map((eventGroup) => (
                   <EventGroup
-                    key={eventGroup.event}
+                    key={eventGroup.key}
                     eventGroup={eventGroup}
-                    isCollapsed={!!collapsedEvents[eventGroup.event]}
-                    onToggle={() => toggleEvent(eventGroup.event)}
+                    isCollapsed={!!collapsedEvents[eventGroup.key]}
+                    onToggle={() => toggleEvent(eventGroup.key)}
+                    collapsedMarkets={collapsedMarkets}
+                    collapsedPlayers={collapsedPlayers}
+                    onToggleMarket={toggleMarket}
+                    onTogglePlayer={togglePlayer}
                     onUpdateRow={onUpdateRow}
                     onDeleteRow={onDeleteRow}
                   />
@@ -113,40 +171,39 @@ function EventGroup({
   eventGroup,
   isCollapsed,
   onToggle,
+  collapsedMarkets,
+  collapsedPlayers,
+  onToggleMarket,
+  onTogglePlayer,
   onUpdateRow,
   onDeleteRow,
 }) {
-  const totalRowsInEvent = eventGroup.markets.reduce(
-    (sum, marketGroup) => sum + marketGroup.rows.length,
-    0
-  );
+  const totalRowsInEvent = eventGroup.markets.reduce((sum, marketGroup) => sum + marketGroup.rows.length, 0);
 
   return (
     <>
       <tr>
         <td colSpan={13} style={eventHeaderStyle}>
-          <div style={eventHeaderInnerStyle}>
-            <button type="button" onClick={onToggle} style={collapseButtonStyle}>
-              {isCollapsed ? "Show" : "Hide"}
-            </button>
-
-            <div style={eventHeaderTextWrapStyle}>
-              <div style={eventHeaderTitleStyle}>{eventGroup.event}</div>
-              <div style={eventHeaderMetaStyle}>
-                {eventGroup.markets.length} market
-                {eventGroup.markets.length === 1 ? "" : "s"} • {totalRowsInEvent} row
-                {totalRowsInEvent === 1 ? "" : "s"}
-              </div>
-            </div>
-          </div>
+          <button type="button" onClick={onToggle} style={eventToggleStyle}>
+            <span>{isCollapsed ? "Show" : "Hide"}</span>
+            <span style={eventTitleStyle}>{eventGroup.event}</span>
+            <span style={eventMetaStyle}>
+              {eventGroup.markets.length} markets • {totalRowsInEvent} rows
+            </span>
+          </button>
         </td>
       </tr>
 
       {!isCollapsed &&
         eventGroup.markets.map((marketGroup) => (
           <MarketGroup
-            key={`${eventGroup.event}__${marketGroup.market}`}
+            key={`${eventGroup.key}__${marketGroup.market}`}
+            eventKey={eventGroup.key}
             marketGroup={marketGroup}
+            isCollapsed={!!collapsedMarkets[`${eventGroup.key}__${marketGroup.market}`]}
+            collapsedPlayers={collapsedPlayers}
+            onToggle={() => onToggleMarket(eventGroup.key, marketGroup.market)}
+            onTogglePlayer={onTogglePlayer}
             onUpdateRow={onUpdateRow}
             onDeleteRow={onDeleteRow}
           />
@@ -155,117 +212,122 @@ function EventGroup({
   );
 }
 
-function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
+function MarketGroup({
+  eventKey,
+  marketGroup,
+  isCollapsed,
+  collapsedPlayers,
+  onToggle,
+  onTogglePlayer,
+  onUpdateRow,
+  onDeleteRow,
+}) {
   return (
     <>
       <tr>
         <td colSpan={13} style={marketHeaderStyle}>
-          {formatMarketLabel(marketGroup.market)}
+          <button type="button" onClick={onToggle} style={marketToggleStyle}>
+            <span>{isCollapsed ? "Show" : "Hide"}</span>
+            <span style={marketTitleStyle}>{formatMarketLabel(marketGroup.market)}</span>
+            <span style={marketMetaStyle}>
+              {marketGroup.players.length} players • {marketGroup.rows.length} rows
+            </span>
+          </button>
         </td>
       </tr>
 
-      {marketGroup.rows.map((row, idx) => {
-        const zebraBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+      {!isCollapsed &&
+        marketGroup.players.map((playerGroup) => (
+          <PlayerGroup
+            key={`${eventKey}__${marketGroup.market}__${playerGroup.player}`}
+            eventKey={eventKey}
+            marketName={marketGroup.market}
+            playerGroup={playerGroup}
+            isCollapsed={!!collapsedPlayers[`${eventKey}__${marketGroup.market}__${playerGroup.player}`]}
+            onToggle={() => onTogglePlayer(eventKey, marketGroup.market, playerGroup.player)}
+            onUpdateRow={onUpdateRow}
+            onDeleteRow={onDeleteRow}
+          />
+        ))}
+    </>
+  );
+}
 
-        return (
-          <tr key={row.id} style={{ background: zebraBg }}>
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              {row.batchRole === "fair_odds" ? "Sharp" : "Target"}
-            </td>
+function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDeleteRow }) {
+  return (
+    <>
+      <tr>
+        <td colSpan={13} style={playerHeaderStyle}>
+          <button type="button" onClick={onToggle} style={playerToggleStyle}>
+            <span>{isCollapsed ? "Show" : "Hide"}</span>
+            <span style={playerTitleStyle}>{playerGroup.player}</span>
+            <span style={playerMetaStyle}>{playerGroup.rows.length} rows</span>
+          </button>
+        </td>
+      </tr>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              {row.sportsbook || "—"}
-            </td>
+      {!isCollapsed &&
+        playerGroup.rows.map((row, rowIndex) => {
+          const zebraBg = rowIndex % 2 === 0 ? "#ffffff" : "#fcfcfe";
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              {row.sport || "—"}
-            </td>
+          return (
+            <tr key={row.id}>
+              <td style={{ ...tdStyle, background: zebraBg }}>{formatBatchRole(row)}</td>
+              <td style={{ ...tdStyle, background: zebraBg }}>{row.sportsbook || "—"}</td>
+              <td style={{ ...tdStyle, background: zebraBg }}>{row.sport || "—"}</td>
 
-                        <td style={{ ...tdStyle, background: zebraBg }}>
-              <div style={eventCellStyle}>
-                <div style={eventTextStyle}>{row.eventLabelRaw || "—"}</div>
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <div style={eventCellStyle}>
+                  <div style={smallLabelStyle}>Event</div>
                   <textarea
                     value={row.eventLabelRaw || ""}
                     onChange={(e) => onUpdateRow(row.id, { eventLabelRaw: e.target.value })}
                     style={eventTextAreaStyle}
                     rows={2}
                   />
-              </div>
-            </td>
+                </div>
+              </td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <div style={canonicalEventStyle}>
-                {buildCanonicalEventPreview(row) || "—"}
-              </div>
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <div style={canonicalEventStyle}>{buildCanonicalEventPreview(row) || "—"}</div>
+              </td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <select
-                value={row.marketType}
-                onChange={(e) => onUpdateRow(row.id, { marketType: e.target.value })}
-                style={inputStyle}
-              >
-                <option value="moneyline_2way">Moneyline</option>
-                <option value="moneyline_3way">Moneyline (3-way)</option>
-                <option value="spread">Spread</option>
-                <option value="total">Total</option>
-                <option value="player_points">Points</option>
-                <option value="player_assists">Assists</option>
-                <option value="player_rebounds">Rebounds</option>
-                <option value="player_threes">Threes</option>
-                <option value="player_pra">PRA</option>
-                <option value="player_goals">Goals</option>
-                <option value="player_shots_on_goal">Shots on Goal</option>
-                <option value="player_saves">Saves</option>
-              </select>
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg }}>{formatMarketLabel(row.marketType)}</td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              {(() => {
-                const [player, side] = (row.selectionNormalized || "").split(" | ");
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <textarea
+                  value={normalizeSelectionForEditor(row) || ""}
+                  onChange={(e) => {
+                    const next = String(e.target.value || "");
+                    onUpdateRow(row.id, {
+                      selectionRaw: next,
+                      selectionNormalized: next,
+                    });
+                  }}
+                  style={selectionTextAreaStyle}
+                  rows={2}
+                />
+              </td>
 
-                return (
-                  <div style={{ lineHeight: 1.2 }}>
-                    <div>{player || row.selectionNormalized || ""}</div>
-                    <div>{side || ""}</div>
-                  </div>
-                );
-              })()}
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <input
+                  type="text"
+                  value={typeof row.lineValueInput === "string" ? row.lineValueInput : formatLineInput(row.lineValue)}
+                  onChange={(e) => {
+                    const next = parseEditableLineState(e.target.value);
+                    onUpdateRow(row.id, {
+                      lineValueInput: next.text,
+                      lineValue: next.value,
+                    });
+                  }}
+                  placeholder="e.g. -1.5"
+                  style={smallInputStyle}
+                />
+              </td>
 
-
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <input
-                type="text"
-                value={
-                row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way"
-                  ? "ML"
-                  : typeof row.lineValueInput === "string"
-                  ? row.lineValueInput
-                  : Number.isFinite(row.lineValue)
-                  ? String(row.lineValue)
-                  : ""
-              }
-                onChange={(e) => {
-                  if (row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way") {
-                    return;
-                  }
-
-                  const next = parseEditableSignedNumberState(e.target.value);
-
-                  onUpdateRow(row.id, {
-                    lineValueInput: next.text,
-                    lineValue: next.value,
-                  });
-                }}
-                placeholder="e.g. -1.5"
-                style={smallInputStyle}
-              />
-            </td>
-
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <input
-                type="text"
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <input
+                  type="text"
                   value={
                     typeof row.oddsAmericanInput === "string"
                       ? row.oddsAmericanInput
@@ -275,243 +337,455 @@ function MarketGroup({ marketGroup, onUpdateRow, onDeleteRow }) {
                         : String(row.oddsAmerican)
                       : ""
                   }
-                onChange={(e) => {
-                  const next = parseEditableAmericanOddsState(e.target.value);
+                  onChange={(e) => {
+                    const next = parseEditableAmericanOddsState(e.target.value);
+                    onUpdateRow(row.id, {
+                      oddsAmericanInput: next.text,
+                      oddsAmerican: next.value,
+                    });
+                  }}
+                  placeholder="+150 or -200"
+                  style={smallInputStyle}
+                />
+              </td>
 
-                  onUpdateRow(row.id, {
-                    oddsAmericanInput: next.text,
-                    oddsAmerican: next.value,
-                  });
-                }}
-                placeholder="+150 or -200"
-                style={smallInputStyle}
-              />
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg, textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={!!row.isSharpSource}
+                  onChange={(e) => onUpdateRow(row.id, { isSharpSource: e.target.checked })}
+                />
+              </td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <input
-                type="checkbox"
-                checked={!!row.isSharpSource}
-                onChange={(e) =>
-                  onUpdateRow(row.id, { isSharpSource: e.target.checked })
-                }
-              />
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <span style={getConfidencePillStyle(row.confidence)}>{row.confidence || "—"}</span>
+              </td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <span style={getConfidencePillStyle(row.confidence)}>{row.confidence}</span>
-            </td>
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                {row.parseWarnings?.length ? row.parseWarnings.join(", ") : "—"}
+              </td>
 
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              {row.parseWarnings?.length ? row.parseWarnings.join(", ") : "—"}
-            </td>
-
-            <td style={{ ...tdStyle, background: zebraBg }}>
-              <button onClick={() => onDeleteRow(row.id)} style={dangerButtonStyle}>
-                Delete
-              </button>
-            </td>
-          </tr>
-        );
-      })}
+              <td style={{ ...tdStyle, background: zebraBg }}>
+                <button onClick={() => onDeleteRow(row.id)} style={dangerButtonStyle}>
+                  Delete
+                </button>
+              </td>
+            </tr>
+          );
+        })}
     </>
   );
 }
 
 function buildGroupedRows(rows) {
   const sorted = [...rows].sort((a, b) => {
-    const eventA = String(a.eventLabelRaw || "");
-    const eventB = String(b.eventLabelRaw || "");
+    const eventA = buildEventGroupKey(a);
+    const eventB = buildEventGroupKey(b);
     if (eventA !== eventB) return eventA.localeCompare(eventB);
 
     const marketA = MARKET_ORDER[a.marketType] || 99;
     const marketB = MARKET_ORDER[b.marketType] || 99;
     if (marketA !== marketB) return marketA - marketB;
 
-    return String(a.selectionNormalized || "").localeCompare(String(b.selectionNormalized || ""));
+    const playerA = getPlayerNameForGrouping(a).toLowerCase();
+    const playerB = getPlayerNameForGrouping(b).toLowerCase();
+    if (playerA !== playerB) return playerA.localeCompare(playerB);
+
+    const lineA = Number.isFinite(a.lineValue) ? a.lineValue : Number.POSITIVE_INFINITY;
+    const lineB = Number.isFinite(b.lineValue) ? b.lineValue : Number.POSITIVE_INFINITY;
+    if (lineA !== lineB) return lineA - lineB;
+
+    const oddsA = Number.isFinite(a.oddsAmerican) ? a.oddsAmerican : 0;
+    const oddsB = Number.isFinite(b.oddsAmerican) ? b.oddsAmerican : 0;
+    return oddsA - oddsB;
   });
 
   const eventMap = new Map();
 
   for (const row of sorted) {
-    const eventKey = row.eventLabelRaw || "Unknown Event";
+    const eventKey = buildEventGroupKey(row);
+    const eventLabel = buildEventDisplayLabel(row);
+
     if (!eventMap.has(eventKey)) {
       eventMap.set(eventKey, {
-        event: eventKey,
+        key: eventKey,
+        event: eventLabel,
         markets: [],
       });
     }
 
     const eventGroup = eventMap.get(eventKey);
-    let marketGroup = eventGroup.markets.find((m) => m.market === row.marketType);
+    if (eventLabel.length > eventGroup.event.length) {
+      eventGroup.event = eventLabel;
+    }
 
+    let marketGroup = eventGroup.markets.find((item) => item.market === row.marketType);
     if (!marketGroup) {
       marketGroup = {
         market: row.marketType,
         rows: [],
+        players: [],
       };
       eventGroup.markets.push(marketGroup);
-      eventGroup.markets.sort(
-        (a, b) => (MARKET_ORDER[a.market] || 99) - (MARKET_ORDER[b.market] || 99)
-      );
+      eventGroup.markets.sort((a, b) => (MARKET_ORDER[a.market] || 99) - (MARKET_ORDER[b.market] || 99));
     }
 
     marketGroup.rows.push(row);
+
+    const allRowsForEventMarket = sorted.filter(
+      (item) =>
+        buildEventGroupKey(item) === eventKey &&
+        item.marketType === row.marketType
+    );
+
+    const playerKey = getPlayerGroupKey(row, eventKey, allRowsForEventMarket);
+    const playerLabel = getPlayerGroupLabel(row, eventKey, allRowsForEventMarket);
+
+    let playerGroup = marketGroup.players.find((item) => item.key === playerKey);
+    if (!playerGroup) {
+      playerGroup = {
+        key: playerKey,
+        player: playerLabel,
+        rows: [],
+      };
+      marketGroup.players.push(playerGroup);
+      marketGroup.players.sort((a, b) => a.player.localeCompare(b.player));
+    }
+
+    playerGroup.rows.push(row);
   }
 
   return Array.from(eventMap.values());
 }
 
+function buildEventGroupKey(row) {
+  const preview = buildCanonicalEventPreview(row);
+  return normalizeEventLabel(preview || row.eventLabelRaw || "Unknown Event");
+}
+
+function buildEventDisplayLabel(row) {
+  const preview = buildCanonicalEventPreview(row);
+  if (preview) return expandEventLabel(preview);
+  return expandEventLabel(String(row.eventLabelRaw || "Unknown Event"));
+}
+
+function getPlayerNameForGrouping(row) {
+  const selection = normalizeSelectionForEditor(row);
+
+  if (row.marketType === "moneyline_2way" || row.marketType === "moneyline_3way") {
+    return selection || "Selection";
+  }
+
+  if (row.marketType === "spread" || row.marketType === "total") {
+    return selection || "Selection";
+  }
+
+  const stripped = selection
+    .replace(/\s+\|\s+(Over|Under)$/i, "")
+    .replace(/\s+(Over|Under)$/i, "")
+    .trim();
+
+  return stripped || selection || "Selection";
+}
+
+function getPlayerGroupKey(row, eventKey, marketRows) {
+  const rawName = getPlayerNameForGrouping(row);
+  const resolved = resolvePlayerNameWithinEvent(rawName, eventKey, marketRows);
+  return normalizeSimplePlayerName(resolved || rawName || "Selection");
+}
+
+function getPlayerGroupLabel(row, eventKey, marketRows) {
+  const rawName = getPlayerNameForGrouping(row);
+  const resolved = resolvePlayerNameWithinEvent(rawName, eventKey, marketRows);
+
+  if (!resolved) return rawName || "Selection";
+  if (normalizeSimplePlayerName(resolved) === normalizeSimplePlayerName(rawName)) {
+    return resolved;
+  }
+
+  return `${resolved} (${rawName})`;
+}
+
+function resolvePlayerNameWithinEvent(rawName, eventKey, marketRows) {
+  const baseName = String(rawName || "").trim();
+  if (!baseName) return "";
+
+  if (!looksLikeAbbreviatedPlayerName(baseName)) {
+    return baseName;
+  }
+
+  const candidates = [...new Set(
+    (marketRows || [])
+      .map((row) => getPlayerNameForGrouping(row))
+      .filter(Boolean)
+      .map((name) => String(name).trim())
+      .filter((name) => !looksLikeAbbreviatedPlayerName(name))
+  )];
+
+  const normalizedBase = normalizeSimplePlayerName(baseName);
+  const baseParts = normalizedBase.split(" ").filter(Boolean);
+  if (baseParts.length < 2) return baseName;
+
+  const baseFirst = baseParts[0];
+  const baseLast = baseParts[baseParts.length - 1];
+
+  const matches = candidates.filter((candidate) => {
+    const normalizedCandidate = normalizeSimplePlayerName(candidate);
+    const candidateParts = normalizedCandidate.split(" ").filter(Boolean);
+    if (candidateParts.length < 2) return false;
+
+    const candidateFirst = candidateParts[0];
+    const candidateLast = candidateParts[candidateParts.length - 1];
+
+    return candidateLast === baseLast && candidateFirst.startsWith(baseFirst);
+  });
+
+  const longerMatches = matches.filter((candidate) => {
+    const normalizedCandidate = normalizeSimplePlayerName(candidate);
+    const candidateFirst = normalizedCandidate.split(" ").filter(Boolean)[0] || "";
+    return candidateFirst.length > baseFirst.length;
+  });
+
+  if (longerMatches.length === 1) {
+    return longerMatches[0];
+  }
+
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  return baseName;
+}
+
+function looksLikeAbbreviatedPlayerName(name) {
+  const text = String(name || "").trim();
+  if (!text) return false;
+
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return false;
+
+  const first = parts[0].replace(/\./g, "");
+  return first.length <= 2 || /\.$/.test(parts[0]);
+}
+
+function normalizeSimplePlayerName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeSelectionForEditor(row) {
+  const selection = String(row.selectionNormalized || row.selectionRaw || "");
+
+  if (
+    row.marketType === "double_double" ||
+    row.marketType === "triple_double" ||
+    row.marketType === "player_shutout"
+  ) {
+    return selection;
+  }
+
+  return selection.replace(/\s+\|\s+/g, " ");
+}
+
+function formatBatchRole(row) {
+  if (row.isSharpSource) return "Sharp";
+  if (row.isTargetBook) return "Target";
+  if (row.batchRole === "fair_odds") return "Sharp";
+  return "Target";
+}
+
 function buildCanonicalEventPreview(row) {
-  const away = String(row.awayTeam || row.awayTeamRaw || "").trim();
-  const home = String(row.homeTeam || row.homeTeamRaw || "").trim();
+  const away = normalizeTeamToken(row.awayTeam || row.awayTeamRaw || "");
+  const home = normalizeTeamToken(row.homeTeam || row.homeTeamRaw || "");
+  if (away && home) return `${away} @ ${home}`;
 
-  if (away && home) {
-    return `${away} @ ${home}`;
+  const raw = String(row.eventLabelRaw || "").trim();
+  if (!raw) return "";
+
+  const parts = raw.split(/\s@\s|\svs\.?\s/i).map((item) => item.trim()).filter(Boolean);
+  if (parts.length === 2) {
+    return `${normalizeTeamToken(parts[0])} @ ${normalizeTeamToken(parts[1])}`;
   }
 
-  const event = String(row.eventLabelRaw || "").trim();
-
-  if (event.includes("@")) {
-    return event;
-  }
-
-  if (/\bvs\b/i.test(event)) {
-    const [awaySide, homeSide] = event.split(/\bvs\b/i).map((s) => s.trim());
-    if (awaySide && homeSide) {
-      return `${awaySide} @ ${homeSide}`;
-    }
-  }
-
-  return event;
+  return expandEventLabel(raw);
 }
 
-function parseEditableSignedNumberState(raw) {
-  const text = String(raw ?? "").replace(/−/g, "-").trim();
+function normalizeEventLabel(value) {
+  const text = expandEventLabel(String(value || ""))
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return text;
+}
 
-  if (text === "") {
+function expandEventLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const parts = raw.split(/\s@\s|\svs\.?\s/i).map((item) => item.trim()).filter(Boolean);
+  if (parts.length === 2) {
+    return `${normalizeTeamToken(parts[0])} @ ${normalizeTeamToken(parts[1])}`;
+  }
+  return normalizeTeamToken(raw);
+}
+
+function normalizeTeamToken(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+
+  const teamMap = {
+    "atl hawks": "Atlanta Hawks",
+    "ny knicks": "New York Knicks",
+    "cha hornets": "Charlotte Hornets",
+    "orl magic": "Orlando Magic",
+    "hou rockets": "Houston Rockets",
+    "la lakers": "Los Angeles Lakers",
+    "phi 76ers": "Philadelphia 76ers",
+    "bos celtics": "Boston Celtics",
+    "por trail blazers": "Portland Trail Blazers",
+    "sa spurs": "San Antonio Spurs",
+    "pho suns": "Phoenix Suns",
+    "phx suns": "Phoenix Suns",
+    "okc thunder": "Oklahoma City Thunder",
+    "cle cavaliers": "Cleveland Cavaliers",
+    "tor raptors": "Toronto Raptors",
+    "den nuggets": "Denver Nuggets",
+    "min timberwolves": "Minnesota Timberwolves",
+    "minnesota wild": "Minnesota Wild",
+    "dallas stars": "Dallas Stars",
+    "montreal canadiens": "Montreal Canadiens",
+    "tampa bay lightning": "Tampa Bay Lightning",
+    "boston bruins": "Boston Bruins",
+    "buffalo sabres": "Buffalo Sabres",
+    "utah mammoth": "Utah Mammoth",
+    "vegas golden knights": "Vegas Golden Knights",
+    "los angeles kings": "Los Angeles Kings",
+    "colorado avalanche": "Colorado Avalanche",
+    "pittsburgh penguins": "Pittsburgh Penguins",
+    "philadelphia flyers": "Philadelphia Flyers",
+  };
+
+  const direct = teamMap[text.toLowerCase()];
+  if (direct) return direct;
+
+  return text;
+}
+
+function formatLineInput(value) {
+  if (!Number.isFinite(value)) return "";
+  return String(value);
+}
+
+function parseEditableLineState(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
     return { text: "", value: null };
   }
 
-  if (text === "-" || text === "+" || text === "." || text === "-." || text === "+.") {
-    return { text, value: null };
-  }
+  const normalized = text.replace(/[^\d+.\-]/g, "");
+  const num = Number(normalized);
 
-  if (!/^[+-]?\d*(\.\d*)?$/.test(text)) {
-    return { text, value: null };
-  }
-
-  const value = Number(text);
   return {
     text,
-    value: Number.isFinite(value) ? value : null,
+    value: Number.isFinite(num) ? num : null,
   };
 }
 
-function parseEditableAmericanOddsState(raw) {
-  const text = String(raw ?? "").replace(/−/g, "-").trim();
+function parseEditableAmericanOddsState(value) {
+  const text = String(value || "").trim();
 
-  if (text === "") {
+  if (!text) {
     return { text: "", value: null };
   }
 
-  if (text === "-" || text === "+") {
+  const normalized = text.replace(/[^\d+\-]/g, "");
+  if (!/^[+-]?\d+$/.test(normalized)) {
     return { text, value: null };
   }
 
-  if (!/^[+-]?\d+$/.test(text)) {
-    return { text, value: null };
-  }
-
-  const value = Number(text);
-
-  if (!Number.isFinite(value) || value === 0) {
-    return { text, value: null };
-  }
-
+  const num = Number(normalized);
   return {
     text,
-    value,
+    value: Number.isFinite(num) ? num : null,
   };
-}
-
-function getConfidencePillStyle(confidence) {
-  const value = String(confidence || "").toLowerCase();
-
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 70,
-    padding: "4px 10px",
-    borderRadius: 999,
-    fontWeight: 800,
-    fontSize: 12,
-  };
-
-  if (value === "high") {
-    return { ...base, background: "#166534", color: "#ecfdf5" };
-  }
-
-  if (value === "medium") {
-    return { ...base, background: "#ca8a04", color: "#fefce8" };
-  }
-
-  if (value === "low") {
-    return { ...base, background: "#dc2626", color: "#fef2f2" };
-  }
-
-  return { ...base, background: "#374151", color: "#f9fafb" };
 }
 
 function formatMarketLabel(value) {
   const text = String(value || "").trim().toLowerCase();
 
   if (text === "moneyline_2way") return "Moneyline";
-  if (text === "moneyline_3way") return "Moneyline (3-way)";
+  if (text === "moneyline_3way") return "3-Way Moneyline";
   if (text === "spread") return "Spread";
   if (text === "total") return "Total";
+
   if (text === "player_points") return "Points";
   if (text === "player_assists") return "Assists";
   if (text === "player_rebounds") return "Rebounds";
-  if (text === "player_threes") return "Threes";
-  if (text === "player_pra") return "PRA";
+  if (text === "player_threes") return "3-Pointers";
+  if (text === "player_pra") return "Points + Rebounds + Assists";
+  if (text === "player_points_rebounds") return "Points + Rebounds";
+  if (text === "player_points_assists") return "Points + Assists";
+  if (text === "player_rebounds_assists") return "Rebounds + Assists";
+  if (text === "double_double") return "Double-Double";
+  if (text === "triple_double") return "Triple-Double";
   if (text === "player_goals") return "Goals";
   if (text === "player_shots_on_goal") return "Shots on Goal";
   if (text === "player_saves") return "Saves";
+  if (text === "player_hits") return "Hits";
+  if (text === "player_power_play_points") return "Power Play Points";
+  if (text === "player_shutout") return "Shutout";
 
-  return value || "";
+  return String(value || "Unknown Market");
+}
+
+function getConfidencePillStyle(confidence) {
+  const key = String(confidence || "").toLowerCase();
+
+  if (key === "high") {
+    return { ...confidencePillBaseStyle, background: "#dcfce7", color: "#166534", border: "1px solid #86efac" };
+  }
+
+  if (key === "medium") {
+    return { ...confidencePillBaseStyle, background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
+  }
+
+  if (key === "low") {
+    return { ...confidencePillBaseStyle, background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" };
+  }
+
+  return { ...confidencePillBaseStyle, background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" };
 }
 
 const sectionStyle = {
   background: "#fff",
-  border: "2px solid #166534",
-  borderRadius: 12,
-  padding: 16,
+  border: "1px solid #d6dbe3",
+  borderRadius: 14,
+  padding: 18,
   marginBottom: 16,
+  boxShadow: "0 2px 10px rgba(15, 23, 42, 0.04)",
 };
 
 const headerRowStyle = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
   gap: 12,
-  marginBottom: 12,
   flexWrap: "wrap",
+  marginBottom: 10,
 };
 
-const h2Style = { marginTop: 0, marginBottom: 6, color: "#14532d" };
-const mutedStyle = { color: "#166534", fontSize: 14, margin: 0 };
+const h2Style = { marginTop: 0, marginBottom: 8 };
+const mutedStyle = { color: "#4b5563", fontSize: 14 };
 
 const scrollFrameStyle = {
-  maxHeight: 520,
-  overflow: "auto",
-  border: "1px solid #d1d5db",
-  borderRadius: 10,
+  overflowX: "auto",
 };
 
 const tableWrapStyle = {
-  minWidth: 1200,
+  minWidth: 1280,
 };
 
 const tableStyle = {
@@ -522,66 +796,168 @@ const tableStyle = {
 };
 
 const thStyle = {
+  textAlign: "left",
+  borderBottom: "1px solid #dbe3ea",
+  padding: "10px 8px",
+  background: "#f8fafc",
   position: "sticky",
   top: 0,
-  zIndex: 2,
-  textAlign: "left",
-  borderBottom: "1px solid #d1d5db",
-  padding: 8,
-  whiteSpace: "nowrap",
-  background: "#dcfce7",
-  color: "#14532d",
+  zIndex: 1,
+  fontWeight: 800,
 };
 
 const tdStyle = {
-  borderBottom: "1px solid #e5e7eb",
+  borderBottom: "1px solid #eef2f7",
   padding: 8,
   verticalAlign: "top",
 };
 
 const eventHeaderStyle = {
-  padding: "10px 12px",
-  background: "#166534",
-  color: "#f0fdf4",
-  fontWeight: 800,
-  letterSpacing: 0.2,
+  background: "linear-gradient(180deg, #ecfdf5 0%, #dcfce7 100%)",
+  borderTop: "1px solid #86efac",
+  borderBottom: "1px solid #86efac",
+  padding: 0,
 };
 
-const eventHeaderInnerStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  justifyContent: "space-between",
-  flexWrap: "wrap",
+const marketHeaderStyle = {
+  background: "linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%)",
+  borderBottom: "1px solid #bbf7d0",
+  padding: 0,
 };
 
-const eventHeaderTextWrapStyle = {
+const playerHeaderStyle = {
+  background: "#e5e7eb",
+  borderBottom: "1px solid #cbd5e1",
+  padding: 0,
+};
+
+const eventToggleStyle = {
+  width: "100%",
   display: "grid",
-  gap: 4,
-  flex: 1,
+  gridTemplateColumns: "72px 1fr auto",
+  gap: 14,
+  alignItems: "center",
+  padding: "16px 16px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  textAlign: "left",
+  fontWeight: 800,
+  color: "#14532d",
+};
+
+const marketToggleStyle = {
+  width: "100%",
+  display: "grid",
+  gridTemplateColumns: "72px 1fr auto",
+  gap: 14,
+  alignItems: "center",
+  padding: "13px 16px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  textAlign: "left",
+  fontWeight: 800,
+  color: "#166534",
+};
+
+const playerToggleStyle = {
+  width: "100%",
+  display: "grid",
+  gridTemplateColumns: "72px 1fr auto",
+  gap: 14,
+  alignItems: "center",
+  padding: "11px 16px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  textAlign: "left",
+  fontWeight: 800,
+  color: "#1f2937",
+};
+
+const eventTitleStyle = {
+  fontSize: 18,
+  lineHeight: 1.2,
+};
+
+const marketTitleStyle = {
+  fontSize: 16,
+  lineHeight: 1.2,
+};
+
+const playerTitleStyle = {
+  fontSize: 15,
+  lineHeight: 1.2,
+  fontWeight: 800,
+};
+
+const eventMetaStyle = {
+  color: "#166534",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const marketMetaStyle = {
+  color: "#166534",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const playerMetaStyle = {
+  color: "#374151",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const eventCellStyle = {
+  display: "grid",
+  gap: 6,
+};
+
+const smallLabelStyle = {
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  color: "#6b7280",
+};
+
+const eventTextAreaStyle = {
+  width: "100%",
+  borderRadius: 8,
+  border: "1px solid #cbd5e1",
+  padding: 8,
+  fontSize: 13,
+  resize: "vertical",
   minWidth: 220,
 };
 
-const eventHeaderTitleStyle = {
-  fontWeight: 800,
-  lineHeight: 1.35,
+const selectionTextAreaStyle = {
+  width: "100%",
+  borderRadius: 8,
+  border: "1px solid #cbd5e1",
+  padding: 8,
+  fontSize: 13,
+  resize: "vertical",
+  minWidth: 180,
 };
 
-const eventHeaderMetaStyle = {
-  fontSize: 12,
-  color: "#dcfce7",
+const canonicalEventStyle = {
+  fontSize: 13,
+  color: "#1f2937",
+  lineHeight: 1.45,
+  minWidth: 200,
   fontWeight: 700,
 };
 
-const collapseButtonStyle = {
-  background: "#f0fdf4",
-  color: "#166534",
-  border: "none",
+const smallInputStyle = {
+  width: "100%",
+  minWidth: 92,
+  padding: "8px 10px",
   borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer",
-  fontWeight: 800,
-  whiteSpace: "nowrap",
+  border: "1px solid #cbd5e1",
+  fontSize: 13,
+  background: "#fff",
 };
 
 const toggleButtonStyle = {
@@ -594,101 +970,22 @@ const toggleButtonStyle = {
   fontWeight: 700,
 };
 
-const marketHeaderStyle = {
-  padding: "8px 12px",
-  background: "#dcfce7",
-  color: "#14532d",
-  fontWeight: 800,
-  textTransform: "uppercase",
-  fontSize: 12,
-  letterSpacing: 0.4,
-};
-
-const inputStyle = {
-  width: "100%",
-  minWidth: 120,
-  padding: 6,
-  borderRadius: 6,
-  border: "1px solid #ccc",
-  background: "#fff",
-};
-
-  const multiLineInputStyle = {
-    width: "100%",
-    minWidth: 140,
-    minHeight: 56,
-    padding: 6,
-    borderRadius: 6,
-    border: "1px solid #cbd5e1",
-    background: "#fff",
-    font: "inherit",
-    lineHeight: 1.25,
-    resize: "vertical",
-    whiteSpace: "pre-wrap",
-    overflowWrap: "anywhere",
-  };
-
-
-const smallInputStyle = {
-  width: 90,
-  padding: 6,
-  borderRadius: 6,
-  border: "1px solid #ccc",
-  background: "#fff",
-};
-
-const eventCellStyle = {
-  display: "grid",
-  gap: 8,
-  minWidth: 260,
-};
-
-const eventTextStyle = {
-  whiteSpace: "normal",
-  wordBreak: "break-word",
-  lineHeight: 1.35,
-  fontWeight: 700,
-  color: "#111827",
-};
-
-const canonicalEventStyle = {
-  minWidth: 220,
-  whiteSpace: "normal",
-  wordBreak: "break-word",
-  lineHeight: 1.35,
-  color: "#374151",
-  fontWeight: 700,
-};
-
-const eventInputStyle = {
-  width: "100%",
-  padding: 6,
-  borderRadius: 6,
-  border: "1px solid #ccc",
-  background: "#fff",
-};
-
-const eventTextAreaStyle = {
-  width: "100%",
-  minHeight: 56,
-  padding: 6,
-  borderRadius: 6,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  font: "inherit",
-  lineHeight: 1.25,
-  resize: "vertical",
-  whiteSpace: "pre-wrap",
-  overflowWrap: "anywhere",
-};
-
-
 const dangerButtonStyle = {
   background: "#fef2f2",
   color: "#991b1b",
   border: "1px solid #fecaca",
-  borderRadius: 6,
-  padding: "6px 10px",
+  borderRadius: 8,
+  padding: "8px 12px",
   cursor: "pointer",
   fontWeight: 700,
+};
+
+const confidencePillBaseStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "4px 8px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
 };

@@ -14,7 +14,9 @@ function normalizeText(value = "") {
 }
 
 function extractPeriod(selection = "", marketDetail = "", fixtureEvent = "") {
-  const text = normalizeText(`${selection} ${marketDetail} ${fixtureEvent}`);
+  const text = normalizeText(`${selection} ${marketDetail} ${fixtureEvent}`)
+  .replace(/\bplayer\b/g, "")
+  .replace(/\btotal\b/g, "");
 
   if (
     /\b1st half\b|\bfirst half\b|\b1h\b/.test(text)
@@ -104,7 +106,9 @@ function inferMarketFamily({
   fixtureEvent = ""
 } = {}) {
   const bt = clean(betType).toLowerCase();
-  const text = normalizeText(`${selection} ${marketDetail} ${fixtureEvent}`);
+  const text = normalizeText(`${selection} ${marketDetail} ${fixtureEvent}`)
+  .replace(/\bplayer\b/g, "")
+  .replace(/\btotal\b/g, "");
 
   if (/\byes\b|\bno\b/.test(clean(selection)) && !canonicalTeam && !canonicalPlayer) {
     return "binary_market";

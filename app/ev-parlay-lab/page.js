@@ -552,12 +552,27 @@ function buildSelectionFamilyKey(row) {
   if (marketType === "player_rebounds") return "rebounds";
   if (marketType === "player_threes") return "threes";
   if (marketType === "player_pra") return "pra";
+  if (marketType === "player_points_rebounds") return "points_rebounds";
+  if (marketType === "player_points_assists") return "points_assists";
+  if (marketType === "player_rebounds_assists") return "rebounds_assists";
+  if (marketType === "double_double") return "double_double";
+  if (marketType === "triple_double") return "triple_double";
+
+  if (/\bpts\s*\+\s*reb\s*\+\s*ast\b|\bpts & rebs & asts\b|\bpra\b/.test(selection)) {
+    return "pra";
+  }
+
+  if (/\bpts\s*\+\s*reb\b/.test(selection)) return "points_rebounds";
+  if (/\bpts\s*\+\s*ast\b/.test(selection)) return "points_assists";
+  if (/\breb\s*\+\s*ast\b/.test(selection)) return "rebounds_assists";
+
+  if (/\bdouble[\s-]?double\b/.test(selection)) return "double_double";
+  if (/\btriple[\s-]?double\b/.test(selection)) return "triple_double";
 
   if (/\bpoints\b/.test(selection)) return "points";
   if (/\bassists\b/.test(selection)) return "assists";
   if (/\brebounds\b/.test(selection)) return "rebounds";
   if (/\bthrees\b|\b3\+ pointers\b|\bthree pointers\b|\bthrees made\b/.test(selection)) return "threes";
-  if (/\bpts & rebs & asts\b|\bpra\b/.test(selection)) return "pra";
 
   return marketType;
 }
