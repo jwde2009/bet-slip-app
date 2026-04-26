@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "EV Parlay Extractor",
+  "version": "1.0",
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": [
+  "https://*.thescore.bet/*",
+  "https://*.thescore.com/*",
+  "https://*.pinnacle.com/*",
+  "https://*.fanduel.com/*",
+  "https://*.sportsbook.fanduel.com/*",
+  "https://*.betmgm.com/*",
+  "https://*.draftkings.com/*",
+  "https://*.sportsbook.draftkings.com/*",
+  "http://localhost:3000/*"
+],
+  "action": {
+    "default_title": "Extract Odds"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
