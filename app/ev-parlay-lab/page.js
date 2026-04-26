@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ImportPanel from "./components/ImportPanel";
 import ExtractionGuide from "./components/ExtractionGuide";
 import ParsedOddsTable from "./components/ParsedOddsTable";
@@ -17,8 +17,180 @@ import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
 import { buildParlayCandidates } from "./utils/parlayEngine";
+import { normalizeMarketType } from "./utils/marketNormalization";
 
-function buildTopSingleEdgeBets({ markets, fairOddsResults }) {
+const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
+const SAVED_SESSION_KEY = "EV_PARLAY_LAB_SESSION";
+const SAVED_PLACED_PARLAYS_KEY = "EV_PARLAY_LAB_PLACED_PARLAYS";
+const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function readImportQueue() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(IMPORT_QUEUE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeImportQueue(queue) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(IMPORT_QUEUE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
+}
+
+function readSavedPlacedParlays() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVED_PLACED_PARLAYS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeSavedPlacedParlays(parlays) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    SAVED_PLACED_PARLAYS_KEY,
+    JSON.stringify(Array.isArray(parlays) ? parlays : [])
+  );
+}
+
+function normalizeLegKeyPart(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function buildSavedLegKeyFromLeg(leg = {}) {
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(leg.marketType),
+    normalizeLegKeyPart(leg.subjectName),
+    normalizeLegKeyPart(leg.selectionLabel),
+    normalizeLegKeyPart(leg.lineValue),
+  ].join("::");
+}
+
+function buildSavedLegUsageMap(savedPlacedParlays = []) {
+  const usage = new Map();
+
+  for (const parlay of savedPlacedParlays || []) {
+    for (const leg of parlay?.legs || []) {
+      const key = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
+      if (!key) continue;
+
+      usage.set(key, {
+        count: (usage.get(key)?.count || 0) + 1,
+        lastUsedAt: parlay.savedAt || "",
+        parlayIds: [...(usage.get(key)?.parlayIds || []), parlay.id],
+      });
+    }
+  }
+
+  return usage;
+}
+
+function makePlacedParlayRecord(parlay) {
+  const savedAt = new Date().toISOString();
+
+  return {
+    id: `placed_parlay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    savedAt,
+    placedDate: savedAt.slice(0, 10),
+    boostPct: Number(parlay?.boostPctUsed || 0),
+    rawParlayAmerican: parlay?.rawParlayAmerican ?? null,
+    boostedParlayAmerican: parlay?.boostedParlayAmerican ?? null,
+    expectedValuePct: parlay?.expectedValuePct ?? null,
+    fairHitProbability: parlay?.fairHitProbability ?? null,
+    gradeTier: parlay?.gradeTier || "",
+    playLabel: parlay?.playLabel || "",
+    legs: (parlay?.legs || []).map((leg) => {
+      const savedLegKey = buildSavedLegKeyFromLeg(leg);
+
+      return {
+        savedLegKey,
+        eventName: leg.eventName || "",
+        eventDate: leg.eventDate || leg.startTime || "",
+        sport: leg.sport || "",
+        marketType: leg.marketType || "",
+        subjectName: leg.subjectName || "",
+        selectionLabel: leg.selectionLabel || "",
+        lineValue: leg.lineValue ?? null,
+        sportsbook: leg.sportsbook || "",
+        oddsAmerican: leg.oddsAmerican ?? null,
+      };
+    }),
+  };
+}
+
+function formatSavedDateTime(value) {
+  if (!value) return "Unknown time";
+
+  try {
+    return new Date(value).toLocaleString();
+  } catch (err) {
+    return String(value);
+  }
+}
+
+
+function calculateSingleKellyStake({
+  bankroll,
+  kellyFraction,
+  fairProbability,
+  oddsDecimal,
+}) {
+  const resolvedBankroll = Number(bankroll) || 0;
+  const resolvedKellyFraction = Number(kellyFraction) || 0;
+
+  if (
+    !(resolvedBankroll > 0) ||
+    !(resolvedKellyFraction > 0) ||
+    !(fairProbability > 0) ||
+    !(fairProbability < 1) ||
+    !(oddsDecimal > 1)
+  ) {
+    return 0;
+  }
+
+  const b = oddsDecimal - 1;
+  const p = fairProbability;
+  const q = 1 - p;
+
+  const fullKellyFraction = (b * p - q) / b;
+
+  if (!(fullKellyFraction > 0)) {
+    return 0;
+  }
+
+  return resolvedBankroll * resolvedKellyFraction * fullKellyFraction;
+}
+
+function extractSubjectNameFromMarket(market) {
+  const subjectKey = String(market?.subjectKey || "");
+
+  if (!subjectKey.includes("::")) return "";
+
+  const rawName = subjectKey.split("::").slice(1).join("::").trim();
+  if (!rawName) return "";
+
+  return rawName
+    .split(/\s+/)
+    .map((part) => {
+      if (/^[a-z]\.$/i.test(part)) return part.toUpperCase();
+      if (/^mj$/i.test(part)) return "MJ";
+      if (/^jr\.?$/i.test(part)) return "Jr.";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
   const fairMap = new Map(
     fairOddsResults.map((result) => [`${result.marketId}::${result.selectionId}`, result])
   );
@@ -50,9 +222,19 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults }) {
         (a, b) => b.oddsDecimal - a.oddsDecimal
       )[0];
 
-      const bestSharpQuote = [...sharpQuotes].sort(
-        (a, b) => b.oddsDecimal - a.oddsDecimal
-      )[0];
+      const bestSharpQuote = [...sharpQuotes].sort((a, b) => {
+        const priority = (quote) => {
+          const book = String(quote.sportsbook || "").trim().toLowerCase();
+          if (book === "pinnacle") return 1;
+          if (book === "fanduel") return 2;
+          return 3;
+        };
+
+        const priorityDiff = priority(a) - priority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+
+        return b.oddsDecimal - a.oddsDecimal;
+      })[0];
 
       const fairProbability = fair.fairProbability;
       const evPct =
@@ -68,7 +250,9 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults }) {
         marketId: market.id,
         selectionId: selection.id,
         eventName: market.displayName,
+        sport: market.sport || "",
         marketType: market.marketType,
+        subjectName: extractSubjectNameFromMarket(market),
         lineValue: market.lineValue,
         selectionLabel: selection.label,
         targetSportsbook: bestTargetQuote.sportsbook,
@@ -79,6 +263,12 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults }) {
         fairAmerican: fair.fairAmerican,
         edgePct,
         evPct,
+        suggestedKellyStake: calculateSingleKellyStake({
+          bankroll: filters?.bankroll,
+          kellyFraction: filters?.kellyFraction,
+          fairProbability: fair.fairProbability,
+          oddsDecimal: bestTargetQuote.oddsDecimal,
+        }),
       });
     }
   }
@@ -94,6 +284,64 @@ export default function EVParlayLabPage() {
   const [filters, setFilters] = useState(SAMPLE_FILTERS);
   const [manualMatches, setManualMatches] = useState([]);
   const [lastParsedAt, setLastParsedAt] = useState(null);
+  const [showParsedTable, setShowParsedTable] = useState(false);
+  const [showManualMatchPanel, setShowManualMatchPanel] = useState(false);
+  const [pendingUrlImport, setPendingUrlImport] = useState(null);
+  const [pendingImports, setPendingImports] = useState([]);
+  const [savedPlacedParlays, setSavedPlacedParlays] = useState([]);
+  const [hasRestoredSession, setHasRestoredSession] = useState(false);
+  function refreshPendingImports() {
+    setPendingImports(readImportQueue());
+  }
+
+  function handleLoadNewestImport({ append = false } = {}) {
+    const queue = readImportQueue();
+    if (!queue.length) {
+      alert("No pending imports found.");
+      return;
+    }
+
+    const newest = queue[queue.length - 1];
+    const incomingText = String(newest?.text || "");
+
+    if (!incomingText.trim()) {
+      alert("Newest import is empty.");
+      return;
+    }
+
+    setRawText((prev) => {
+      if (!append || !String(prev || "").trim()) return incomingText;
+      return `${String(prev).trim()}\n\n${incomingText}`;
+    });
+
+    if (newest?.source) {
+      setSportsbook(String(newest.source));
+    }
+
+    refreshPendingImports();
+  }
+
+  function handleClearPendingImports() {
+    writeImportQueue([]);
+    setPendingImports([]);
+  }
+
+  function handleClearSavedSession() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(SAVED_SESSION_KEY);
+      localStorage.removeItem(IMPORT_QUEUE_KEY);
+    }
+
+    setRows([]);
+    setManualMatches([]);
+    setLastParsedAt(null);
+    setPendingUrlImport(null);
+    setPendingImports([]);
+    setRawText("");
+    setShowParsedTable(false);
+    setShowManualMatchPanel(false);
+  }
+
    function handleParse() {
   const inputText = typeof rawText === "string" ? rawText : "";
 
@@ -124,7 +372,13 @@ export default function EVParlayLabPage() {
     batchRole,
   });
 
-  const normalized = normalizeParsedRows(withBatchRole) || [];
+  const parsedAt = Date.now();
+
+  const normalized = (normalizeParsedRows(withBatchRole) || []).map((row, index) => ({
+    ...row,
+    id: makeParsedRowId(row, parsedAt, index),
+  }));
+
 console.log("HANDLE PARSE NORMALIZED", normalized);
 
   setRows((prev) => {
@@ -170,6 +424,29 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     });
   }
 
+    function makeParsedRowId(row, parsedAt, index) {
+      return [
+        row.sportsbook || "book",
+        row.batchRole || "role",
+        row.sport || "sport",
+        row.eventLabelRaw || "event",
+        row.marketType || "market",
+        row.selectionNormalized || row.selectionRaw || "selection",
+        row.lineValue ?? "line",
+        row.oddsAmerican ?? "odds",
+        parsedAt,
+        index,
+      ]
+        .map((part) =>
+          String(part)
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+        )
+        .join("__");
+    }
+
   function makeRowMergeKey(row) {
     return [
       String(row.batchRole || "").trim().toLowerCase(),
@@ -191,6 +468,42 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     setRows([]);
     setManualMatches([]);
     setLastParsedAt(null);
+    setShowParsedTable(false);
+    setShowManualMatchPanel(false);
+  }
+
+function handleSavePlacedParlay(parlay) {
+    if (!parlay || !Array.isArray(parlay.legs) || parlay.legs.length === 0) {
+      alert("No parlay legs found to save.");
+      return;
+    }
+
+    const record = makePlacedParlayRecord(parlay);
+
+    setSavedPlacedParlays((prev) => {
+      const next = [record, ...(prev || [])].slice(0, 250);
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+  }
+
+  function handleClearSavedPlacedParlays() {
+    const ok = window.confirm(
+      "Clear all saved placed parlays? This only clears the EV Lab saved-parlay ledger."
+    );
+
+    if (!ok) return;
+
+    setSavedPlacedParlays([]);
+    writeSavedPlacedParlays([]);
+  }
+
+  function handleDeleteSavedPlacedParlay(parlayId) {
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).filter((parlay) => parlay.id !== parlayId);
+      writeSavedPlacedParlays(next);
+      return next;
+    });
   }
 
   function handleUpdateRow(rowId, patch) {
@@ -211,33 +524,303 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
   [rows, manualMatches]
 );
 
-const manualMatchCandidates = useMemo(
-  () => buildManualMatchCandidates(rows, manualMatches),
-  [rows, manualMatches]
+  const rowsForAnalysis = useMemo(() => {
+  const selectedSport = String(filters?.selectedSport || "ALL").trim().toUpperCase();
+  const enforceNoLiveGames = filters?.enforceNoLiveGames !== false;
+
+  return (rowsWithManualMatches || []).filter((row) => {
+    const sport = String(row.sport || "").trim().toUpperCase();
+
+    if (selectedSport !== "ALL" && sport !== selectedSport) {
+      return false;
+    }
+
+    if (enforceNoLiveGames && isLikelyLiveRow(row)) {
+      return false;
+    }
+
+    return true;
+  });
+}, [rowsWithManualMatches, filters]);
+
+  function handleDeleteRows(rowIds = []) {
+    const ids = new Set(rowIds);
+
+    setRows((prev) => prev.filter((row) => !ids.has(row.id)));
+
+    setManualMatches((prev) =>
+      prev.filter(
+        (match) => !ids.has(match.sourceRowId) && !ids.has(match.targetRowId)
+      )
+    );
+  }
+
+const manualMatchCandidates = useMemo(() => {
+  if (!showManualMatchPanel) return [];
+  if (!Array.isArray(rows) || !rows.length) return [];
+
+  return buildManualMatchCandidates(rows, manualMatches);
+}, [showManualMatchPanel, rows, manualMatches]);
+
+const savedLegUsageMap = useMemo(
+  () => buildSavedLegUsageMap(savedPlacedParlays),
+  [savedPlacedParlays]
 );
 
-const marketBundle = useMemo(() => buildCanonicalMarkets(rowsWithManualMatches), [rowsWithManualMatches]);
+const marketBundle = useMemo(() => {
+  if (!rowsForAnalysis.length) {
+    return { markets: [], unmatchedRows: [] };
+  }
+
+  return buildCanonicalMarkets(rowsForAnalysis);
+}, [rowsForAnalysis]);
 
   const fairOddsBundle = useMemo(() => {
-    return calculateFairOddsForMarkets(marketBundle.markets, rowsWithManualMatches);
-  }, [marketBundle.markets, rowsWithManualMatches]);
+    if (!marketBundle.markets.length) return [];
+    return calculateFairOddsForMarkets(marketBundle.markets, rowsForAnalysis);
+    }, [marketBundle.markets, rowsForAnalysis]);
 
   const topSingleEdgeBets = useMemo(() => {
-    return buildTopSingleEdgeBets({
-      markets: marketBundle.markets,
-      fairOddsResults: fairOddsBundle,
-    });
-  }, [marketBundle.markets, fairOddsBundle]);
+    if (!marketBundle.markets.length || !fairOddsBundle.length) return [];
 
-  const parlayEngineOutput = useMemo(() => {
-    return buildParlayCandidates({
-      rows: rowsWithManualMatches,
+    return buildTopSingleEdgeBets({
       markets: marketBundle.markets,
       fairOddsResults: fairOddsBundle,
       filters,
     });
-  }, [rowsWithManualMatches, marketBundle.markets, fairOddsBundle, filters]);
+  }, [marketBundle.markets, fairOddsBundle, filters]);
 
+  const parlayEngineOutput = useMemo(() => {
+    if (!rowsForAnalysis.length || !marketBundle.markets.length || !fairOddsBundle.length) {
+      return {
+        parlays: [],
+        counts: {
+          eligibleLegs: 0,
+          eligibleMarkets: 0,
+          generatedCombos: 0,
+          rejections: {
+            noFairOdds: 0,
+            noTargetQuote: 0,
+            belowLegThreshold: 0,
+            sameSportBlocked: 0,
+            sameGameBlocked: 0,
+            repeatsBlocked: 0,
+            nonPositiveParlayEv: 0,
+          },
+        },
+      };
+    }
+
+    return buildParlayCandidates({
+      rows: rowsForAnalysis,
+      markets: marketBundle.markets,
+      fairOddsResults: fairOddsBundle,
+      filters,
+      savedLegUsageMap,
+    });
+  }, [rowsForAnalysis, marketBundle.markets, fairOddsBundle, filters, savedLegUsageMap]);
+
+
+
+  useEffect(() => {
+    refreshPendingImports();
+
+    if (typeof window === "undefined") {
+      setHasRestoredSession(true);
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const safeReset = params.get("evSafe") === "1" || params.get("evReset") === "1";
+
+    if (safeReset) {
+      localStorage.removeItem(SAVED_SESSION_KEY);
+      localStorage.removeItem(IMPORT_QUEUE_KEY);
+      sessionStorage.clear();
+
+      setRawText("");
+      setRows([]);
+      setManualMatches([]);
+      setLastParsedAt(null);
+      setPendingUrlImport(null);
+      setPendingImports([]);
+      setSavedPlacedParlays(readSavedPlacedParlays());
+
+      params.delete("evSafe");
+      params.delete("evReset");
+
+      const newUrl =
+        window.location.pathname + (params.toString() ? `?${params.toString()}` : "");
+
+      window.history.replaceState({}, "", newUrl);
+      setHasRestoredSession(true);
+      return;
+    }
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_SESSION_KEY) || "null");
+
+      if (!saved || typeof saved !== "object") {
+        setHasRestoredSession(true);
+        return;
+      }
+
+      const savedAt = Number(saved.savedAt || 0);
+      if (savedAt && Date.now() - savedAt > SAVED_SESSION_TTL_MS) {
+        localStorage.removeItem(SAVED_SESSION_KEY);
+        setHasRestoredSession(true);
+        return;
+      }
+
+      if (typeof saved.rawText === "string") setRawText(saved.rawText);
+      if (typeof saved.sportsbook === "string") setSportsbook(saved.sportsbook);
+      if (typeof saved.batchRole === "string") setBatchRole(saved.batchRole);
+      if (Array.isArray(saved.rows)) setRows(saved.rows);
+      if (saved.filters && typeof saved.filters === "object") setFilters(saved.filters);
+      if (Array.isArray(saved.manualMatches)) setManualMatches(saved.manualMatches);
+      setSavedPlacedParlays(readSavedPlacedParlays());
+      if (typeof saved.lastParsedAt === "string" || saved.lastParsedAt === null) {
+        setLastParsedAt(saved.lastParsedAt);
+      }
+    } catch (err) {
+      console.warn("Failed to restore EV Parlay Lab session", err);
+    } finally {
+      setHasRestoredSession(true);
+    }
+  }, []);
+
+    useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function processQueuedImports() {
+      const queue = readImportQueue();
+      if (!queue.length) {
+        refreshPendingImports();
+        return;
+      }
+
+      const newest = queue[queue.length - 1];
+      const incomingText = String(newest?.text || "");
+
+      if (!incomingText.trim()) {
+        refreshPendingImports();
+        return;
+      }
+
+      setPendingUrlImport(incomingText);
+      setRawText(incomingText);
+
+      if (newest?.source) {
+        const sourceName = String(newest.source);
+        setSportsbook(sourceName);
+
+        if (/^pinnacle$/i.test(sourceName) || /^fanduel$/i.test(sourceName)) {
+          setBatchRole("fair_odds");
+        } else {
+          setBatchRole("target");
+        }
+      }
+
+      writeImportQueue([]);
+      setPendingImports([]);
+      setSavedPlacedParlays(readSavedPlacedParlays());
+      window.__evParlayAutoParsePending = true;
+    }
+
+    processQueuedImports();
+
+    window.addEventListener("ev-parlay-import-queued", processQueuedImports);
+
+    return () => {
+      window.removeEventListener("ev-parlay-import-queued", processQueuedImports);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasRestoredSession) return;
+
+    const safeRows = (rows || []).map((row) => {
+      const {
+        _allRowsInEvent,
+        ...rest
+      } = row || {};
+
+      return rest;
+    });
+
+    const payload = {
+      rawText,
+      sportsbook,
+      batchRole,
+      rows: safeRows,
+      filters,
+      manualMatches,
+      lastParsedAt,
+      savedAt: Date.now(),
+    };
+
+    try {
+      localStorage.setItem(SAVED_SESSION_KEY, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("Failed to save EV Parlay Lab session", err);
+    }
+  }, [hasRestoredSession, rawText, sportsbook, batchRole, rows, filters, manualMatches, lastParsedAt]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const imported = params.get("import");
+    const source = params.get("source");
+    const mode = params.get("mode");
+    const autoParse = params.get("autoparse");
+
+    if (!imported) return;
+
+    const decoded = imported;
+
+    if (decoded && decoded.trim()) {
+      setPendingUrlImport(decoded);
+
+      setRawText((prev) => {
+        if (mode === "append" && String(prev || "").trim()) {
+          return `${String(prev).trim()}\n\n${decoded}`;
+        }
+        return decoded;
+      });
+
+      if (source && String(source).trim()) {
+        const normalizedSource = String(source).trim();
+        if (/^thescore$/i.test(normalizedSource)) {
+          setSportsbook("TheScore");
+        } else {
+          setSportsbook(normalizedSource);
+        }
+      }
+
+      if (autoParse === "1") {
+        window.__evParlayAutoParsePending = true;
+      }
+    }
+
+    params.delete("import");
+    params.delete("source");
+    params.delete("mode");
+    params.delete("autoparse");
+    const newUrl =
+      window.location.pathname + (params.toString() ? `?${params.toString()}` : "");
+    window.history.replaceState({}, "", newUrl);
+  }, []);
+
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      if (!window.__evParlayAutoParsePending) return;
+      if (!rawText || !String(rawText).trim()) return;
+
+      window.__evParlayAutoParsePending = false;
+      handleParse();
+    }, [rawText, sportsbook, batchRole]);
 
   const parlayCandidates = Array.isArray(parlayEngineOutput)
     ? parlayEngineOutput
@@ -334,29 +917,166 @@ const marketBundle = useMemo(() => buildCanonicalMarkets(rowsWithManualMatches),
 
         <ExtractionGuide sportsbook={sportsbook} />
 
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: "#ecfdf5",
+            border: "1px solid #86efac",
+          }}
+        >
+          <div style={{ fontWeight: 800, color: "#166534", marginBottom: 8 }}>
+            Pending scraped imports: {pendingImports.length}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => handleLoadNewestImport({ append: false })}
+              style={{
+                background: "#166534",
+                color: "#f0fdf4",
+                border: "none",
+                borderRadius: 8,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Load newest import
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLoadNewestImport({ append: true })}
+              style={{
+                background: "#fff",
+                color: "#166534",
+                border: "1px solid #86efac",
+                borderRadius: 8,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Append newest import
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearPendingImports}
+              style={{
+                background: "#fff",
+                color: "#991b1b",
+                border: "1px solid #fca5a5",
+                borderRadius: 8,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Clear pending imports
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearSavedSession}
+              style={{
+                background: "#fff",
+                color: "#7c2d12",
+                border: "1px solid #fdba74",
+                borderRadius: 8,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Clear saved session
+            </button>
+          </div>
+        </div>
+
+        {pendingUrlImport ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 10,
+              background: "#ecfdf5",
+              border: "1px solid #86efac",
+              color: "#166534",
+              fontWeight: 700,
+            }}
+          >
+            Imported scraped text from URL. Review or click Parse.
+          </div>
+        ) : null}
+
         <div style={{ marginBottom: 12, fontWeight: 700, color: "#166534" }}>
           Debug: rows in state = {rows.length}
         </div>
 
-        <ParsedOddsTable
-          rows={rows}
-          onUpdateRow={handleUpdateRow}
-          onDeleteRow={handleDeleteRow}
-        />
+        <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 
-        <ManualMatchPanel
-          candidates={manualMatchCandidates}
-          manualMatches={manualMatches}
-          onApplyMatch={(match) => {
-            setManualMatches((prev) => {
-              const filtered = prev.filter((item) => item.sourceRowId !== match.sourceRowId);
-              return [...filtered, match];
-            });
-          }}
-          onRemoveMatch={(sourceRowId) => {
-            setManualMatches((prev) => prev.filter((item) => item.sourceRowId !== sourceRowId));
-          }}
-        />
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setShowParsedTable((prev) => !prev)}
+            style={{
+              background: "#166534",
+              color: "#f0fdf4",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 12px",
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            {showParsedTable ? "Hide Parsed Review" : "Show Parsed Review"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowManualMatchPanel((prev) => !prev)}
+            style={{
+              background: "#fff",
+              color: "#166534",
+              border: "1px solid #86efac",
+              borderRadius: 8,
+              padding: "8px 12px",
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            {showManualMatchPanel ? "Hide Manual Match Review" : "Show Manual Match Review"}
+          </button>
+        </div>
+
+        {showParsedTable ? (
+          <ParsedOddsTable
+            rows={rows}
+            onUpdateRow={handleUpdateRow}
+            onDeleteRow={handleDeleteRow}
+            onDeleteRows={handleDeleteRows}
+          />
+        ) : null}
+
+        {showManualMatchPanel ? (
+          <ManualMatchPanel
+            candidates={manualMatchCandidates}
+            manualMatches={manualMatches}
+            onApplyMatch={(match) => {
+              setManualMatches((prev) => {
+                const filtered = prev.filter((item) => item.sourceRowId !== match.sourceRowId);
+                return [...filtered, match];
+              });
+            }}
+            onRemoveMatch={(sourceRowId) => {
+              setManualMatches((prev) => prev.filter((item) => item.sourceRowId !== sourceRowId));
+            }}
+          />
+        ) : null}
 
         {/* <MarketMatchPanel
           markets={marketBundle.markets}
@@ -368,7 +1088,16 @@ const marketBundle = useMemo(() => buildCanonicalMarkets(rowsWithManualMatches),
 
         <ParlayFilters filters={filters} setFilters={setFilters} />
 
-        <ParlayResults parlays={parlayCandidates} counts={parlayCounts} />
+        <ParlayResults
+          parlays={parlayCandidates}
+          counts={parlayCounts}
+          savedPlacedParlays={savedPlacedParlays}
+          savedLegUsageMap={savedLegUsageMap}
+          onSavePlacedParlay={handleSavePlacedParlay}
+          onClearSavedParlays={handleClearSavedPlacedParlays}
+          onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
+          formatSavedDateTime={formatSavedDateTime}
+        />
       </div>
     </div>
   );
@@ -416,8 +1145,10 @@ function buildManualMatchCandidates(rows, manualMatches) {
 
   const matchedSourceIds = new Set((manualMatches || []).map((match) => match.sourceRowId));
 
-  const sharpRows = rows.filter((row) => row.isSharpSource === true);
-  const targetRows = rows.filter((row) => row.isTargetBook === true);
+  const rowsWithManualMatches = applyManualMatchOverrides(rows, manualMatches || []);
+
+  const sharpRows = rowsWithManualMatches.filter((row) => row.isSharpSource === true);
+  const targetRows = rowsWithManualMatches.filter((row) => row.isTargetBook === true);
 
   const candidates = [];
 
@@ -432,10 +1163,20 @@ function buildManualMatchCandidates(rows, manualMatches) {
 
     if (!sourceEventKey || !sourceBaseKey) continue;
 
+    const alreadyMatchedExact = targetRows.some((targetRow) => {
+      if (normalizeManualMatchEventKey(targetRow.eventLabelRaw) !== sourceEventKey) return false;
+      if (String(normalizeMarketType(targetRow.marketType) || "") !== String(normalizeMarketType(sourceRow.marketType) || "")) return false;
+      if (buildSelectionFamilyKey(targetRow) !== sourceFamilyKey) return false;
+      if (buildSelectionDirectionKey(targetRow) !== sourceDirection) return false;
+      return buildSelectionThresholdKey(targetRow) === sourceThresholdKey;
+    });
+
+    if (alreadyMatchedExact) continue;
+
     const possibleTargets = targetRows.filter((targetRow) => {
       if (targetRow.id === sourceRow.id) return false;
       if (normalizeManualMatchEventKey(targetRow.eventLabelRaw) !== sourceEventKey) return false;
-      if (String(targetRow.marketType || "") !== String(sourceRow.marketType || "")) return false;
+      if (String(normalizeMarketType(targetRow.marketType) || "") !== String(normalizeMarketType(sourceRow.marketType) || "")) return false;
 
       const targetBaseKey = buildSelectionBaseKey(targetRow);
       if (!targetBaseKey) return false;
@@ -469,7 +1210,6 @@ function buildManualMatchCandidates(rows, manualMatches) {
         thresholdSortValue: buildThresholdSortValue(row),
         matchScore: computeMatchScore(sourceRow, row),
       });
-
     }
 
     const targetBooks = Array.from(groupedByBook.entries()).map(([sportsbook, options]) => ({
@@ -542,10 +1282,10 @@ function buildSelectionThresholdKey(row) {
 }
 
 function buildSelectionFamilyKey(row) {
-  const marketType = String(row.marketType || "").toLowerCase();
+  const marketType = normalizeMarketType(row.marketType);
   const selection = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/−/g, "-");
+    .replace(/âˆ’/g, "-");
 
   if (marketType === "player_points") return "points";
   if (marketType === "player_assists") return "assists";
@@ -557,6 +1297,12 @@ function buildSelectionFamilyKey(row) {
   if (marketType === "player_rebounds_assists") return "rebounds_assists";
   if (marketType === "double_double") return "double_double";
   if (marketType === "triple_double") return "triple_double";
+  if (marketType === "player_shots_on_goal") return "shots_on_goal";
+  if (marketType === "player_saves") return "saves";
+  if (marketType === "player_power_play_points") return "power_play_points";
+  if (marketType === "goalie_goals_against") return "goals_against";
+  if (marketType === "player_shutout") return "shutout";
+  if (marketType === "anytime_goalscorer") return "anytime_goalscorer";
 
   if (/\bpts\s*\+\s*reb\s*\+\s*ast\b|\bpts & rebs & asts\b|\bpra\b/.test(selection)) {
     return "pra";
@@ -569,6 +1315,13 @@ function buildSelectionFamilyKey(row) {
   if (/\bdouble[\s-]?double\b/.test(selection)) return "double_double";
   if (/\btriple[\s-]?double\b/.test(selection)) return "triple_double";
 
+  if (/\bshots on goal\b/.test(selection)) return "shots_on_goal";
+  if (/\bsaves\b/.test(selection)) return "saves";
+  if (/\bpower play points\b/.test(selection)) return "power_play_points";
+  if (/\bgoals against\b/.test(selection)) return "goals_against";
+  if (/\bshutout\b/.test(selection)) return "shutout";
+  if (/\bany ?time goal scorer\b|\banytime goalscorer\b/.test(selection)) return "anytime_goalscorer";
+
   if (/\bpoints\b/.test(selection)) return "points";
   if (/\bassists\b/.test(selection)) return "assists";
   if (/\brebounds\b/.test(selection)) return "rebounds";
@@ -576,6 +1329,7 @@ function buildSelectionFamilyKey(row) {
 
   return marketType;
 }
+
 
 function buildSelectionDirectionKey(row) {
   const selection = String(row.selectionNormalized || row.selectionRaw || "").toLowerCase();
@@ -638,4 +1392,30 @@ function buildManualSelectionLabel(row) {
       : "";
 
   return `${selection}${lineValue}${odds}`;
+}
+
+function isLikelyLiveRow(row) {
+  const text = [
+    row.eventLabelRaw,
+    row.startTimeRaw,
+    row.rawText,
+    row.sourceTag,
+    ...(Array.isArray(row.parseWarnings) ? row.parseWarnings : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    /\blive\b/.test(text) ||
+    /\btop\s+\d/.test(text) ||
+    /\bbottom\s+\d/.test(text) ||
+    /\bend\s+\d/.test(text) ||
+    /\bperiod\b/.test(text) ||
+    /\bquarter\b/.test(text) ||
+    /\bhalf\b/.test(text) ||
+    /\bb:\d\b/.test(text) ||
+    /\bs:\d\b/.test(text) ||
+    /\bo:\d\b/.test(text)
+  );
 }

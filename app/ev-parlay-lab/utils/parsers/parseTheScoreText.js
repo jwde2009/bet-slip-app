@@ -31,6 +31,10 @@ export function parseTheScoreText(rawText = "", context = {}) {
     rows.push(...parseLandingGames(lines, sport));
   }
 
+  if (rows.length === 0) {
+    rows.push(...parseStructuredExport(lines, context));
+  }
+
   return dedupeRows(rows);
 }
 
@@ -455,6 +459,218 @@ function parseDetailYesNoProps(lines, startIndex, event, sport) {
   return rows;
 }
 
+function parseStructuredExport(lines, context = {}) {
+  const rows = [];
+
+  let currentSport = String(context?.sport || "").toUpperCase() || "UNKNOWN";
+  let currentEvent = String(context?.eventName || "").trim() || "Unknown Event";
+  let currentMarket = "";
+
+  for (const line of lines) {
+    if (/^THESCORE_STRUCTURED_EXPORT$/i.test(line)) continue;
+
+    const sportMatch = line.match(/^Sport:\s*(.+)$/i);
+    if (sportMatch) {
+      currentSport = normalizeLine(sportMatch[1]).toUpperCase();
+      continue;
+    }
+
+    const eventMatch = line.match(/^Event:\s*(.+)$/i);
+    if (eventMatch) {
+      currentEvent = normalizeLine(eventMatch[1]);
+      continue;
+    }
+
+    const marketMatch = line.match(/^Market:\s*(.+)$/i);
+    if (marketMatch) {
+      currentMarket = normalizeLine(marketMatch[1]);
+      continue;
+    }
+
+    const ouMatch = line.match(/^(.+?)\s*\|\s*(OVER|UNDER)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (ouMatch) {
+      const player = normalizeLine(ouMatch[1]);
+      const side = ouMatch[2].toLowerCase();
+      const lineValue = Number(ouMatch[3]);
+      const oddsAmerican = /^EVEN$/i.test(ouMatch[4]) ? 100 : Number(ouMatch[4]);
+
+      const marketType = inferStructuredMarketType(currentMarket, "ou");
+
+      if (!player || !Number.isFinite(lineValue) || !Number.isFinite(oddsAmerican) || !marketType) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType,
+        selection: `${player} ${side === "over" ? "Over" : "Under"}`,
+        lineValue,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+
+    const ladderMatch = line.match(/^(.+?)\s*\|\s*(\d+(?:\.\d+)?\+)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (ladderMatch) {
+      const player = normalizeLine(ladderMatch[1]);
+      const threshold = Number(String(ladderMatch[2]).replace(/\+$/, ""));
+      const oddsAmerican = /^EVEN$/i.test(ladderMatch[3]) ? 100 : Number(ladderMatch[3]);
+
+      const marketType = inferStructuredMarketType(currentMarket, "ladder");
+
+      if (!player || !Number.isFinite(threshold) || !Number.isFinite(oddsAmerican) || !marketType) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType,
+        selection: `${player} Over`,
+        lineValue: threshold - 0.5,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+
+    const yesNoMatch = line.match(/^(.+?)\s*\|\s*(YES|NO)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (yesNoMatch) {
+      const player = normalizeLine(yesNoMatch[1]);
+      const side = yesNoMatch[2].toUpperCase();
+      const oddsAmerican = /^EVEN$/i.test(yesNoMatch[3]) ? 100 : Number(yesNoMatch[3]);
+
+      const marketType = inferStructuredMarketType(currentMarket, "yesno");
+
+      if (!player || !Number.isFinite(oddsAmerican) || !marketType) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType,
+        selection: `${player} ${side === "YES" ? "Yes" : "No"}`,
+        lineValue: null,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+
+    const spreadMatch = line.match(/^(.+?)\s*\|\s*([+-]\d+(?:\.\d+)?)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (spreadMatch && /^spread$/i.test(currentMarket)) {
+      const team = normalizeLine(spreadMatch[1]);
+      const lineValue = Number(spreadMatch[2]);
+      const oddsAmerican = /^EVEN$/i.test(spreadMatch[3]) ? 100 : Number(spreadMatch[3]);
+
+      if (!team || !Number.isFinite(lineValue) || !Number.isFinite(oddsAmerican)) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType: "spread",
+        selection: team,
+        lineValue,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+
+    const totalMatch = line.match(/^(Over|Under)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (totalMatch && /^total$/i.test(currentMarket)) {
+      const side = totalMatch[1];
+      const lineValue = Number(totalMatch[2]);
+      const oddsAmerican = /^EVEN$/i.test(totalMatch[3]) ? 100 : Number(totalMatch[3]);
+
+      if (!Number.isFinite(lineValue) || !Number.isFinite(oddsAmerican)) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType: "total",
+        selection: side,
+        lineValue,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+
+    const moneylineMatch = line.match(/^(.+?)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
+    if (moneylineMatch && /^moneyline$/i.test(currentMarket)) {
+      const team = normalizeLine(moneylineMatch[1]);
+      const oddsAmerican = /^EVEN$/i.test(moneylineMatch[2]) ? 100 : Number(moneylineMatch[2]);
+
+      if (!team || !Number.isFinite(oddsAmerican)) {
+        continue;
+      }
+
+      rows.push(buildRow({
+        sport: currentSport,
+        event: currentEvent,
+        marketType: "moneyline_2way",
+        selection: team,
+        lineValue: null,
+        oddsAmerican,
+      }));
+
+      continue;
+    }
+  }
+
+  return rows;
+}
+
+function inferStructuredMarketType(header, mode = "") {
+  const text = normalizeLine(header).toLowerCase();
+
+  if (text === "points (o/u)" || text === "points") return "player_points";
+  if (text === "rebounds (o/u)" || text === "rebounds") return "player_rebounds";
+  if (text === "assists (o/u)" || text === "assists") return "player_assists";
+  if (text === "3-pointers made (o/u)" || text === "3-pointers made") return "player_threes";
+  if (text === "pts + reb + ast (o/u)" || text === "pts + reb + ast") return "player_pra";
+  if (text === "pts + reb") return "player_points_rebounds";
+  if (text === "pts + ast") return "player_points_assists";
+  if (text === "reb + ast (o/u)" || text === "reb + ast") return "player_rebounds_assists";
+  if (text === "double double") return "double_double";
+  if (text === "triple double") return "triple_double";
+
+  if (text === "shots on goal") return "player_shots_on_goal";
+  if (text === "goals") return "player_goals";
+  if (text === "saves") return "player_saves";
+  if (text === "player shutout") return "player_shutout";
+  if (text === "power play points") return "player_power_play_points";
+  if (text === "hits") return "player_hits";
+  if (text === "points/assists") return "player_points_assists";
+
+  if (text === "pitcher strikeouts") return "pitcher_strikeouts";
+  if (text === "pitcher strikeouts (o/u)") return "pitcher_strikeouts";
+  if (text === "outs recorded (o/u)") return "pitcher_outs_recorded";
+  if (text === "hits allowed (o/u)") return "pitcher_hits_allowed";
+  if (text === "earned runs allowed (o/u)") return "pitcher_earned_runs_allowed";
+  if (text === "walks allowed (o/u)") return "pitcher_walks_allowed";
+
+  if (text === "home runs") return "player_home_runs";
+  if (text === "home runs (o/u)") return "player_home_runs";
+  if (text === "rbis") return "player_rbis";
+  if (text === "rbis (o/u)") return "player_rbis";
+  if (text === "runs scored") return "player_runs";
+  if (text === "runs scored (o/u)") return "player_runs";
+  if (text === "total bases") return "player_total_bases";
+  if (text === "total bases (o/u)") return "player_total_bases";
+  if (text === "hits (o/u)") return "player_hits";
+
+  return "";
+}
+
 function buildMainRows(event, away, home, sport, parsed) {
   return [
     buildRow({ sport, event, marketType: "spread", selection: away, lineValue: parsed.spreadA, oddsAmerican: parsed.spreadAOdds }),
@@ -574,7 +790,7 @@ function isLikelySectionHeader(value) {
   // 🚫 EXCLUDE combo headers
   if (isComboHeader(text)) return false;
 
-  return /^(Lines|Futures|Series|Popular|Player Points|Player Rebounds|Player Assists|Player Threes|Player Combos|Player Defense|Quarter|Half|Game Props|Specials|Featured Parlays|Main Lines|Alternate Game Spread|Alternate Total Points|Points|Rebounds|Assists|3-Pointers Made|Points \(O\/U\)|Rebounds \(O\/U\)|Assists \(O\/U\)|3-Pointers Made \(O\/U\)|Pts \+ Reb \+ Ast \(O\/U\)|Reb \+ Ast \(O\/U\)|Goalscorer|Shots On Goal|Points\/Assists|Goalie\/Defense|Periods|Goals|Assists|Power Play Points|Saves|Hits|Player Shutout|Betting News|See All|Hot Props|Moving On|Series Specials|Playoff Specials)$/i.test(text);
+  return /^(Lines|Futures|Series|Popular|Player Points|Player Rebounds|Player Assists|Player Threes|Player Combos|Player Defense|Quarter|Half|Game Props|Specials|Featured Parlays|Main Lines|Alternate Game Spread|Alternate Total Points|Points|Rebounds|Assists|3-Pointers Made|Points \(O\/U\)|Rebounds \(O\/U\)|Assists \(O\/U\)|3-Pointers Made \(O\/U\)|Pts \+ Reb \+ Ast \(O\/U\)|Reb \+ Ast \(O\/U\)|Goalscorer|Shots On Goal|First To 5 Shots On Goal|Points\/Assists|Goalie\/Defense|Periods|Goals|Assists|Power Play Points|Saves|Hits|Player Shutout|Betting News|See All|Hot Props|Moving On|Series Specials|Playoff Specials)$/i.test(text);
 }
 
 function isComboHeader(value) {
