@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 
 export default function LoadCoveragePanel({ rows = [] }) {
   const [collapsedBooks, setCollapsedBooks] = useState({});
+  const [collapsedSports, setCollapsedSports] = useState({});
   const [collapsedEvents, setCollapsedEvents] = useState({});
   const [showOnlyThin, setShowOnlyThin] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const coverage = useMemo(() => buildCoverage(rows), [rows]);
 
@@ -38,6 +40,36 @@ export default function LoadCoveragePanel({ rows = [] }) {
     );
   }
 
+  if (panelCollapsed) {
+    return (
+      <section style={sectionStyle}>
+        <div style={headerRowStyle}>
+          <div>
+            <h2 style={h2Style}>Loaded Coverage</h2>
+            <div style={subtleStyle}>
+              Hidden for now. Reopen it if you want to check loaded books, leagues, games, and markets again.
+            </div>
+          </div>
+
+          <div style={headerButtonRowStyle}>
+            <span style={summaryPillStyle}>Books: {coverage.bookCount}</span>
+            <span style={summaryPillStyle}>Events: {coverage.eventCount}</span>
+            <span style={summaryPillStyle}>Markets: {coverage.marketCount}</span>
+            <span style={summaryPillStyle}>Rows: {coverage.rowCount}</span>
+
+            <button
+              type="button"
+              onClick={() => setPanelCollapsed(false)}
+              style={showThinButtonStyle}
+            >
+              Show Loaded Coverage
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
@@ -60,6 +92,14 @@ export default function LoadCoveragePanel({ rows = [] }) {
             style={showThinButtonStyle}
           >
             {showOnlyThin ? "Show All" : "Show Thin Only"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPanelCollapsed(true)}
+            style={showThinButtonStyle}
+          >
+            Hide Loaded Coverage
           </button>
         </div>
       </div>
@@ -96,70 +136,88 @@ export default function LoadCoveragePanel({ rows = [] }) {
 
                 {!bookCollapsed ? (
                   <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-                    {book.sports.map((sport) => (
-                      <div key={`${bookKey}_${sport.sport}`} style={sportCardStyle}>
-                        <div style={sportHeaderStyle}>
-                          {sport.sport || "UNKNOWN"} ({sport.eventCount} events)
-                          <span style={sportMetaStyle}>
-                            {sport.marketCount} markets • {sport.rowCount} rows
-                          </span>
-                        </div>
+                    {book.sports.map((sport) => {
+                      const sportKey = `${bookKey}_${sport.sport}`;
+                      const sportCollapsed = !!collapsedSports[sportKey];
 
-                        <div style={{ display: "grid", gap: 8 }}>
-                          {sport.events.map((event) => {
-                            const eventKey = `${bookKey}::${sport.sport}::${event.eventName}`;
-                            const eventCollapsed = !!collapsedEvents[eventKey];
+                      return (
+                        <div key={sportKey} style={sportCardStyle}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCollapsedSports((prev) => ({
+                                ...prev,
+                                [sportKey]: !prev[sportKey],
+                              }))
+                            }
+                            style={sportHeaderButtonStyle}
+                          >
+                            <span>
+                              {sportCollapsed ? "Show" : "Hide"} {sport.sport || "UNKNOWN"} ({sport.eventCount} events)
+                            </span>
+                            <span style={sportMetaStyle}>
+                              {sport.marketCount} markets • {sport.rowCount} rows
+                            </span>
+                          </button>
 
-                            return (
-                              <div
-                                key={eventKey}
-                                style={{
-                                  ...eventCardStyle,
-                                  ...(event.isThin ? thinEventStyle : null),
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCollapsedEvents((prev) => ({
-                                      ...prev,
-                                      [eventKey]: !prev[eventKey],
-                                    }))
-                                  }
-                                  style={eventHeaderButtonStyle}
-                                >
-                                  <span>
-                                    {eventCollapsed ? "Show" : "Hide"} {event.eventName}
-                                  </span>
+                          {!sportCollapsed ? (
+                            <div style={{ display: "grid", gap: 8 }}>
+                              {sport.events.map((event) => {
+                                const eventKey = `${bookKey}::${sport.sport}::${event.eventName}`;
+                                const eventCollapsed = !!collapsedEvents[eventKey];
 
-                                  <span style={eventMetaWrapStyle}>
-                                    {event.isThin ? (
-                                      <span style={thinBadgeStyle}>
-                                        Possibly incomplete
+                                return (
+                                  <div
+                                    key={eventKey}
+                                    style={{
+                                      ...eventCardStyle,
+                                      ...(event.isThin ? thinEventStyle : null),
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCollapsedEvents((prev) => ({
+                                          ...prev,
+                                          [eventKey]: !prev[eventKey],
+                                        }))
+                                      }
+                                      style={eventHeaderButtonStyle}
+                                    >
+                                      <span>
+                                        {eventCollapsed ? "Show" : "Hide"} {event.eventName}
                                       </span>
-                                    ) : null}
-                                    <span style={eventMetaStyle}>
-                                      {event.marketCount} markets • {event.rowCount} rows
-                                    </span>
-                                  </span>
-                                </button>
 
-                                {!eventCollapsed ? (
-                                  <div style={marketGridStyle}>
-                                    {event.markets.map((market) => (
-                                      <div key={`${eventKey}_${market.marketType}`} style={marketPillStyle}>
-                                        <span style={marketNameStyle}>{formatMarketLabel(market.marketType)}</span>
-                                        <span style={marketCountStyle}>{market.rowCount} rows</span>
+                                      <span style={eventMetaWrapStyle}>
+                                        {event.isThin ? (
+                                          <span style={thinBadgeStyle}>
+                                            Possibly incomplete
+                                          </span>
+                                        ) : null}
+                                        <span style={eventMetaStyle}>
+                                          {event.marketCount} markets • {event.rowCount} rows
+                                        </span>
+                                      </span>
+                                    </button>
+
+                                    {!eventCollapsed ? (
+                                      <div style={marketGridStyle}>
+                                        {event.markets.map((market) => (
+                                          <div key={`${eventKey}_${market.marketType}`} style={marketPillStyle}>
+                                            <span style={marketNameStyle}>{formatMarketLabel(market.marketType)}</span>
+                                            <span style={marketCountStyle}>{market.rowCount} rows</span>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
+                                    ) : null}
                                   </div>
-                                ) : null}
-                              </div>
-                            );
-                          })}
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -450,6 +508,17 @@ const sportHeaderStyle = {
   marginBottom: 8,
 };
 
+const sportHeaderButtonStyle = {
+  ...sportHeaderStyle,
+  width: "100%",
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  cursor: "pointer",
+  color: "#111827",
+  textAlign: "left",
+};
+
 const sportMetaStyle = {
   color: "#6b7280",
   fontSize: 12,
@@ -457,7 +526,9 @@ const sportMetaStyle = {
 };
 
 const eventCardStyle = {
-  border: "1px solid #e5e7eb",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "#e5e7eb",
   borderRadius: 10,
   padding: 9,
   background: "#f9fafb",
