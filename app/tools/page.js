@@ -980,14 +980,20 @@ const collapseButtonStyle = {
 };
 
 const collapsedCardStyle = {
+  paddingTop: 16,
+  paddingRight: 16,
   paddingBottom: 10,
+  paddingLeft: 16,
 };
 
 const cardStyle = {
   background: "#f0fdf4",
   border: "2px solid #166534",
   borderRadius: 12,
-  padding: 16,
+  paddingTop: 16,
+  paddingRight: 16,
+  paddingBottom: 16,
+  paddingLeft: 16,
 };
 
 const cardTitleIconStyle = {
