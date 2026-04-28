@@ -47,7 +47,7 @@ export default function ParlayFilters({ filters, setFilters }) {
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
         <div>
-          <h2 style={h2Style}>5. Parlay Filters</h2>
+          <h2 style={h2Style}>6. Parlay Filters</h2>
           <div style={helpTextStyle}>
             Edit filters freely, then click Apply Filters to recalculate parlays.
           </div>
@@ -104,6 +104,22 @@ export default function ParlayFilters({ filters, setFilters }) {
             <option value="TENNIS">Tennis</option>
             <option value="UFC">UFC</option>
             <option value="GOLF">Golf</option>
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          Target Book
+          <select
+            value={draftFilters.selectedTargetBook || "ALL"}
+            onChange={(e) => updateField("selectedTargetBook", e.target.value)}
+            style={inputStyle}
+          >
+            <option value="ALL">All Target Books</option>
+            <option value="TheScore">TheScore</option>
+            <option value="BetMGM">BetMGM</option>
+            <option value="DraftKings">DraftKings</option>
+            <option value="FanDuel">FanDuel</option>
+            <option value="Caesars">Caesars</option>
           </select>
         </label>
 

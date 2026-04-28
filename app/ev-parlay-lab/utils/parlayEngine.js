@@ -93,6 +93,10 @@ export function buildParlayCandidates({
     fairOddsResults.map((result) => [`${result.marketId}::${result.selectionId}`, result])
   );
 
+  const selectedTargetBook = String(filters?.selectedTargetBook || "ALL")
+    .trim()
+    .toLowerCase();
+
   const candidateLegs = [];
   const rejectionCounts = {
     noFairOdds: 0,
@@ -112,9 +116,16 @@ export function buildParlayCandidates({
         continue;
       }
 
-      const targetQuotes = selection.quotes.filter(
-        (q) => q.isTargetBook === true && Number.isFinite(q.oddsDecimal) && q.oddsDecimal > 1
-      );
+      const targetQuotes = selection.quotes.filter((q) => {
+        const quoteBook = String(q.sportsbook || "").trim().toLowerCase();
+
+        return (
+          q.isTargetBook === true &&
+          Number.isFinite(q.oddsDecimal) &&
+          q.oddsDecimal > 1 &&
+          (selectedTargetBook === "all" || quoteBook === selectedTargetBook)
+        );
+      });
 
       if (!targetQuotes.length) {
         rejectionCounts.noTargetQuote += 1;

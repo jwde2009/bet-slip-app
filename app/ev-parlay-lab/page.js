@@ -196,6 +196,10 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
     fairOddsResults.map((result) => [`${result.marketId}::${result.selectionId}`, result])
   );
 
+  const selectedTargetBook = String(filters?.selectedTargetBook || "ALL")
+    .trim()
+    .toLowerCase();
+
   const bets = [];
 
   for (const market of markets) {
@@ -203,12 +207,16 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
       const fair = fairMap.get(`${market.id}::${selection.id}`);
       if (!fair) continue;
 
-      const targetQuotes = selection.quotes.filter(
-        (q) =>
+      const targetQuotes = selection.quotes.filter((q) => {
+        const quoteBook = String(q.sportsbook || "").trim().toLowerCase();
+
+        return (
           q.isTargetBook === true &&
           Number.isFinite(q.oddsDecimal) &&
-          q.oddsDecimal > 1
-      );
+          q.oddsDecimal > 1 &&
+          (selectedTargetBook === "all" || quoteBook === selectedTargetBook)
+        );
+      });
 
       const sharpQuotes = selection.quotes.filter(
         (q) =>
@@ -1020,8 +1028,6 @@ const marketBundle = useMemo(() => {
 
         <LoadCoveragePanel rows={rows} />
 
-        <TopEdgeBetsPanel bets={topSingleEdgeBets} />
-
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <button
             type="button"
@@ -1088,6 +1094,7 @@ const marketBundle = useMemo(() => {
 
         <FairOddsPanel fairOddsResults={fairOddsBundle} />
 
+        <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 
         <ParlayFilters filters={filters} setFilters={setFilters} />
 
