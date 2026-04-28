@@ -1,5 +1,6 @@
 import { normalizeTeamNameBySport } from "../data/teamAliases";
 import { americanToDecimal } from "./odds";
+import { normalizeMarketType, isPlayerPropMarket } from "./marketNormalization";
 
 export function normalizeParsedRows(rows) {
   const seededRows = (rows || []).map((row) => {
@@ -76,11 +77,11 @@ function buildEventAliasKey(row) {
 }
 
 function normalizeSelectionWithinEvent(row, rawSelection, aliasMapByEvent) {
-  const marketType = String(row.marketType || "").toLowerCase();
+  const marketType = normalizeMarketType(row.marketType);
   const sport = String(row.sport || "").toUpperCase();
   const cleanedSelection = String(rawSelection || "").trim();
 
-  if (/^(moneyline_2way|moneyline_3way|spread)$/i.test(marketType)) {
+  if (["moneyline_2way","moneyline_3way","spread"].includes(marketType)) {
     return normalizeTeamNameBySport(cleanedSelection, sport) || cleanedSelection;
   }
 
@@ -189,30 +190,6 @@ function looksLikeAbbreviatedPlayerName(text) {
 
   const first = parts[0].replace(/\./g, "");
   return first.length <= 2;
-}
-
-function isPlayerPropMarket(marketType = "") {
-  return [
-    "player_points",
-    "player_assists",
-    "player_rebounds",
-    "player_threes",
-    "player_pra",
-    "player_points_rebounds",
-    "player_points_assists",
-    "player_rebounds_assists",
-    "double_double",
-    "triple_double",
-    "player_hits",
-    "player_total_bases",
-    "player_home_runs",
-    "player_rbis",
-    "player_strikeouts",
-    "player_shots_on_goal",
-    "player_power_play_points",
-    "player_saves",
-    "player_shutout",
-  ].includes(String(marketType || "").toLowerCase());
 }
 
 function normalizePlayerName(text) {

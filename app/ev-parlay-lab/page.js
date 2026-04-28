@@ -8,6 +8,7 @@ import MarketMatchPanel from "./components/MarketMatchPanel";
 import ManualMatchPanel from "./components/ManualMatchPanel";
 import FairOddsPanel from "./components/FairOddsPanel";
 import TopEdgeBetsPanel from "./components/TopEdgeBetsPanel";
+import LoadCoveragePanel from "./components/LoadCoveragePanel";
 import ParlayFilters from "./components/ParlayFilters";
 import ParlayResults from "./components/ParlayResults";
 
@@ -1016,6 +1017,8 @@ const marketBundle = useMemo(() => {
         <div style={{ marginBottom: 12, fontWeight: 700, color: "#166534" }}>
           Debug: rows in state = {rows.length}
         </div>
+
+        <LoadCoveragePanel rows={rows} />
 
         <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 

@@ -1,4 +1,6 @@
 import { normalizeTeamNameBySport } from "../data/teamAliases";
+import { normalizeMarketType, isPlayerPropMarket } from "./marketNormalization";
+
 
 export function buildCanonicalMarkets(rows) {
   const eligibleRows = rows.filter(
@@ -204,56 +206,11 @@ function normalizeLineValueForMarket(row) {
   return Number(row.lineValue).toFixed(1);
 }
 
-function normalizeMarketType(value = "") {
-  const text = String(value || "").trim().toLowerCase();
+// delete the local normalizeMarketType() and isPlayerPropMarket()
+//
+// matchMarkets.js should now use the imported versions from:
+// ./marketNormalization
 
-  if (text === "player_points") return "player_points";
-  if (text === "player_assists") return "player_assists";
-  if (text === "player_rebounds") return "player_rebounds";
-  if (text === "player_threes") return "player_threes";
-  if (text === "player_pra") return "player_pra";
-  if (text === "player_points_rebounds") return "player_points_rebounds";
-  if (text === "player_points_assists") return "player_points_assists";
-  if (text === "player_rebounds_assists") return "player_rebounds_assists";
-  if (text === "double_double") return "double_double";
-  if (text === "triple_double") return "triple_double";
-  if (text === "player_hits") return "player_hits";
-  if (text === "player_total_bases") return "player_total_bases";
-  if (text === "player_home_runs") return "player_home_runs";
-  if (text === "player_rbis") return "player_rbis";
-  if (text === "player_strikeouts") return "player_strikeouts";
-  if (text === "player_shots_on_goal") return "player_shots_on_goal";
-  if (text === "player_power_play_points") return "player_power_play_points";
-  if (text === "player_saves") return "player_saves";
-  if (text === "anytime_goalscorer") return "anytime_goalscorer";
-  if (text === "anytime_goal_scorer") return "anytime_goalscorer";
-  if (text === "both_teams_to_score") return "both_teams_to_score";
-
-  return text;
-}
-
-function isPlayerPropMarket(marketType = "") {
-  return [
-    "player_points",
-    "player_assists",
-    "player_rebounds",
-    "player_threes",
-    "player_pra",
-    "player_points_rebounds",
-    "player_points_assists",
-    "player_rebounds_assists",
-    "double_double",
-    "triple_double",
-    "player_hits",
-    "player_total_bases",
-    "player_home_runs",
-    "player_rbis",
-    "player_strikeouts",
-    "player_shots_on_goal",
-    "player_power_play_points",
-    "player_saves",
-  ].includes(marketType);
-}
 
 function buildSubjectKey(row) {
   const marketType = normalizeMarketType(row.marketType);

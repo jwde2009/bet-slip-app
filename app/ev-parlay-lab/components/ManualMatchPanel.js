@@ -59,9 +59,10 @@ export default function ManualMatchPanel({
               <div style={cardHeaderStyle}>
                 <div>
                   <div style={eventStyle}>{candidate.eventName}</div>
-                  <div style={subtleStyle}>
-                    {candidate.marketType} • sharp source: {candidate.sourceSportsbook}
+                     <div style={marketMetaStyle}>
+                    {formatMarketLabel(candidate.marketType)} • sharp source: {candidate.sourceSportsbook}
                   </div>
+
                 </div>
 
                 {existing ? <span style={appliedBadgeStyle}>Applied</span> : null}
@@ -172,6 +173,22 @@ export default function ManualMatchPanel({
   );
 }
 
+function formatMarketLabel(value) {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "player_points") return "Points";
+  if (text === "player_assists") return "Assists";
+  if (text === "player_rebounds") return "Rebounds";
+  if (text === "player_threes") return "Three's";
+  if (text === "player_pra") return "PRA";
+  if (text === "player_points_rebounds") return "Points + Rebounds";
+  if (text === "player_points_assists") return "Points + Assists";
+  if (text === "player_rebounds_assists") return "Rebounds + Assists";
+  if (text === "double_double") return "Double-Double";
+  if (text === "triple_double") return "Triple-Double";
+  return String(value || "Unknown Market");
+}
+
 const sectionStyle = {
   background: "#fff",
   border: "2px solid #166534",
@@ -215,6 +232,13 @@ const eventStyle = {
 const subtleStyle = {
   color: "#4b5563",
   fontSize: 13,
+  marginTop: 4,
+};
+
+const marketMetaStyle = {
+  color: "#14532d",
+  fontSize: 18,
+  fontWeight: 800,
   marginTop: 4,
 };
 
