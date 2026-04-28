@@ -399,6 +399,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    applySavedFilterView("review_queue");
+  }, []);
+
+
+  useEffect(() => {
     try {
       localStorage.setItem(
         "betSlipAppStateV1",
@@ -598,6 +603,14 @@ const counts = {
 
     if (nextNeedsReview) setSelectedRowId(nextNeedsReview.id);
   };
+
+  const selectNextHedgeRow = () => {
+    const next = visibleRows.find(
+      (row) => row.likelyHedge === "Y" && row.reviewResolved !== "Y"
+    );
+    if (next) setSelectedRowId(next.id);
+  };
+
 
   function classifySideKey(row) {
     const selection = String(row?.selection || "").toLowerCase().trim();
@@ -907,6 +920,72 @@ function groupHedgeRowsTogether(rowsInput) {
         );
         showNotice("Review later toggled");
         setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                  exported: "Y",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed + exported");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                  archived: "Y",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed + archived");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        selectNextHedgeRow();
+      }
+       else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed ✓");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewLater: row.reviewLater === "Y" ? "N" : "Y",
+                  reviewResolved: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Review later toggled");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
       }
     };
 
@@ -1036,7 +1115,7 @@ function groupHedgeRowsTogether(rowsInput) {
 
     let errorCount = 0;
     const newRows = [];
-    const concurrency = 3;
+    const concurrency = 12;
 
     async function processOneFile(file, index) {
       let folder = "";
@@ -1853,6 +1932,7 @@ function groupHedgeRowsTogether(rowsInput) {
           >
             Mark Reviewed
           </button>
+
         </div>
       )}
 

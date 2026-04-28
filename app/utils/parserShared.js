@@ -200,13 +200,21 @@ export function looksLikeFanDuelText(text = "") {
 
 export function detectStatus(cleaned, receiptWindowText) {
   const windowText = receiptWindowText || cleaned;
-  if (/\bCashed Out\b/i.test(windowText) || /\bPaid:\s*\$/i.test(windowText))
+
+  // 🔥 ONLY true cash-out
+  if (/\bCashed Out\b/i.test(windowText)) {
     return "Cashed Out";
+  }
+
   if (/Bet Settled/i.test(windowText)) {
     if (/\bWon\b/i.test(windowText)) return "Won";
     if (/\bLost\b/i.test(windowText)) return "Lost";
   }
-  if (/\bOpen\b/i.test(windowText) && !/Bet Settled/i.test(windowText)) return "Open";
+
+  if (/\bOpen\b/i.test(windowText) && !/Bet Settled/i.test(windowText)) {
+    return "Open";
+  }
+
   return "";
 }
 
