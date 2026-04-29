@@ -1338,6 +1338,266 @@ async function extractOddsTextFromCurrentPage() {
       return mergeRawTextBlocks(captures) || rawPageText();
     }
 
+        function normalizeFanDuelLabel(value) {
+      return clean(value)
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function isSafeFanDuelExpandableText(value) {
+      const text = clean(value);
+
+      if (!text) return false;
+
+      // Avoid period/quarter/half markets for now.
+      if (/\b(1st|2nd|3rd|4th)\s+(Quarter|Period)\b/i.test(text)) return false;
+      if (/\b(1st|2nd)\s+Half\b/i.test(text)) return false;
+      if (/^Overtime$/i.test(text)) return false;
+
+      const exact = new Set([
+        // NBA core
+        "Player Points",
+        "Player Made Threes",
+        "Player Threes",
+        "Player Rebounds",
+        "Player Assists",
+        "Player Pts + Reb + Ast",
+        "Player Pts + Reb",
+        "Player Pts + Ast",
+        "Player Reb + Ast",
+        "To Record A Double Double",
+        "To Record A Triple Double",
+
+        // FanDuel top NBA tab labels
+        "Player Combos",
+        "Player Defense",
+
+        // NHL core
+        "Any Time Goal Scorer",
+        "Player 1+ Points",
+        "Player 2+ Points",
+        "Player 3+ Points",
+        "Player 1+ Assists",
+        "Player 2+ Assists",
+        "Player 3+ Assists",
+        "Player to Record 1+ Powerplay Points",
+        /^Player to Record \d+\+ Blocked Shots$/i.test(text) ||
+        "60 Min Player to Record 1+ Shots on Goal",
+        "60 Min Player to Record 2+ Shots on Goal",
+        "60 Min Player to Record 3+ Shots on Goal",
+        "60 Min Player to Record 4+ Shots on Goal",
+        "60 Min Player to Record 5+ Shots on Goal",
+        "60 Min Player to Record 6+ Shots on Goal",
+        "60 Min Player to Record 7+ Shots on Goal",
+      ]);
+
+      if (exact.has(text)) return true;
+
+      return (
+        /^60 Min .+ Shots on Goal$/i.test(text) ||
+        /^60 Min .+ Total Saves$/i.test(text) ||
+        /^60 Min .+ Total Goals$/i.test(text) ||
+        /^.+ Total Goals$/i.test(text) ||
+        /^.+ - 60 Min Alt Saves$/i.test(text) ||
+        /^Player \d+\+ Points$/i.test(text) ||
+        /^Player \d+\+ Assists$/i.test(text) ||
+        /^Player to Record \d+\+ Powerplay Points$/i.test(text) ||
+        /^Player to Record \d+\+ Blocked Shots$/i.test(text) ||
+        /^Player to Score \d+\+ Goals$/i.test(text)
+      );
+    }
+
+    function getFanDuelExpandableCandidates() {
+      const directButtons = Array.from(
+        document.querySelectorAll("button, a, [role='button'], [role='tab']")
+      );
+
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = getElementText(el);
+          if (!isSafeFanDuelExpandableText(text)) return false;
+
+          const rect = el.getBoundingClientRect();
+
+          // Avoid giant containers/page shells.
+          return rect.width > 8 && rect.height > 8 && rect.width < 520 && rect.height < 140;
+        })
+        .map(findClickableAncestor);
+
+      const all = [...directButtons, ...textMatches];
+      const seen = new Set();
+      const unique = [];
+
+      for (const el of all) {
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+
+        const text = getElementText(el);
+        const childText = Array.from(el.querySelectorAll("*"))
+          .map((child) => getElementText(child))
+          .find((value) => isSafeFanDuelExpandableText(value));
+
+        const usableText = isSafeFanDuelExpandableText(text) ? text : childText;
+        if (!usableText) continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 650 || rect.height > 180) continue;
+
+        unique.push(el);
+      }
+
+      return unique.filter(isElementVisible).slice(0, 80);
+    }
+
+       async function clickFanDuelExpandableSections(options = {}) {
+      const clicked = new Set();
+      let totalClicked = 0;
+
+      const maxPasses = Number(options.maxPasses || 2);
+      const maxClicks = Number(options.maxClicks || 18);
+
+      for (let pass = 0; pass < maxPasses; pass += 1) {
+        const candidates = getFanDuelExpandableCandidates();
+        let clickedThisPass = 0;
+
+        for (const el of candidates) {
+          if (!isElementVisible(el)) continue;
+
+          const text = getElementText(el);
+          const label = isSafeFanDuelExpandableText(text)
+            ? text
+            : Array.from(el.querySelectorAll("*"))
+                .map((child) => getElementText(child))
+                .find((value) => isSafeFanDuelExpandableText(value));
+
+          if (!label) continue;
+
+          // Important: key by label only, not screen position.
+          // FanDuel shifts the page after each open, so position-based keys caused repeat loops.
+          const key = normalizeFanDuelLabel(label);
+          if (clicked.has(key)) continue;
+
+          const ok = await clickElementReliably(el);
+
+          if (ok) {
+            clicked.add(key);
+            clickedThisPass += 1;
+            totalClicked += 1;
+
+            await sleep(650);
+            await clickSafeExpandButtons();
+            await sleep(250);
+          }
+
+          if (totalClicked >= maxClicks) break;
+        }
+
+        if (totalClicked >= maxClicks || clickedThisPass === 0) break;
+
+        await sleep(500);
+      }
+
+      return totalClicked;
+    }
+
+        async function buildFanDuelExpandedRawText() {
+      const captures = [];
+
+      function getFanDuelSectionLabelsForPage(text) {
+        const pageText = clean(text).toLowerCase();
+
+        const isLikelyNhl =
+          /\bhockey\b/i.test(pageText) ||
+          /\bnhl odds\b/i.test(pageText) ||
+          /\bshots on goal\b/i.test(pageText) ||
+          /\bgoalies\b/i.test(pageText) ||
+          /\bany time goal scorer\b/i.test(pageText) ||
+          /\btotal saves\b/i.test(pageText);
+
+        const isLikelyNba =
+          /\bbasketball\b/i.test(pageText) ||
+          /\bnba odds\b/i.test(pageText) ||
+          /\bplayer points\b/i.test(pageText) ||
+          /\bplayer rebounds\b/i.test(pageText) ||
+          /\bplayer assists\b/i.test(pageText) ||
+          /\bplayer combos\b/i.test(pageText);
+
+        if (isLikelyNhl) {
+          return ["Goals", "Shots", "Points/Assists", "Goalies"];
+        }
+
+        if (isLikelyNba) {
+          return [
+            "Player Points",
+            "Player Threes",
+            "Player Rebounds",
+            "Player Assists",
+            "Player Combos",
+          ];
+        }
+
+        return [];
+      }
+
+      async function captureFanDuelSnapshot(label) {
+        await openDetailsDrawers();
+        await clickSafeExpandButtons();
+        await sleep(500);
+
+        const text = rawPageText();
+
+        if (text && text.trim()) {
+          captures.push(`FANDUEL_CAPTURE: ${label}\n${text}`);
+        }
+      }
+
+      await openDetailsDrawers();
+      await clickSafeExpandButtons();
+      await sleep(500);
+
+      const initial = rawPageText();
+      if (initial && initial.trim()) {
+        captures.push(`FANDUEL_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      const sectionLabels = getFanDuelSectionLabelsForPage(initial);
+
+      // Expand the current section first.
+      const initialClicked = await clickFanDuelExpandableSections({
+        maxPasses: 2,
+        maxClicks: 14,
+      });
+
+      await captureFanDuelSnapshot(`initial expanded clicked ${initialClicked}`);
+
+      // Then jump FanDuel top sections one by one and expand each page/section.
+      for (const label of sectionLabels) {
+        const clickedTab = await clickExactVisibleText(label, {
+          maxWidth: 420,
+          maxHeight: 120,
+          sleepMs: 1300,
+        });
+
+        if (!clickedTab) continue;
+
+        await openDetailsDrawers();
+        await sleep(500);
+
+        const expandedClicked = await clickFanDuelExpandableSections({
+          maxPasses: 2,
+          maxClicks: 14,
+        });
+
+        await captureFanDuelSnapshot(`${label} clicked ${expandedClicked}`);
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
+
   function rawPageText() {
     return String(document.body?.innerText || "").trim();
   }

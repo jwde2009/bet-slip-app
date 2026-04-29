@@ -21,9 +21,19 @@ export function parseFanDuelText(rawText = "", context = {}) {
   if (detailEvent) {
     const event = `${detailEvent.away} @ ${detailEvent.home}`;
     rows.push(...parseMainLines(lines, detailEvent.startIndex, event, detailEvent.away, detailEvent.home, sport));
-    rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
+
+    // Safe visible full-game O/U parser for FanDuel NBA/NHL.
+    rows.push(...parseFanDuelVisibleOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
+
+    // Safe visible NHL extras: goalscorer, points/assists milestones, SOG, saves.
+    rows.push(...parseFanDuelNhlVisibleProps(lines, detailEvent.startIndex, event, sport));
+
+    // Keep yes-only binary markets available if a clean section is expanded.
     rows.push(...parseYesOnlyPlayerProps(lines, detailEvent.startIndex, event, sport));
-    rows.push(...parsePlusLadders(lines, detailEvent.startIndex, event, sport));
+
+    // Disabled for now. FanDuel alt ladders and period props can create noisy rows.
+    // rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
+    // rows.push(...parsePlusLadders(lines, detailEvent.startIndex, event, sport));
   }
 
   if (rows.length === 0) {
@@ -95,9 +105,15 @@ function findDetailEvent(lines) {
     const line = normalizeLine(lines[i]);
     const m = line.match(/^(.+?)\s+@\s+(.+?)\s+Odds$/i);
     if (m) {
+      const away = m[1].trim();
+      const home = m[2]
+        .trim()
+        .replace(/\s+(Goals|Shots|Points\/Assists|Goalies|Game Props|Popular|Quick Hits)$/i, "")
+        .trim();
+
       return {
-        away: m[1].trim(),
-        home: m[2].trim(),
+        away,
+        home,
         startIndex: i + 1,
       };
     }
@@ -399,6 +415,478 @@ function parsePlusLadders(lines, startIndex, event, sport) {
 
   return rows;
 }
+function parseFanDuelVisibleOverUnderBlocks(lines, startIndex, event, sport) {
+  const rows = [];
+
+  const marketMap = new Map([
+    ["player points", "player_points"],
+    ["player rebounds", "player_rebounds"],
+    ["player assists", "player_assists"],
+    ["player made threes", "player_threes"],
+    ["player threes", "player_threes"],
+    ["player pts + reb + ast", "player_pra"],
+    ["player points + rebounds + assists", "player_pra"],
+    ["player pts + reb", "player_points_rebounds"],
+    ["player points + rebounds", "player_points_rebounds"],
+    ["player pts + ast", "player_points_assists"],
+    ["player points + assists", "player_points_assists"],
+    ["player reb + ast", "player_rebounds_assists"],
+    ["player rebounds + assists", "player_rebounds_assists"],
+  ]);
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 5; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const marketType = marketMap.get(header.toLowerCase());
+
+    if (!marketType) continue;
+    if (isFanDuelPartialGameHeader(header)) continue;
+
+    const end = findFanDuelVisibleSectionEnd(lines, i + 1);
+
+    for (let j = i + 1; j < end - 4; j += 1) {
+      const player = normalizeLine(lines[j]);
+
+      if (/^(OVER|UNDER)$/i.test(player)) continue;
+      if (/^Show less$/i.test(player)) continue;
+      if (!looksLikePlayerName(player)) continue;
+
+      const overLine = parseTotalToken(lines[j + 1], "O");
+      const overOdds = parseAmericanOdds(lines[j + 2]);
+      const underLine = parseTotalToken(lines[j + 3], "U");
+      const underOdds = parseAmericanOdds(lines[j + 4]);
+
+      if (
+        overLine === null ||
+        underLine === null ||
+        Math.abs(overLine - underLine) > 0.0001 ||
+        overOdds === null ||
+        underOdds === null
+      ) {
+        continue;
+      }
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType,
+          selection: `${player} Over`,
+          lineValue: overLine,
+          oddsAmerican: overOdds,
+        })
+      );
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType,
+          selection: `${player} Under`,
+          lineValue: underLine,
+          oddsAmerican: underOdds,
+        })
+      );
+
+      j += 4;
+    }
+  }
+
+  return rows;
+}
+
+function parseFanDuelNhlVisibleProps(lines, startIndex, event, sport) {
+  const rows = [];
+  const text = lines.slice(0, 260).join(" ");
+
+  const looksLikeNhl =
+    String(sport || "").toUpperCase() === "NHL" ||
+    /\bHockey\b/i.test(text) ||
+    /\bNHL Odds\b/i.test(text) ||
+    /\bShots on Goal\b/i.test(text) ||
+    /\bAny Time Goal Scorer\b/i.test(text) ||
+    /\bTotal Saves\b/i.test(text) ||
+    /\bPowerplay Points\b/i.test(text) ||
+    /\bBlocked Shots\b/i.test(text) ||
+    /(canadiens|lightning|bruins|sabres|penguins|flyers|oilers|ducks|stars|wild|avalanche|kings|rangers|islanders|devils|panthers|maple leafs|jets|canucks|kraken|senators|hurricanes|golden knights|mammoth)/i.test(text);
+
+  if (!looksLikeNhl) return rows;
+
+  const resolvedSport = "NHL";
+
+  rows.push(...parseFanDuelNhlAnytimeGoalScorer(lines, startIndex, event, resolvedSport));
+  rows.push(...parseFanDuelNhlMilestoneSections(lines, startIndex, event, resolvedSport));
+  rows.push(...parseFanDuelNhlOverUnderSections(lines, startIndex, event, resolvedSport));
+  rows.push(...parseFanDuelNhlAltSavesSections(lines, startIndex, event, resolvedSport));
+
+  return rows;
+}
+
+function parseFanDuelNhlAnytimeGoalScorer(lines, startIndex, event, sport) {
+  const rows = [];
+  const idx = findLineIndexAfter(lines, startIndex, /^Any Time Goal Scorer$/i);
+
+  if (idx === -1) return rows;
+
+  const end = findFanDuelVisibleSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const player = normalizeLine(lines[i]);
+    const odds = parseAmericanOdds(lines[i + 1]);
+
+    if (!looksLikePlayerName(player) || odds === null) continue;
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType: "player_goals",
+        selection: `${player} Over`,
+        lineValue: 0.5,
+        oddsAmerican: odds,
+      })
+    );
+
+    i += 1;
+  }
+
+  return rows;
+}
+
+function parseFanDuelNhlMilestoneSections(lines, startIndex, event, sport) {
+  const rows = [];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 2; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const parsed = parseFanDuelNhlMilestoneHeader(header);
+
+    if (!parsed) continue;
+    if (isFanDuelPartialGameHeader(header)) continue;
+
+    const end = findFanDuelVisibleSectionEnd(lines, i + 1);
+
+    for (let j = i + 1; j < end - 1; j += 1) {
+      const player = normalizeLine(lines[j]);
+      const odds = parseAmericanOdds(lines[j + 1]);
+
+      if (!looksLikePlayerName(player) || odds === null) continue;
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType: parsed.marketType,
+          selection: `${player} Over`,
+          lineValue: parsed.lineValue,
+          oddsAmerican: odds,
+        })
+      );
+
+      j += 1;
+    }
+  }
+
+  return rows;
+}
+
+function parseFanDuelNhlMilestoneHeader(header) {
+  const text = normalizeLine(header);
+
+  let m = text.match(/^60 Min Player to Record (\d+)\+ Shots on Goal$/i);
+  if (m) {
+    return {
+      marketType: "player_shots_on_goal",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^Player (\d+)\+ Points$/i);
+  if (m) {
+    const threshold = Number(m[1]);
+
+    // Only keep 1+ points for FanDuel NHL right now.
+    // 2+/3+ are less useful and slow down expansion/parlay generation.
+    if (threshold !== 1) return null;
+
+    return {
+      marketType: "player_points",
+      lineValue: threshold - 0.5,
+    };
+  }
+
+  m = text.match(/^Player (\d+)\+ Assists$/i);
+  if (m) {
+    const threshold = Number(m[1]);
+
+    // Only keep 1+ assists for FanDuel NHL right now.
+    if (threshold !== 1) return null;
+
+    return {
+      marketType: "player_assists",
+      lineValue: threshold - 0.5,
+    };
+  }
+
+  m = text.match(/^Player to Record (\d+)\+ Powerplay Points$/i);
+  if (m) {
+    const threshold = Number(m[1]);
+    if (threshold !== 1) return null;
+
+    return {
+      marketType: "player_power_play_points",
+      lineValue: threshold - 0.5,
+    };
+  }
+
+  m = text.match(/^Player to Score (\d+)\+ Goals$/i);
+  if (m) {
+    return {
+      marketType: "player_goals",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  // Do not parse blocked shots for now.
+  return null;
+}
+
+function parseFanDuelNhlOverUnderSections(lines, startIndex, event, sport) {
+  const rows = [];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 6; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const parsed = parseFanDuelNhlOverUnderHeader(header);
+
+    if (!parsed) continue;
+    if (isFanDuelPartialGameHeader(header)) continue;
+
+    let overIndex = -1;
+    let underIndex = -1;
+
+    for (let j = i + 1; j < Math.min(lines.length, i + 18); j += 1) {
+      const token = normalizeLine(lines[j]);
+
+      if (isFanDuelVisibleSectionBoundary(token) && j > i + 1) break;
+
+      if (
+        overIndex === -1 &&
+        new RegExp(`^${escapeRegExp(parsed.player)}\\s+-\\s+Over$`, "i").test(token)
+      ) {
+        overIndex = j;
+        continue;
+      }
+
+      if (
+        underIndex === -1 &&
+        new RegExp(`^${escapeRegExp(parsed.player)}\\s+-\\s+Under$`, "i").test(token)
+      ) {
+        underIndex = j;
+        continue;
+      }
+    }
+
+    if (overIndex === -1 || underIndex === -1) continue;
+
+    const overLine = parseTotalToken(lines[overIndex + 1], "O");
+    const overOdds = parseAmericanOdds(lines[overIndex + 2]);
+    const underLine = parseTotalToken(lines[underIndex + 1], "U");
+    const underOdds = parseAmericanOdds(lines[underIndex + 2]);
+
+    if (
+      overLine === null ||
+      underLine === null ||
+      Math.abs(overLine - underLine) > 0.0001 ||
+      overOdds === null ||
+      underOdds === null
+    ) {
+      continue;
+    }
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType: parsed.marketType,
+        selection: `${parsed.player} Over`,
+        lineValue: overLine,
+        oddsAmerican: overOdds,
+      })
+    );
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType: parsed.marketType,
+        selection: `${parsed.player} Under`,
+        lineValue: underLine,
+        oddsAmerican: underOdds,
+      })
+    );
+
+    i = Math.max(i, underIndex + 2);
+  }
+
+  return rows;
+}
+
+function parseFanDuelNhlAltSavesSections(lines, startIndex, event, sport) {
+  const rows = [];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 2; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const m = header.match(/^(.+?)\s+-\s+60 Min Alt Saves$/i);
+
+    if (!m) continue;
+
+    const playerFromHeader = m[1].trim();
+    if (!looksLikePlayerName(playerFromHeader)) continue;
+
+    const end = findFanDuelVisibleSectionEnd(lines, i + 1);
+
+    for (let j = i + 1; j < end - 1; j += 1) {
+      const line = normalizeLine(lines[j]);
+      const rowMatch = line.match(/^(.+?)\s+-\s+(\d+(?:\.\d+)?)\+$/i);
+
+      if (!rowMatch) continue;
+
+      const player = rowMatch[1].trim();
+      const threshold = Number(rowMatch[2]);
+      const odds = parseAmericanOdds(lines[j + 1]);
+
+      if (
+        !looksLikePlayerName(player) ||
+        player.toLowerCase() !== playerFromHeader.toLowerCase() ||
+        !Number.isFinite(threshold) ||
+        odds === null
+      ) {
+        continue;
+      }
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType: "player_saves",
+          selection: `${player} Over`,
+          lineValue: threshold - 0.5,
+          oddsAmerican: odds,
+        })
+      );
+
+      j += 1;
+    }
+  }
+
+  return rows;
+}
+
+function parseFanDuelNhlOverUnderHeader(header) {
+  const text = normalizeLine(header);
+
+  let m = text.match(/^60 Min (.+?) Shots on Goal$/i);
+  if (m && looksLikePlayerName(m[1])) {
+    return { player: m[1].trim(), marketType: "player_shots_on_goal" };
+  }
+
+  m = text.match(/^60 Min (.+?) Total Saves$/i);
+  if (m && looksLikePlayerName(m[1])) {
+    return { player: m[1].trim(), marketType: "player_saves" };
+  }
+
+  m = text.match(/^60 Min (.+?) Total Goals$/i);
+  if (m && looksLikePlayerName(m[1])) {
+    return { player: m[1].trim(), marketType: "player_goals" };
+  }
+
+  m = text.match(/^(.+?) Total Goals$/i);
+  if (m && looksLikePlayerName(m[1])) {
+    return { player: m[1].trim(), marketType: "player_goals" };
+  }
+
+  return null;
+}
+
+function findFanDuelVisibleSectionEnd(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const line = normalizeLine(lines[i]);
+
+    if (isFanDuelVisibleSectionBoundary(line)) return i;
+  }
+
+  return lines.length;
+}
+
+function isFanDuelPartialGameHeader(value) {
+  const text = normalizeLine(value);
+
+  return (
+    /^(1st|2nd|3rd|4th)\s+(Quarter|Period)\b/i.test(text) ||
+    /\b(1st|2nd|3rd|4th)\s+(Quarter|Period)\b/i.test(text) ||
+    /\b(1st|2nd)\s+Half\b/i.test(text) ||
+    /^Overtime\b/i.test(text)
+  );
+}
+
+function isFanDuelVisibleSectionBoundary(value) {
+  const text = normalizeLine(value);
+
+  if (!text) return false;
+  if (/^Show less$/i.test(text)) return false;
+  if (/^(OVER|UNDER)$/i.test(text)) return false;
+
+  return (
+    isHardStopLine(text) ||
+    /^Bet on .+ Odds/i.test(text) ||
+    /^Verifying location/i.test(text) ||
+    /^ABOUT$/i.test(text) ||
+    /^Back to top$/i.test(text) ||
+    /^Betslip/i.test(text) ||
+    /^Same Game Parlay/i.test(text) ||
+    /^Popular$/i.test(text) ||
+    /^Quick Bets$/i.test(text) ||
+    /^Quick Hits$/i.test(text) ||
+    /^Period Player Props$/i.test(text) ||
+    /^Goals$/i.test(text) ||
+    /^Shots$/i.test(text) ||
+    /^Points\/Assists$/i.test(text) ||
+    /^Goalies$/i.test(text) ||
+    /^Game Props$/i.test(text) ||
+    /^Player Points$/i.test(text) ||
+    /^Player Made Threes$/i.test(text) ||
+    /^Player Rebounds$/i.test(text) ||
+    /^Player Assists$/i.test(text) ||
+    /^Player Pts \+ Reb \+ Ast$/i.test(text) ||
+    /^Player Pts \+ Reb$/i.test(text) ||
+    /^Player Pts \+ Ast$/i.test(text) ||
+    /^Player Reb \+ Ast$/i.test(text) ||
+    /^To Record A Double Double$/i.test(text) ||
+    /^To Record A Triple Double$/i.test(text) ||
+    /^First Goal Scorer$/i.test(text) ||
+    /^First Home Team Goal Scorer$/i.test(text) ||
+    /^First Away Team Goal Scorer$/i.test(text) ||
+    /^Second Goal Scorer$/i.test(text) ||
+    /^Third Goal Scorer$/i.test(text) ||
+    /^Any Time Goal Scorer \/ Team to Win Parlay$/i.test(text) ||
+    /^First Basket$/i.test(text) ||
+    /^First Team Basket Scorer$/i.test(text) ||
+    /^Alternate /i.test(text) ||
+    /^.+ - Alt /i.test(text) ||
+    /^Win Margin/i.test(text) ||
+    /^Winning Margin/i.test(text) ||
+    /^Total Points Odd \/ Even$/i.test(text) ||
+    /^Player \d+\+ Points$/i.test(text) ||
+    /^Player \d+\+ Assists$/i.test(text) ||
+    /^Player to Record \d+\+ Powerplay Points$/i.test(text) ||
+    /^60 Min Player to Record \d+\+ Shots on Goal$/i.test(text) ||
+    /^Player to Record \d+\+ Blocked Shots$/i.test(text) ||
+    /^Player to Score \d+\+ Goals$/i.test(text) ||
+    /^60 Min .+ Shots on Goal$/i.test(text) ||
+    /^60 Min .+ Total Saves$/i.test(text) ||
+    /^60 Min .+ Total Goals$/i.test(text) ||
+    /^.+ - 60 Min Alt Saves$/i.test(text) ||
+    isFanDuelPartialGameHeader(text)
+  );
+}
 
 function buildMainRows(event, away, home, sport, parsed) {
   return [
@@ -413,14 +901,44 @@ function buildMainRows(event, away, home, sport, parsed) {
 
 function inferSport(lines, context) {
   if (context?.sport) return String(context.sport).toUpperCase();
-  const text = lines.slice(0, 80).join(" ");
-  if (/NBA/i.test(text)) return "NBA";
 
-  if (/(76ers|celtics|knicks|hawks|lakers|warriors|suns|raptors|cavaliers|pistons|spurs|rockets|nuggets|timberwolves)/i.test(text)) {
+  const text = lines.slice(0, 220).join(" ");
+
+  // FanDuel pages include sidebar league names like NBA / MLB / NHL, so check
+  // sport-specific page/market clues before generic sidebar words.
+  if (
+    /\bHockey\b/i.test(text) ||
+    /\bNHL Odds\b/i.test(text) ||
+    /\bShots on Goal\b/i.test(text) ||
+    /\bGoalies\b/i.test(text) ||
+    /\bAny Time Goal Scorer\b/i.test(text) ||
+    /\bTotal Saves\b/i.test(text) ||
+    /\bPowerplay Points\b/i.test(text) ||
+    /\bBlocked Shots\b/i.test(text) ||
+    /(canadiens|lightning|bruins|sabres|penguins|flyers|oilers|ducks|stars|wild|avalanche|kings|rangers|islanders|devils|panthers|maple leafs|jets|canucks|kraken|senators|hurricanes|golden knights|mammoth)/i.test(text)
+  ) {
+    return "NHL";
+  }
+
+  if (
+    /\bBasketball\b/i.test(text) ||
+    /\bNBA Odds\b/i.test(text) ||
+    /\bPlayer Points\b/i.test(text) ||
+    /\bPlayer Rebounds\b/i.test(text) ||
+    /\bPlayer Assists\b/i.test(text) ||
+    /(76ers|celtics|knicks|hawks|lakers|warriors|suns|raptors|cavaliers|pistons|spurs|rockets|nuggets|timberwolves|magic|hornets|trail blazers)/i.test(text)
+  ) {
     return "NBA";
   }
-  if (/NHL/i.test(text)) return "NHL";
-  if (/MLB/i.test(text)) return "MLB";
+
+  if (/\bBaseball\b/i.test(text) || /\bMLB Odds\b/i.test(text) || /\bHome Runs\b/i.test(text)) {
+    return "MLB";
+  }
+
+  if (/\bNHL\b/i.test(text)) return "NHL";
+  if (/\bNBA\b/i.test(text)) return "NBA";
+  if (/\bMLB\b/i.test(text)) return "MLB";
+
   return "UNKNOWN";
 }
 
