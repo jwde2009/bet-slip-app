@@ -963,6 +963,7 @@ async function extractOddsTextFromCurrentPage() {
       ["Kansas City Royals", ["kansas city royals", "kc royals", "royals"]],
       ["Milwaukee Brewers", ["milwaukee brewers", "mil brewers", "brewers"]],
       ["Denver Nuggets", ["denver nuggets", "den nuggets", "nuggets"]],
+      ["Detroit Pistons", ["detroit pistons", "det pistons", "pistons"]],
       ["Minnesota Timberwolves", ["minnesota timberwolves", "min timberwolves", "timberwolves"]],
       ["Oklahoma City Thunder", ["oklahoma city thunder", "okc thunder", "thunder"]],
       ["Phoenix Suns", ["phoenix suns", "phx suns", "pho suns", "suns"]],
@@ -1258,9 +1259,81 @@ async function extractOddsTextFromCurrentPage() {
     out.push("Sport: " + sport);
     out.push("Event: " + event);
 
+    function appendYesNoMarketFromVisibleText({ headerPattern, marketName, suffixRegex }) {
+      const bodyLines = String(document.querySelector("main")?.innerText || document.body?.innerText || "")
+        .split("\n")
+        .map((line) => clean(line))
+        .filter(Boolean);
+
+      const headerIndex = bodyLines.findIndex((line) => headerPattern.test(line));
+      if (headerIndex === -1) return;
+
+      const stopRegex =
+        /^(Triple[\s-]?Double|Double[\s-]?Double|Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Pts \+ Reb \+ Ast \(O\/U\)|Pts \+ Reb \(O\/U\)|Pts \+ Ast \(O\/U\)|Reb \+ Ast \(O\/U\)|Popular|Quick Bets|Player Points|Player Rebounds|Player Assists|Player Threes|Player Combos|Player Defense|Quarter|Half|Game Props|Specials|Betting News)$/i;
+
+      const rows = [];
+
+      for (let i = headerIndex + 1; i < bodyLines.length - 1; i += 1) {
+        const line = bodyLines[i];
+
+        if (i > headerIndex + 1 && stopRegex.test(line)) break;
+        if (!suffixRegex.test(line)) continue;
+
+        const player = line.replace(suffixRegex, "").trim();
+        if (!player) continue;
+
+        let yesIndex = -1;
+        for (let j = i + 1; j < Math.min(bodyLines.length, i + 8); j += 1) {
+          if (/^Yes$/i.test(bodyLines[j])) {
+            yesIndex = j;
+            break;
+          }
+          if (stopRegex.test(bodyLines[j])) break;
+        }
+
+        if (yesIndex === -1) continue;
+
+        let yesOdds = "";
+        for (let j = yesIndex + 1; j < Math.min(bodyLines.length, yesIndex + 14); j += 1) {
+          const candidate = bodyLines[j];
+
+          if (stopRegex.test(candidate)) break;
+          if (suffixRegex.test(candidate)) break;
+
+          if (/^[-+]\d+$|^EVEN$/i.test(candidate)) {
+            yesOdds = candidate;
+            break;
+          }
+        }
+
+        if (!yesOdds) continue;
+
+        rows.push(`${player} | YES | ${toOdds(yesOdds)}`);
+      }
+
+      if (!rows.length) return;
+
+      out.push("");
+      out.push("Market: " + marketName);
+      rows.forEach((row) => out.push(row));
+    }
+
+    appendYesNoMarketFromVisibleText({
+      headerPattern: /^Double[\s-]?Double$/i,
+      marketName: "Double Double",
+      suffixRegex: /\s+(?:To Record A Double Double|Double-Double|Double Double)$/i,
+    });
+
+    appendYesNoMarketFromVisibleText({
+      headerPattern: /^Triple[\s-]?Double$/i,
+      marketName: "Triple Double",
+      suffixRegex: /\s+(?:To Record A Triple Double|Triple-Double|Triple Double)$/i,
+    });
+
     document.querySelectorAll("details[data-testid]").forEach((drawer) => {
       const titleEl = drawer.querySelector("summary h2");
-      if (!titleEl) return;
+
+    if (!titleEl) return;
 
       const drawerMarket = clean(titleEl.innerText);
       if (!drawerMarket) return;
