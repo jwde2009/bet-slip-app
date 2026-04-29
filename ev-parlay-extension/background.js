@@ -1616,8 +1616,6 @@ async function extractOddsTextFromCurrentPage() {
 
   const detectedSource = detectBookSource();
 
-  await preparePageForExtraction();
-
   if (
     detectedSource === "Pinnacle" ||
     detectedSource === "FanDuel" ||

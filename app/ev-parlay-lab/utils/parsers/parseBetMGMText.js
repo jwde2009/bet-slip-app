@@ -28,6 +28,10 @@ export function parseBetMGMText(rawText = "", context = {}) {
     // quarter/half props. The parser below stops before partial-game markers.
     rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
 
+    // Safe NHL visible sections:
+    // Anytime goalscorer, player shots, player assists, player points, goalie saves.
+    rows.push(...parseBetMgmNhlVisibleProps(lines, detailEvent.startIndex, event, sport));
+
     // SAFETY LOCK:
     // Keep these disabled for now. BetMGM ladders like 10+, 15+, 20+, 25+, 30+, 35+, 40+
     // can create false lines like 39.5, and visible fallback sections can still mix
@@ -828,6 +832,163 @@ function parsePlusLadders(lines, startIndex, event, sport) {
   }
 
   return rows;
+}
+
+function parseBetMgmNhlVisibleProps(lines, startIndex, event, sport) {
+  const rows = [];
+  const text = lines.slice(0, 260).join(" ");
+
+  const looksLikeNhl =
+    String(sport || "").toUpperCase() === "NHL" ||
+    /\bHockey\b/i.test(text) ||
+    /\bNHL\b/i.test(text) ||
+    /\bAnytime goalscorer\b/i.test(text) ||
+    /\bPlayer shots\b/i.test(text) ||
+    /\bGoalie saves\b/i.test(text) ||
+    /(canadiens|lightning|penguins|flyers|sabres|bruins|stars|wild|oilers|ducks|golden knights|mammoth)/i.test(text);
+
+  if (!looksLikeNhl) return rows;
+
+  rows.push(...parseBetMgmNhlAnytimeGoalscorer(lines, startIndex, event));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player shots", "player_shots_on_goal"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player assists", "player_assists"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player points", "player_points"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Goalie saves", "player_saves"));
+
+  return rows;
+}
+
+function parseBetMgmNhlAnytimeGoalscorer(lines, startIndex, event) {
+  const rows = [];
+  const idx = findLineIndexAfter(lines, startIndex, /^Anytime goalscorer$/i);
+
+  if (idx === -1) return rows;
+
+  const end = findBetMgmNhlVisibleSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const player = normalizeLine(lines[i]);
+    const odds = parseAmericanOdds(lines[i + 1]);
+
+    if (!looksLikePlayerName(player) || odds === null) continue;
+
+    rows.push(
+      buildRow({
+        sport: "NHL",
+        event,
+        marketType: "player_goals",
+        selection: `${player} Over`,
+        lineValue: 0.5,
+        oddsAmerican: odds,
+      })
+    );
+
+    i += 1;
+  }
+
+  return rows;
+}
+
+function parseBetMgmNhlOverUnderSection(lines, startIndex, event, headerText, marketType) {
+  const rows = [];
+  const idx = findLineIndexAfter(
+    lines,
+    startIndex,
+    new RegExp(`^${escapeRegExp(headerText)}$`, "i")
+  );
+
+  if (idx === -1) return rows;
+
+  const end = findBetMgmNhlVisibleSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 4; i += 1) {
+    const player = normalizeLine(lines[i]);
+
+    if (/^(All|Canadiens|Lightning|Over|Under)$/i.test(player)) continue;
+    if (!looksLikePlayerName(player)) continue;
+
+    const overLine = parseTotalToken(lines[i + 1], "O");
+    const overOdds = parseAmericanOdds(lines[i + 2]);
+    const underLine = parseTotalToken(lines[i + 3], "U");
+    const underOdds = parseAmericanOdds(lines[i + 4]);
+
+    if (
+      overLine === null ||
+      underLine === null ||
+      Math.abs(overLine - underLine) > 0.0001 ||
+      overOdds === null ||
+      underOdds === null
+    ) {
+      continue;
+    }
+
+    rows.push(
+      buildRow({
+        sport: "NHL",
+        event,
+        marketType,
+        selection: `${player} Over`,
+        lineValue: overLine,
+        oddsAmerican: overOdds,
+      })
+    );
+
+    rows.push(
+      buildRow({
+        sport: "NHL",
+        event,
+        marketType,
+        selection: `${player} Under`,
+        lineValue: underLine,
+        oddsAmerican: underOdds,
+      })
+    );
+
+    i += 4;
+  }
+
+  return rows;
+}
+
+function findBetMgmNhlVisibleSectionEnd(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const line = normalizeLine(lines[i]);
+
+    if (isBetMgmNhlVisibleSectionBoundary(line)) return i;
+  }
+
+  return lines.length;
+}
+
+function isBetMgmNhlVisibleSectionBoundary(value) {
+  const text = normalizeLine(value);
+
+  if (!text) return false;
+  if (/^Show Less$/i.test(text)) return false;
+  if (/^(All|Canadiens|Lightning|Over|Under)$/i.test(text)) return false;
+
+  return (
+    isHardStopLine(text) ||
+    /^Missouri$/i.test(text) ||
+    /^Current time:/i.test(text) ||
+    /^Bet slip$/i.test(text) ||
+    /^My Bets$/i.test(text) ||
+    /^Anytime goalscorer: Either player$/i.test(text) ||
+    /^First goalscorer$/i.test(text) ||
+    /^First goalscorer: Either player$/i.test(text) ||
+    /^Player to score \d+\+ goals$/i.test(text) ||
+    /^Player shots$/i.test(text) ||
+    /^Player assists$/i.test(text) ||
+    /^Player points$/i.test(text) ||
+    /^Player blocked shots$/i.test(text) ||
+    /^Goalie saves$/i.test(text) ||
+    /^Goalie shutouts$/i.test(text) ||
+    /^Goals against$/i.test(text) ||
+    /^.+ : Star player props$/i.test(text) ||
+    /^.+: Star player props$/i.test(text) ||
+    /^.+: Goalie props$/i.test(text) ||
+    /^.+ : Goalie props$/i.test(text)
+  );
 }
 
 function buildMainRows(event, away, home, sport, parsed) {

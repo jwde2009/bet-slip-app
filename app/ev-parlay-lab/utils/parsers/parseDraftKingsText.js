@@ -710,10 +710,31 @@ function makeRow({ event, selection, marketType, lineValue, oddsAmerican, contex
 
 function inferSportFromText(text) {
   const t = String(text || "").toLowerCase();
-  if (/hornets|magic|warriors|suns|raptors|cavaliers|timberwolves|nuggets|hawks|knicks|rockets|lakers|76ers|celtics|trail blazers|spurs/.test(t)) return "NBA";
-  if (/nhl|bruins|rangers|canucks|penguins|oilers|leafs|flames|kings|devils|stars|jets|canadiens|senators|kraken|avalanche/.test(t)) return "NHL";
-  if (/yankees|dodgers|phillies|giants|twins|orioles|diamondbacks|mets|braves|astros|mariners|angels|pirates|guardians|cardinals/.test(t)) return "MLB";
-  if (/chelsea|arsenal|tottenham|brighton|liverpool|man city|man utd|newcastle|everton|west ham/.test(t)) return "SOCCER";
+
+  if (
+    /hornets|magic|warriors|suns|raptors|cavaliers|timberwolves|nuggets|hawks|knicks|rockets|lakers|76ers|celtics|trail blazers|spurs|pistons|thunder|mavericks|mavs|clippers|grizzlies|bucks|heat|pacers|bulls|wizards|nets|jazz|kings|pelicans/.test(t)
+  ) {
+    return "NBA";
+  }
+
+  if (
+    /nhl|hockey|bruins|sabres|rangers|islanders|canucks|penguins|oilers|leafs|maple leafs|flames|kings|devils|stars|jets|canadiens|senators|kraken|avalanche|hurricanes|panthers|flyers|lightning|capitals|wild|ducks|predators|blue jackets|red wings|blackhawks|sharks|blues|golden knights|knights|vegas|vgk|mammoth|utah|uta/.test(t)
+  ) {
+    return "NHL";
+  }
+
+  if (
+    /yankees|dodgers|phillies|giants|twins|orioles|diamondbacks|mets|braves|astros|mariners|angels|pirates|guardians|cardinals|cubs|white sox|red sox|blue jays|rays|padres|rockies|brewers|royals|rangers|tigers|reds|nationals|marlins|athletics/.test(t)
+  ) {
+    return "MLB";
+  }
+
+  if (
+    /soccer|chelsea|arsenal|tottenham|brighton|liverpool|man city|man utd|newcastle|everton|west ham|aston villa|barcelona|real madrid|atletico|bayern|dortmund|psg|inter milan|juventus|ac milan/.test(t)
+  ) {
+    return "SOCCER";
+  }
+
   return "UNKNOWN";
 }
 
