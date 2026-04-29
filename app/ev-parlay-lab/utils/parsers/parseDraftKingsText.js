@@ -94,84 +94,103 @@ function parseDraftKingsDetailPage(lines, game, context) {
     }
   }
 
+    // Standard player milestone ladders like:
+  // Points / Cade Cunningham / 18+ / 20+ / 25+ / 29+ / 30+ / +105 / 35+
+  rows.push(...parseDraftKingsStandardPlusLadderSections(block, event, context));
+
   // Player O/U sections like:
-  // Points O/U / Player / Over / Under / LaMelo Ball / O / 23.5 / -119 / U / 23.5 / -107
+  // Points O/U / Player / Over / Under / Cade Cunningham / PPG / 0 / ... / O / 28.5 / -115 / U / 28.5 / -110
   for (let i = 0; i < block.length - 8; i += 1) {
     const marketType = inferOuMarketType(block[i]);
-    if (marketType) {
-      console.log("DK FOUND O/U SECTION", {
-        index: i,
-        header: block[i],
-        next: block[i + 1],
-        next2: block[i + 2],
-        next3: block[i + 3],
-      });
-    }
     if (!marketType) continue;
 
-    if (
-      !/^Player$/i.test(block[i + 1]) ||
-      !/^Over$/i.test(block[i + 2]) ||
-      !/^Under$/i.test(block[i + 3])
-    ) {
-      continue;
-    }
+    const end = findNextDraftKingsSectionEnd(block, i + 1);
 
-    for (let j = i + 4; j < block.length - 6; j += 1) {
-      const player = block[j];
+    for (let j = i + 1; j < end; j += 1) {
+      const player = normalizeLine(block[j]);
 
+      if (/^(Player|Over|Under)$/i.test(player)) continue;
       if (inferOuMarketType(player)) break;
       if (isHardStopLine(player)) break;
       if (isSectionBreak(player)) break;
       if (!looksLikePlayerName(player)) continue;
 
-      const markerOver = block[j + 1];
-      const lineOver = parseTotalNumber(block[j + 2]);
-      const oddsOver = parseAmericanOdds(block[j + 3]);
-      const markerUnder = block[j + 4];
-      const lineUnder = parseTotalNumber(block[j + 5]);
-      const oddsUnder = parseAmericanOdds(block[j + 6]);
+      let found = null;
 
-      if (
-        /^O$/i.test(markerOver) &&
-        lineOver !== null &&
-        oddsOver !== null &&
-        /^U$/i.test(markerUnder) &&
-        lineUnder !== null &&
-        oddsUnder !== null &&
-        Math.abs(lineOver - lineUnder) < 0.001
-      ) {
-        console.log("DK PLAYER PROP MATCH", {
-          player,
-          marketType,
-          markerOver,
+      for (let k = j + 1; k < Math.min(end, j + 90); k += 1) {
+        const token = normalizeLine(block[k]);
+
+        if (k > j + 1 && looksLikePlayerName(token)) break;
+        if (isSectionBreak(token) || isHardStopLine(token)) break;
+
+        if (!/^O$/i.test(token)) continue;
+
+        const lineOver = parseTotalNumber(block[k + 1]);
+        const oddsOver = parseAmericanOdds(block[k + 2]);
+
+        if (lineOver === null || oddsOver === null) continue;
+
+        let underIndex = -1;
+
+        for (let u = k + 3; u < Math.min(end, k + 16); u += 1) {
+          const underToken = normalizeLine(block[u]);
+
+          if (/^U$/i.test(underToken)) {
+            underIndex = u;
+            break;
+          }
+
+          if (looksLikePlayerName(underToken) || isSectionBreak(underToken) || isHardStopLine(underToken)) {
+            break;
+          }
+        }
+
+        if (underIndex === -1) continue;
+
+        const lineUnder = parseTotalNumber(block[underIndex + 1]);
+        const oddsUnder = parseAmericanOdds(block[underIndex + 2]);
+
+        if (
+          lineUnder === null ||
+          oddsUnder === null ||
+          Math.abs(lineOver - lineUnder) >= 0.001
+        ) {
+          continue;
+        }
+
+        found = {
           lineOver,
           oddsOver,
-          markerUnder,
           lineUnder,
           oddsUnder,
-        });
-        rows.push(
-          makeRow({
-            event,
-            selection: `${player} | Over`,
-            marketType,
-            lineValue: lineOver,
-            oddsAmerican: oddsOver,
-            context,
-          }),
-          makeRow({
-            event,
-            selection: `${player} | Under`,
-            marketType,
-            lineValue: lineUnder,
-            oddsAmerican: oddsUnder,
-            context,
-          })
-        );
+          consumedIndex: underIndex + 2,
+        };
 
-        j += 6;
+        break;
       }
+
+      if (!found) continue;
+
+      rows.push(
+        makeRow({
+          event,
+          selection: `${player} | Over`,
+          marketType,
+          lineValue: found.lineOver,
+          oddsAmerican: found.oddsOver,
+          context,
+        }),
+        makeRow({
+          event,
+          selection: `${player} | Under`,
+          marketType,
+          lineValue: found.lineUnder,
+          oddsAmerican: found.oddsUnder,
+          context,
+        })
+      );
+
+      j = found.consumedIndex;
     }
   }
 
@@ -337,6 +356,76 @@ function inferOuMarketType(text) {
   return "";
 }
 
+function parseDraftKingsStandardPlusLadderSections(block, event, context) {
+  const rows = [];
+
+  const sections = [
+    ["Points", "player_points"],
+    ["Threes", "player_threes"],
+    ["Rebounds", "player_rebounds"],
+    ["Assists", "player_assists"],
+    ["Shots on Goal", "player_shots_on_goal"],
+    ["Goals", "player_goals"],
+    ["Saves", "player_saves"],
+    ["Blocks", "player_blocked_shots"],
+  ];
+
+  for (const [header, marketType] of sections) {
+    const idx = block.findIndex((line) => {
+      const text = normalizeLine(line);
+      return new RegExp(`^${escapeRegExp(header)}$`, "i").test(text);
+    });
+
+    if (idx === -1) continue;
+
+    const end = findNextDraftKingsSectionEnd(block, idx + 1);
+
+    for (let i = idx + 1; i < end; i += 1) {
+      const player = normalizeLine(block[i]);
+
+      if (isSectionBreak(player) || isHardStopLine(player)) break;
+      if (!looksLikePlayerName(player)) continue;
+
+      let lastPlus = null;
+      let consumedIndex = i;
+
+      for (let j = i + 1; j < Math.min(end, i + 80); j += 1) {
+        const token = normalizeLine(block[j]);
+
+        if (j > i + 1 && looksLikePlayerName(token)) break;
+        if (isSectionBreak(token) || isHardStopLine(token)) break;
+
+        const plus = parsePlusNumber(token);
+        if (plus !== null) {
+          lastPlus = plus;
+          continue;
+        }
+
+        const odds = parseAmericanOdds(token);
+        if (odds !== null && lastPlus !== null) {
+          rows.push(
+            makeRow({
+              event,
+              selection: `${player} | Over`,
+              marketType: String(marketType),
+              lineValue: lastPlus - 0.5,
+              oddsAmerican: odds,
+              context,
+            })
+          );
+
+          consumedIndex = j;
+          break;
+        }
+      }
+
+      i = Math.max(i, consumedIndex);
+    }
+  }
+
+  return rows;
+}
+
 function parseDraftKingsComboSections(block, event, context) {
   const rows = [];
   const sections = [
@@ -399,43 +488,80 @@ function parseDraftKingsComboSections(block, event, context) {
 
 function parseDraftKingsYesNoSections(block, event, context) {
   const rows = [];
+
   const sections = [
     ["Double-Double", "double_double"],
+    ["Double Double", "double_double"],
     ["Triple-Double", "triple_double"],
+    ["Triple Double", "triple_double"],
   ];
 
   for (const [header, marketType] of sections) {
-    const idx = block.findIndex((line) => new RegExp(`^${escapeRegExp(header)}$`, "i").test(line));
+    const headerPattern = new RegExp(`^${escapeRegExp(header)}$`, "i");
+    const idx = block.findIndex((line) => headerPattern.test(normalizeLine(line)));
     if (idx === -1) continue;
 
     const end = findNextDraftKingsSectionEnd(block, idx + 1);
+    const suffixPattern = new RegExp(`\\s*${escapeRegExp(header)}$`, "i");
 
-    for (let i = idx + 1; i < end - 2; i += 1) {
+    for (let i = idx + 1; i < end - 1; i += 1) {
       const playerLabel = normalizeLine(block[i]);
 
-      // 🚫 Skip headers
-      if (isSectionBreak(playerLabel)) continue;
-      const yesLabel = normalizeLine(block[i + 1]);
-      const odds = parseAmericanOdds(block[i + 2]);
+      if (isSectionBreak(playerLabel) || isHardStopLine(playerLabel)) break;
+      if (!suffixPattern.test(playerLabel)) continue;
 
-      if (!new RegExp(`${header}$`, "i").test(playerLabel)) continue;
-      if (!/^Yes$/i.test(yesLabel)) continue;
-      if (odds === null) continue;
+      const player = playerLabel.replace(suffixPattern, "").trim();
+      if (!player) continue;
 
-      const player = playerLabel.replace(new RegExp(`\\s*${header}$`, "i"), "").trim();
+      let yesIndex = -1;
+
+      for (let j = i + 1; j < Math.min(end, i + 10); j += 1) {
+        const token = normalizeLine(block[j]);
+
+        if (/^Yes$/i.test(token)) {
+          yesIndex = j;
+          break;
+        }
+
+        if (suffixPattern.test(token) || isSectionBreak(token) || isHardStopLine(token)) {
+          break;
+        }
+      }
+
+      if (yesIndex === -1) continue;
+
+      let yesOdds = null;
+      let consumedIndex = yesIndex;
+
+      for (let j = yesIndex + 1; j < Math.min(end, yesIndex + 18); j += 1) {
+        const token = normalizeLine(block[j]);
+
+        if (suffixPattern.test(token) || isSectionBreak(token) || isHardStopLine(token)) {
+          break;
+        }
+
+        const odds = parseAmericanOdds(token);
+        if (odds !== null) {
+          yesOdds = odds;
+          consumedIndex = j;
+          break;
+        }
+      }
+
+      if (yesOdds === null) continue;
 
       rows.push(
         makeRow({
           event,
-          selection: player,
+          selection: `${player} | Yes`,
           marketType: String(marketType),
           lineValue: null,
-          oddsAmerican: odds,
+          oddsAmerican: yesOdds,
           context,
         })
       );
 
-      i += 2;
+      i = Math.max(i, consumedIndex);
     }
   }
 
