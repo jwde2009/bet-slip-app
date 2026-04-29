@@ -1294,21 +1294,46 @@ async function extractOddsTextFromCurrentPage() {
         if (yesIndex === -1) continue;
 
         let yesOdds = "";
+        let noIndex = -1;
+
         for (let j = yesIndex + 1; j < Math.min(bodyLines.length, yesIndex + 14); j += 1) {
           const candidate = bodyLines[j];
 
           if (stopRegex.test(candidate)) break;
           if (suffixRegex.test(candidate)) break;
 
-          if (/^[-+]\d+$|^EVEN$/i.test(candidate)) {
-            yesOdds = candidate;
+          if (/^No$/i.test(candidate)) {
+            noIndex = j;
             break;
+          }
+
+          if (!yesOdds && /^[-+]\d+$|^EVEN$/i.test(candidate)) {
+            yesOdds = candidate;
           }
         }
 
-        if (!yesOdds) continue;
+        let noOdds = "";
+        if (noIndex !== -1) {
+          for (let j = noIndex + 1; j < Math.min(bodyLines.length, noIndex + 14); j += 1) {
+            const candidate = bodyLines[j];
 
-        rows.push(`${player} | YES | ${toOdds(yesOdds)}`);
+            if (stopRegex.test(candidate)) break;
+            if (suffixRegex.test(candidate)) break;
+
+            if (/^[-+]\d+$|^EVEN$/i.test(candidate)) {
+              noOdds = candidate;
+              break;
+            }
+          }
+        }
+
+        if (yesOdds) {
+          rows.push(`${player} | YES | ${toOdds(yesOdds)}`);
+        }
+
+        if (noOdds) {
+          rows.push(`${player} | NO | ${toOdds(noOdds)}`);
+        }
       }
 
       if (!rows.length) return;
