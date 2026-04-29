@@ -20,15 +20,22 @@ export function parseBetMGMText(rawText = "", context = {}) {
   const detailEvent = findDetailEvent(lines);
   if (detailEvent) {
     const event = `${detailEvent.away} @ ${detailEvent.home}`;
-    rows.push(...parseMainLines(lines, detailEvent.startIndex, event, detailEvent.away, detailEvent.home, sport));
-    rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
-    rows.push(...parseYesNoPlayerProps(lines, detailEvent.startIndex, event, sport));
-    rows.push(...parsePlusLadders(lines, detailEvent.startIndex, event, sport));
 
-    // Safety fallback for BetMGM pages where market headers repeat:
-    // Player shots / Player assists / Goalie saves may appear once as a menu item,
-    // then later again with actual odds underneath.
-    rows.push(...parseVisibleBetMgmOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
+    // Main lines are safe.
+    rows.push(...parseMainLines(lines, detailEvent.startIndex, event, detailEvent.away, detailEvent.home, sport));
+
+    // Full-game O/U props are allowed only when the section does not drift into
+    // quarter/half props. The parser below stops before partial-game markers.
+    rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
+
+    // SAFETY LOCK:
+    // Keep these disabled for now. BetMGM ladders like 10+, 15+, 20+, 25+, 30+, 35+, 40+
+    // can create false lines like 39.5, and visible fallback sections can still mix
+    // full-game labels with 1Q/half content.
+    //
+    // rows.push(...parseYesNoPlayerProps(lines, detailEvent.startIndex, event, sport));
+    // rows.push(...parsePlusLadders(lines, detailEvent.startIndex, event, sport));
+    // rows.push(...parseVisibleBetMgmOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
   }
 
   if (rows.length === 0) {
@@ -451,18 +458,14 @@ function parseOverUnderPlayerProps(lines, startIndex, event, sport) {
     ["Player assists O/U", "player_assists"],
     ["Player three-pointers O/U", "player_threes"],
     ["Player pts + reb + ast O/U", "player_pra"],
+    ["Player points + rebounds + assists O/U", "player_pra"],
+    ["Player points + rebounds O/U", "player_points_rebounds"],
+    ["Player points + assists O/U", "player_points_assists"],
+    ["Player rebounds + assists O/U", "player_rebounds_assists"],
     ["Player shots on goal O/U", "player_shots_on_goal"],
-    ["Player points + rebounds + assists", "player_pra"],
-    ["Player points + assists", "player_points_assists"],
-    ["Player points + rebounds", "player_points_rebounds"],
-    ["Player rebounds + assists", "player_rebounds_assists"],
-    ["Player points", "player_points"],
-    ["Player assists", "player_assists"],
-    ["Player shots", "player_shots_on_goal"],
-    ["Player power play points", "player_power_play_points"],
-    ["Goalie saves", "player_saves"],
     ["Saves O/U", "player_saves"],
-    ["Goals against", "goalie_goals_against"],
+    ["Goalie saves O/U", "player_saves"],
+    ["Goals against O/U", "goalie_goals_against"],
   ];
 
   for (const [header, marketType] of sections) {
@@ -932,10 +935,27 @@ function findLineIndexAfter(lines, startIndex, pattern) {
   return -1;
 }
 
+function isBetMgmPartialGameMarker(value) {
+  const text = normalizeLine(value);
+
+  return (
+    /^player .+:\s*(1st|2nd|3rd|4th|first|second|third|fourth)\s+quarter$/i.test(text) ||
+    /^player .+:\s*(1st|2nd|first|second)\s+half$/i.test(text) ||
+    /\b(1st quarter|2nd quarter|3rd quarter|4th quarter|first quarter|second quarter|third quarter|fourth quarter|1st half|2nd half|first half|second half)\b/i.test(text)
+  );
+}
+
 function findNextSectionIndex(lines, startIndex) {
   for (let i = startIndex; i < lines.length; i += 1) {
-    if (isLikelySectionHeader(lines[i]) || isHardStopLine(lines[i])) return i;
+    if (
+      isLikelySectionHeader(lines[i]) ||
+      isBetMgmPartialGameMarker(lines[i]) ||
+      isHardStopLine(lines[i])
+    ) {
+      return i;
+    }
   }
+
   return lines.length;
 }
 
