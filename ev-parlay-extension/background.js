@@ -52,6 +52,21 @@ async function safeShowToast(tabId, title, message, details = {}) {
   });
 }
 
+async function setExtensionWorkingBadge(isWorking) {
+  try {
+    await chrome.action.setBadgeText({ text: isWorking ? "…" : "" });
+
+    if (isWorking) {
+      await chrome.action.setBadgeBackgroundColor({ color: "#16a34a" });
+      await chrome.action.setTitle({ title: "EV Parlay Extractor: running" });
+    } else {
+      await chrome.action.setTitle({ title: "EV Parlay Extractor" });
+    }
+  } catch (err) {
+    // ignore badge failures
+  }
+}
+
 function estimateExtractedRows(text = "", source = "") {
   const lines = String(text || "")
     .split("\n")
@@ -122,6 +137,18 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   const sourceTabId = tab.id;
 
+  await setExtensionWorkingBadge(true);
+
+  await safeShowToast(
+    sourceTabId,
+    "Extracting odds…",
+    "The EV Parlay extension is running. Keep this tab open.",
+    {
+      loading: true,
+      pulse: true,
+    }
+  );
+
   const extractionResult = await safeExecuteScript({
     tabId: sourceTabId,
     func: extractOddsTextFromCurrentPage,
@@ -133,7 +160,11 @@ chrome.action.onClicked.addListener(async (tab) => {
   const source = String(payload?.source || "");
 
   if (!finalText.trim() || !source.trim()) {
-    await safeShowToast(sourceTabId, "Unsupported page", "No odds text was extracted.");
+    await setExtensionWorkingBadge(false);
+    await safeShowToast(sourceTabId, "Unsupported page", "No odds text was extracted.", {
+      loading: false,
+      pulse: true,
+    });
     return;
   }
 
@@ -150,7 +181,10 @@ chrome.action.onClicked.addListener(async (tab) => {
     await waitForTabComplete(appTabId);
   }
 
-  if (!appTabId) return;
+  if (!appTabId) {
+    await setExtensionWorkingBadge(false);
+    return;
+  }
 
   const queueWriteResult = await safeExecuteScript({
     tabId: appTabId,
@@ -159,15 +193,22 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 
   if (!queueWriteResult) {
+    await setExtensionWorkingBadge(false);
     await safeShowToast(
       sourceTabId,
       "Import failed",
-      "EV Parlay Lab was not ready. Open or reload the app, then try again."
+      "EV Parlay Lab was not ready. Open or reload the app, then try again.",
+      {
+        loading: false,
+        pulse: true,
+      }
     );
     return;
   }
 
   const estimatedRows = estimateExtractedRows(finalText, source);
+
+  await setExtensionWorkingBadge(false);
 
   await safeShowToast(
     sourceTabId,
@@ -175,6 +216,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     `Rows extracted: ${estimatedRows.toLocaleString()}`,
     {
       characters: finalText.length,
+      loading: false,
       pulse: true,
     }
   );
@@ -252,8 +294,41 @@ function showImportToast(title, message, details = {}) {
     header.style.marginBottom = "4px";
 
     const titleEl = document.createElement("div");
-    titleEl.textContent = data.title || "Import sent";
+    titleEl.style.display = "flex";
+    titleEl.style.alignItems = "center";
+    titleEl.style.gap = "8px";
     titleEl.style.fontWeight = "800";
+
+    if (data?.details?.loading) {
+      const spinner = document.createElement("span");
+      spinner.setAttribute("aria-hidden", "true");
+      spinner.style.width = "13px";
+      spinner.style.height = "13px";
+      spinner.style.border = "2px solid rgba(240,253,244,0.35)";
+      spinner.style.borderTopColor = "#f0fdf4";
+      spinner.style.borderRadius = "999px";
+      spinner.style.display = "inline-block";
+      spinner.style.flex = "0 0 auto";
+
+      try {
+        spinner.animate(
+          [{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }],
+          {
+            duration: 850,
+            iterations: Infinity,
+            easing: "linear",
+          }
+        );
+      } catch (err) {
+        // ignore animation failures
+      }
+
+      titleEl.appendChild(spinner);
+    }
+
+    const titleText = document.createElement("span");
+    titleText.textContent = data.title || "Import sent";
+    titleEl.appendChild(titleText);
 
     const closeButton = document.createElement("button");
     closeButton.type = "button";
@@ -874,6 +949,395 @@ async function extractOddsTextFromCurrentPage() {
 
       return mergeRawTextBlocks(captures);
     }
+
+          function normalizeDraftKingsLabel(value) {
+      return clean(value)
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function isDraftKingsNoisyLabel(value) {
+      return /popular|quick hits|game lines|sgp|builder|stats|halves|quarters|team props|game props|specials|featured|same game parlay|all odds|my bets/i.test(
+        String(value || "")
+      );
+    }
+
+    function getDraftKingsMarketContentPattern(label) {
+      const normalized = normalizeDraftKingsLabel(label);
+
+      if (normalized === "points") return /\bPoints\b[\s\S]{0,900}\bPoints O\/U\b/i;
+      if (normalized === "threes") return /\bThrees\b[\s\S]{0,900}\bThrees O\/U\b/i;
+      if (normalized === "rebounds") return /\bRebounds\b[\s\S]{0,900}\bRebounds O\/U\b/i;
+      if (normalized === "assists") return /\bAssists\b[\s\S]{0,900}\bAssists O\/U\b/i;
+      if (normalized === "combos") return /\b(Pts \+ Reb \+ Ast|Double-Double|Triple-Double)\b/i;
+
+      if (normalized === "goalscorer") return /\b(Goalscorer|Goal Scorer|Anytime Goalscorer)\b/i;
+      if (normalized === "shots on goal") return /\bShots On Goal\b[\s\S]{0,900}\bShots On Goal O\/U\b/i;
+      if (normalized === "goalie") return /\b(Goalie|Saves|Saves O\/U)\b/i;
+      if (normalized === "blocks") return /\b(Blocks|Blocked Shots)\b/i;
+
+      return new RegExp(`\\b${label}\\b`, "i");
+    }
+
+    function getDraftKingsClickableByExactText(label) {
+      const wanted = normalizeDraftKingsLabel(label);
+      if (!wanted) return null;
+
+      const directCandidates = Array.from(
+        document.querySelectorAll("button, a, [role='button'], [role='tab']")
+      )
+        .filter(isElementVisible)
+        .map((el) => ({
+          el,
+          text: normalizeDraftKingsLabel(getElementText(el)),
+        }))
+        .filter(({ text }) => text === wanted && !isDraftKingsNoisyLabel(text));
+
+      if (directCandidates[0]?.el) {
+        return directCandidates[0].el;
+      }
+
+      // Safer fallback: exact visible text node, but only if its clickable ancestor is not
+      // a giant page/body container. This avoids clicking MY BETS/page shell.
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = normalizeDraftKingsLabel(getElementText(el));
+          if (text !== wanted || isDraftKingsNoisyLabel(text)) return false;
+
+          const rect = el.getBoundingClientRect();
+          return rect.width > 8 && rect.height > 8 && rect.width < 320 && rect.height < 80;
+        })
+        .map((el) => {
+          const clickable = findClickableAncestor(el);
+          if (!clickable || !isElementVisible(clickable)) return null;
+
+          const rect = clickable.getBoundingClientRect();
+
+          // Avoid giant containers.
+          if (rect.width > 500 || rect.height > 140) return null;
+
+          return clickable;
+        })
+        .filter(Boolean);
+
+      return textMatches[0] || null;
+    }
+
+    async function waitForDraftKingsMarketContent(label, timeoutMs = 6500) {
+      const pattern = getDraftKingsMarketContentPattern(label);
+      const startedAt = Date.now();
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const text = rawPageText();
+
+        if (pattern.test(text)) {
+          return true;
+        }
+
+        await sleep(350);
+      }
+
+      return false;
+    }
+
+    async function clickDraftKingsLabelAndCapture(label, captures) {
+      const button = getDraftKingsClickableByExactText(label);
+
+      if (!button) {
+        captures.push(`DRAFTKINGS_MISSING_TAB: ${label}\n${rawPageText()}`);
+        return false;
+      }
+
+      try {
+        await clickElementReliably(button);
+        await sleep(900);
+
+        // Do not run full preparePageForExtraction here.
+        // DK can jump to MY BETS or a shell page if broad expand clicking runs after a tab click.
+        await openDetailsDrawers();
+
+        const loaded = await waitForDraftKingsMarketContent(label);
+        const captured = rawPageText();
+
+        if (captured && captured.trim()) {
+          captures.push(
+            `DRAFTKINGS_MARKET_CAPTURE: ${label}${loaded ? "" : " (NO_CONTENT_MATCH)"}\n${captured}`
+          );
+          return loaded;
+        }
+      } catch (err) {
+        captures.push(`DRAFTKINGS_CLICK_ERROR: ${label}\n${rawPageText()}`);
+      }
+
+      return false;
+    }
+
+    function getDraftKingsComboSubheaderLabels() {
+      return [
+        "Pts + Reb + Ast",
+        "Double-Double",
+        "Triple-Double",
+        "Pts + Reb",
+        "Pts + Ast",
+        "Reb + Ast",
+        "Reb + Ast O/U",
+        "Pts + Reb + Ast O/U",
+        "Pts + Reb O/U",
+        "Pts + Ast O/U",
+      ];
+    }
+
+    async function clickDraftKingsComboSubheaders(captures) {
+      for (const label of getDraftKingsComboSubheaderLabels()) {
+        const button = getDraftKingsClickableByExactText(label);
+
+        if (!button) continue;
+
+        try {
+          await clickElementReliably(button);
+          await sleep(900);
+          await openDetailsDrawers();
+
+          const captured = rawPageText();
+
+          if (captured && captured.trim()) {
+            captures.push(`DRAFTKINGS_COMBO_CAPTURE: ${label}\n${captured}`);
+          }
+        } catch (err) {
+          // ignore combo subheader click failures
+        }
+
+        await sleep(350);
+      }
+    }
+
+    async function buildDraftKingsCombinedRawText() {
+      const captures = [];
+
+      try {
+        await openDetailsDrawers();
+        await sleep(350);
+
+        const initialText = rawPageText();
+        if (initialText && initialText.trim()) {
+          captures.push(`DRAFTKINGS_INITIAL_CAPTURE\n${initialText}`);
+        }
+
+        const pageText = clean(document.body?.innerText || "").toLowerCase();
+
+        const isLikelyNhl =
+          /hockey|nhl|shots on goal|goalie|goalscorer|bruins|sabres|oilers|ducks|stars|wild|canadiens|lightning|penguins|flyers/i.test(
+            pageText
+          );
+
+        const targetLabels = isLikelyNhl
+          ? ["GOALSCORER", "SHOTS ON GOAL", "POINTS", "ASSISTS", "GOALIE", "BLOCKS"]
+          : ["POINTS", "THREES", "REBOUNDS", "ASSISTS", "COMBOS"];
+
+        for (const label of targetLabels) {
+          const loaded = await clickDraftKingsLabelAndCapture(label, captures);
+
+          if (label === "COMBOS" && loaded) {
+            await clickDraftKingsComboSubheaders(captures);
+          }
+
+          await sleep(500);
+        }
+      } catch (err) {
+        // Return whatever we captured rather than breaking the import.
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
+    function findClickableByExactVisibleText(label, options = {}) {
+      const wanted = clean(label).toLowerCase();
+      const maxWidth = Number(options.maxWidth || 420);
+      const maxHeight = Number(options.maxHeight || 120);
+
+      if (!wanted) return null;
+
+      const directCandidates = Array.from(
+        document.querySelectorAll("button, a, [role='button'], [role='tab']")
+      )
+        .filter(isElementVisible)
+        .map((el) => ({
+          el,
+          text: clean(getElementText(el)).toLowerCase(),
+        }))
+        .filter(({ text }) => text === wanted);
+
+      if (directCandidates[0]?.el) return directCandidates[0].el;
+
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = clean(getElementText(el)).toLowerCase();
+          if (text !== wanted) return false;
+
+          const rect = el.getBoundingClientRect();
+          return (
+            rect.width > 8 &&
+            rect.height > 8 &&
+            rect.width <= maxWidth &&
+            rect.height <= maxHeight
+          );
+        })
+        .map((el) => {
+          const clickable = findClickableAncestor(el);
+          if (!clickable || !isElementVisible(clickable)) return null;
+
+          const rect = clickable.getBoundingClientRect();
+
+          // Avoid accidentally clicking a giant page shell.
+          if (rect.width > Math.max(maxWidth, 520) || rect.height > Math.max(maxHeight, 160)) {
+            return null;
+          }
+
+          return clickable;
+        })
+        .filter(Boolean);
+
+      return textMatches[0] || null;
+    }
+
+    async function clickExactVisibleText(label, options = {}) {
+      const button = findClickableByExactVisibleText(label, options);
+      if (!button) return false;
+
+      try {
+        await clickElementReliably(button);
+        await sleep(Number(options.sleepMs || 900));
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    async function buildDraftKingsComboOnlyText() {
+      const captures = [];
+
+      await openDetailsDrawers();
+      await sleep(300);
+
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(`DRAFTKINGS_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      // This is intentionally narrow. It only expands subheaders that are visible
+      // after you are already on the DraftKings COMBOS page.
+      const comboPageVisible =
+        /\bCOMBOS\b/i.test(initial) &&
+        /\b(Pts \+ Reb \+ Ast|Double-Double|Triple-Double|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast)\b/i.test(initial);
+
+      if (!comboPageVisible) {
+        return mergeRawTextBlocks(captures) || initial;
+      }
+
+      const comboLabels = [
+        "Pts + Reb + Ast",
+        "Double-Double",
+        "Triple-Double",
+        "Pts + Reb",
+        "Pts + Ast",
+        "Reb + Ast",
+        "Reb + Ast O/U",
+        "Pts + Reb + Ast O/U",
+        "Pts + Reb O/U",
+        "Pts + Ast O/U",
+      ];
+
+      for (const label of comboLabels) {
+        const clicked = await clickExactVisibleText(label, {
+          maxWidth: 360,
+          maxHeight: 90,
+          sleepMs: 950,
+        });
+
+        if (!clicked) continue;
+
+        await openDetailsDrawers();
+        await sleep(300);
+
+        const captured = rawPageText();
+
+        if (captured && captured.trim()) {
+          captures.push(`DRAFTKINGS_COMBO_CAPTURE: ${label}\n${captured}`);
+        }
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
+    async function buildBetMgmLightPlayerPropsText() {
+      const captures = [];
+
+      await openDetailsDrawers();
+      await clickSafeExpandButtons();
+      await sleep(500);
+
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(`BETMGM_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      // If the Player props tab/button is visible, enter it. If already there, this is harmless.
+      await clickExactVisibleText("Player props", {
+        maxWidth: 420,
+        maxHeight: 120,
+        sleepMs: 1200,
+      });
+
+      await openDetailsDrawers();
+      await clickSafeExpandButtons();
+      await sleep(650);
+
+      const playerPropsCapture = rawPageText();
+      if (playerPropsCapture && playerPropsCapture.trim()) {
+        captures.push(`BETMGM_PLAYER_PROPS_CAPTURE\n${playerPropsCapture}`);
+      }
+
+      // Controlled tab pass. Parser safety still decides whether rows are full-game.
+      // Ladders remain blocked parser-side; 1Q/half sections remain blocked parser-side.
+      const betMgmLabels = [
+        "Points",
+        "Assists",
+        "Rebounds",
+        "Three-pointers",
+        "Combo stats",
+        "Defense",
+      ];
+
+      for (const label of betMgmLabels) {
+        const clicked = await clickExactVisibleText(label, {
+          maxWidth: 420,
+          maxHeight: 120,
+          sleepMs: 1000,
+        });
+
+        if (!clicked) continue;
+
+        await openDetailsDrawers();
+        await clickSafeExpandButtons();
+        await sleep(650);
+
+        const captured = rawPageText();
+
+        if (captured && captured.trim()) {
+          captures.push(`BETMGM_MARKET_CAPTURE: ${label}\n${captured}`);
+        }
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
   function rawPageText() {
     return String(document.body?.innerText || "").trim();
   }
@@ -894,17 +1358,11 @@ async function extractOddsTextFromCurrentPage() {
 
   await preparePageForExtraction();
 
-  if (detectedSource === "BetMGM") {
-    return {
-      source: detectedSource,
-      text: await buildBetMgmCombinedRawText(),
-    };
-  }
-
   if (
     detectedSource === "Pinnacle" ||
     detectedSource === "FanDuel" ||
-    detectedSource === "DraftKings"
+    detectedSource === "DraftKings" ||
+    detectedSource === "BetMGM"
   ) {
     return {
       source: detectedSource,
