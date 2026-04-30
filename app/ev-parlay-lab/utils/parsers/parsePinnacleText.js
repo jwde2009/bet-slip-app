@@ -886,10 +886,18 @@ function looksLikeSupportedPlayerPropHeader(value) {
  
 function parsePlayerPropHeader(value) {
   const text = normalizeLine(value);
- 
+
   const patterns = [
+    // Parentheses style
     { regex: /^(.*?)\s+\(Points\)(?:\(must start\))?$/i, marketType: "player_points" },
     { regex: /^(.*?)\s+\(Assists\)(?:\(must start\))?$/i, marketType: "player_assists" },
+    { regex: /^(.*?)\s+\(Rebounds\)(?:\(must start\))?$/i, marketType: "player_rebounds" },
+    { regex: /^(.*?)\s+\(Threes Made\)(?:\(must start\))?$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+\(Three Pointers\)(?:\(must start\))?$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+\(Pts & Rebs & Asts\)(?:\(must start\))?$/i, marketType: "player_pra" },
+    { regex: /^(.*?)\s+\(PRA\)(?:\(must start\))?$/i, marketType: "player_pra" },
+
+    // NHL / other parentheses style
     { regex: /^(.*?)\s+\(Goals\)(?:\(must start\))?$/i, marketType: "player_goals" },
     { regex: /^(.*?)\s+\(Shots\)(?:\(must start\))?$/i, marketType: "player_shots_on_goal" },
     { regex: /^(.*?)\s+\(Shots On Goal\)(?:\(must start\))?$/i, marketType: "player_shots_on_goal" },
@@ -897,17 +905,30 @@ function parsePlayerPropHeader(value) {
     { regex: /^(.*?)\s+\(Saves\)(?:\(must start\))?$/i, marketType: "player_saves" },
     { regex: /^(.*?)\s+\(Power Play Points\)(?:\(must start\))?$/i, marketType: "player_power_play_points" },
     { regex: /^(.*?)\s+\(Blocked Shots\)(?:\(must start\))?$/i, marketType: "player_blocked_shots" },
+
+    // MLB pitcher / batter parentheses style
     { regex: /^(.*?)\s+\(Total Strikeouts\)/i, marketType: "pitcher_strikeouts" },
     { regex: /^(.*?)\s+\(Pitching Outs\)/i, marketType: "pitcher_outs_recorded" },
     { regex: /^(.*?)\s+\(Hits Allowed\)/i, marketType: "pitcher_hits_allowed" },
     { regex: /^(.*?)\s+\(Earned Runs\)/i, marketType: "pitcher_earned_runs_allowed" },
     { regex: /^(.*?)\s+\(Home Runs\)/i, marketType: "player_home_runs" },
     { regex: /^(.*?)\s+\(Total Bases\)/i, marketType: "player_total_bases" },
- 
-    // existing fallback
+
+    // Pinnacle visible NBA prop-header style from raw page text:
+    // CJ McCollum Total Assists
+    // CJ McCollum Total Points
+    // CJ McCollum Total Pts & Rebs & Asts
+    // CJ McCollum Total Rebounds
+    // CJ McCollum Total Threes Made
     { regex: /^(.*?)\s+Total Points$/i, marketType: "player_points" },
+    { regex: /^(.*?)\s+Total Assists$/i, marketType: "player_assists" },
+    { regex: /^(.*?)\s+Total Rebounds$/i, marketType: "player_rebounds" },
+    { regex: /^(.*?)\s+Total Threes Made$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+Total Three Pointers$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+Total Pts & Rebs & Asts$/i, marketType: "player_pra" },
+    { regex: /^(.*?)\s+Total PRA$/i, marketType: "player_pra" },
   ];
- 
+
   for (const pattern of patterns) {
     const match = text.match(pattern.regex);
     if (match) {
@@ -925,7 +946,7 @@ function parsePlayerPropHeader(value) {
       };
     }
   }
- 
+
   return null;
 }
  
