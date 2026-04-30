@@ -285,6 +285,156 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
   return bets.sort((a, b) => b.evPct - a.evPct).slice(0, 12);
 }
 
+function buildCoverageWarnings(rows = []) {
+  const warnings = [];
+  const grouped = new Map();
+
+  for (const row of rows || []) {
+    if (!row || row.excluded) continue;
+
+    const book = String(row.sportsbook || "Unknown").trim();
+    const sport = String(row.sport || "UNKNOWN").trim().toUpperCase();
+    const eventName = String(row.eventLabelRaw || "").trim();
+    const canonicalEvent = [
+      row.awayTeam || row.awayTeamRaw || "",
+      row.homeTeam || row.homeTeamRaw || "",
+    ]
+      .filter(Boolean)
+      .join(" @ ");
+
+    const eventKey = canonicalEvent || eventName;
+    if (!book || !sport || !eventKey) continue;
+
+    const key = [book, sport, eventKey].join("||");
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        book,
+        sport,
+        eventName: eventKey,
+        markets: new Set(),
+        rows: 0,
+      });
+    }
+
+    const group = grouped.get(key);
+    group.rows += 1;
+    group.markets.add(normalizeMarketType(row.marketType));
+  }
+
+  for (const group of grouped.values()) {
+    const marketSet = group.markets;
+
+    if (group.sport === "NBA") {
+      const hasAnyPlayerProp = [
+        "player_points",
+        "player_rebounds",
+        "player_assists",
+        "player_threes",
+        "player_pra",
+        "player_points_rebounds",
+        "player_points_assists",
+        "player_rebounds_assists",
+        "double_double",
+        "triple_double",
+      ].some((market) => marketSet.has(market));
+
+      if (!hasAnyPlayerProp) continue;
+
+      const expected = [
+        ["player_points", "Points"],
+        ["player_rebounds", "Rebounds"],
+        ["player_assists", "Assists"],
+        ["player_threes", "3-Pointers"],
+      ];
+
+      for (const [marketType, label] of expected) {
+        if (!marketSet.has(marketType)) {
+          warnings.push({
+            id: `${group.book}_${group.sport}_${group.eventName}_${marketType}`,
+            book: group.book,
+            sport: group.sport,
+            eventName: group.eventName,
+            message: `Warning: Missing ${label} for ${group.eventName} on ${group.book}.`,
+          });
+        }
+      }
+    }
+
+    if (group.sport === "NHL") {
+      const hasAnyPlayerProp = [
+        "player_shots_on_goal",
+        "player_points",
+        "player_assists",
+        "player_goals",
+        "player_saves",
+        "player_power_play_points",
+      ].some((market) => marketSet.has(market));
+
+      if (!hasAnyPlayerProp) continue;
+
+      const expected = [
+        ["player_shots_on_goal", "Shots on Goal"],
+        ["player_points", "Points"],
+        ["player_assists", "Assists"],
+      ];
+
+      for (const [marketType, label] of expected) {
+        if (!marketSet.has(marketType)) {
+          warnings.push({
+            id: `${group.book}_${group.sport}_${group.eventName}_${marketType}`,
+            book: group.book,
+            sport: group.sport,
+            eventName: group.eventName,
+            message: `Warning: Missing ${label} for ${group.eventName} on ${group.book}.`,
+          });
+        }
+      }
+    }
+  }
+
+  return warnings.slice(0, 40);
+}
+
+function CoverageWarningsPanel({ warnings = [] }) {
+  if (!warnings.length) return null;
+
+  return (
+    <section
+      style={{
+        marginBottom: 12,
+        padding: 12,
+        borderRadius: 12,
+        border: "2px solid #f59e0b",
+        background: "#fffbeb",
+      }}
+    >
+      <div style={{ fontWeight: 900, color: "#92400e", marginBottom: 6 }}>
+        Coverage Warnings
+      </div>
+
+      <div style={{ display: "grid", gap: 6 }}>
+        {warnings.map((warning) => (
+          <div
+            key={warning.id}
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#78350f",
+              background: "#fef3c7",
+              border: "1px solid #fbbf24",
+              borderRadius: 8,
+              padding: "6px 8px",
+            }}
+          >
+            {warning.message}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function EVParlayLabPage() {
   const [rawText, setRawText] = useState(SAMPLE_RAW_TEXT);
   const [sportsbook, setSportsbook] = useState("DraftKings");
@@ -298,7 +448,19 @@ export default function EVParlayLabPage() {
   const [pendingUrlImport, setPendingUrlImport] = useState(null);
   const [pendingImports, setPendingImports] = useState([]);
   const [savedPlacedParlays, setSavedPlacedParlays] = useState([]);
+  const [fanDuelSharpMode, setFanDuelSharpMode] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
+    function resolveImportBatchRole(sourceName) {
+    const normalizedSource = String(sourceName || "").trim().toLowerCase();
+
+    if (normalizedSource === "pinnacle") return "fair_odds";
+
+    if (normalizedSource === "fanduel") {
+      return fanDuelSharpMode ? "fair_odds" : "target";
+    }
+
+    return "target";
+  }
   function refreshPendingImports() {
     setPendingImports(readImportQueue());
   }
@@ -324,7 +486,9 @@ export default function EVParlayLabPage() {
     });
 
     if (newest?.source) {
-      setSportsbook(String(newest.source));
+      const sourceName = String(newest.source);
+      setSportsbook(sourceName);
+      setBatchRole(resolveImportBatchRole(sourceName));
     }
 
     refreshPendingImports();
@@ -349,6 +513,7 @@ export default function EVParlayLabPage() {
     setRawText("");
     setShowParsedTable(false);
     setShowManualMatchPanel(false);
+    setFanDuelSharpMode(false);
   }
 
    function handleParse() {
@@ -629,6 +794,11 @@ const marketBundle = useMemo(() => {
     });
   }, [rowsForAnalysis, marketBundle.markets, fairOddsBundle, filters, savedLegUsageMap]);
 
+  const coverageWarnings = useMemo(
+    () => buildCoverageWarnings(rowsForAnalysis),
+    [rowsForAnalysis]
+  );
+
 
 
   useEffect(() => {
@@ -684,6 +854,9 @@ const marketBundle = useMemo(() => {
       if (typeof saved.rawText === "string") setRawText(saved.rawText);
       if (typeof saved.sportsbook === "string") setSportsbook(saved.sportsbook);
       if (typeof saved.batchRole === "string") setBatchRole(saved.batchRole);
+      if (typeof saved.fanDuelSharpMode === "boolean") {
+        setFanDuelSharpMode(saved.fanDuelSharpMode);
+      }
       if (Array.isArray(saved.rows)) setRows(saved.rows);
       if (saved.filters && typeof saved.filters === "object") setFilters(saved.filters);
       if (Array.isArray(saved.manualMatches)) setManualMatches(saved.manualMatches);
@@ -722,12 +895,7 @@ const marketBundle = useMemo(() => {
       if (newest?.source) {
         const sourceName = String(newest.source);
         setSportsbook(sourceName);
-
-        if (/^pinnacle$/i.test(sourceName) || /^fanduel$/i.test(sourceName)) {
-          setBatchRole("fair_odds");
-        } else {
-          setBatchRole("target");
-        }
+        setBatchRole(resolveImportBatchRole(sourceName));
       }
 
       writeImportQueue([]);
@@ -743,7 +911,19 @@ const marketBundle = useMemo(() => {
     return () => {
       window.removeEventListener("ev-parlay-import-queued", processQueuedImports);
     };
-  }, []);
+  }, [fanDuelSharpMode]);
+
+    useEffect(() => {
+    const normalizedSportsbook = String(sportsbook || "").trim().toLowerCase();
+
+    if (normalizedSportsbook === "fanduel") {
+      setBatchRole(fanDuelSharpMode ? "fair_odds" : "target");
+    }
+
+    if (normalizedSportsbook === "pinnacle") {
+      setBatchRole("fair_odds");
+    }
+  }, [sportsbook, fanDuelSharpMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -758,10 +938,11 @@ const marketBundle = useMemo(() => {
       return rest;
     });
 
-    const payload = {
+        const payload = {
       rawText,
       sportsbook,
       batchRole,
+      fanDuelSharpMode,
       rows: safeRows,
       filters,
       manualMatches,
@@ -774,7 +955,7 @@ const marketBundle = useMemo(() => {
     } catch (err) {
       console.warn("Failed to save EV Parlay Lab session", err);
     }
-  }, [hasRestoredSession, rawText, sportsbook, batchRole, rows, filters, manualMatches, lastParsedAt]);
+  }, [hasRestoredSession, rawText, sportsbook, batchRole, fanDuelSharpMode, rows, filters, manualMatches, lastParsedAt]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -801,11 +982,12 @@ const marketBundle = useMemo(() => {
 
       if (source && String(source).trim()) {
         const normalizedSource = String(source).trim();
-        if (/^thescore$/i.test(normalizedSource)) {
-          setSportsbook("TheScore");
-        } else {
-          setSportsbook(normalizedSource);
-        }
+        const resolvedSource = /^thescore$/i.test(normalizedSource)
+          ? "TheScore"
+          : normalizedSource;
+
+        setSportsbook(resolvedSource);
+        setBatchRole(resolveImportBatchRole(resolvedSource));
       }
 
       if (autoParse === "1") {
@@ -926,6 +1108,46 @@ const marketBundle = useMemo(() => {
 
         <ExtractionGuide sportsbook={sportsbook} />
 
+                <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: fanDuelSharpMode ? "#eff6ff" : "#fff",
+            border: fanDuelSharpMode ? "1px solid #93c5fd" : "1px solid #d1d5db",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              fontWeight: 800,
+              color: fanDuelSharpMode ? "#1d4ed8" : "#374151",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={fanDuelSharpMode}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setFanDuelSharpMode(checked);
+
+                if (String(sportsbook || "").trim().toLowerCase() === "fanduel") {
+                  setBatchRole(checked ? "fair_odds" : "target");
+                }
+              }}
+            />
+            FanDuel imports as sharp / fair odds source
+          </label>
+
+          <div style={{ marginTop: 6, fontSize: 12, color: "#666", fontWeight: 700 }}>
+            OFF = FanDuel imports as a target book. ON = FanDuel imports as a sharp source.
+            Set this before clicking the extension or loading a FanDuel import.
+          </div>
+        </div>
+
         <div
           style={{
             marginBottom: 12,
@@ -1027,6 +1249,8 @@ const marketBundle = useMemo(() => {
         </div>
 
         <LoadCoveragePanel rows={rows} />
+
+        <CoverageWarningsPanel warnings={coverageWarnings} />
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <button

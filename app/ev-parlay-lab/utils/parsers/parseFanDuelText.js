@@ -25,6 +25,10 @@ export function parseFanDuelText(rawText = "", context = {}) {
     // Safe visible full-game O/U parser for FanDuel NBA/NHL.
     rows.push(...parseFanDuelVisibleOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
 
+    // Safe visible FanDuel ladder sections like:
+    // To Score 10+ Points, 2+ Made Threes, To Record 6+ Rebounds, etc.
+    rows.push(...parseFanDuelVisibleLadderSections(lines, detailEvent.startIndex, event, sport));
+
     // Safe visible NHL extras: goalscorer, points/assists milestones, SOG, saves.
     rows.push(...parseFanDuelNhlVisibleProps(lines, detailEvent.startIndex, event, sport));
 
@@ -494,6 +498,114 @@ function parseFanDuelVisibleOverUnderBlocks(lines, startIndex, event, sport) {
   return rows;
 }
 
+function parseFanDuelVisibleLadderSections(lines, startIndex, event, sport) {
+  const rows = [];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 2; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const parsed = parseFanDuelVisibleLadderHeader(header);
+
+    if (!parsed) continue;
+    if (isFanDuelPartialGameHeader(header)) continue;
+
+    const end = findFanDuelVisibleSectionEnd(lines, i + 1);
+
+    for (let j = i + 1; j < end - 1; j += 1) {
+      const player = normalizeLine(lines[j]);
+      const odds = parseAmericanOdds(lines[j + 1]);
+
+      if (/^Show less$/i.test(player)) continue;
+      if (/^Tap a player/i.test(player)) continue;
+      if (!looksLikePlayerName(player) || odds === null) continue;
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType: parsed.marketType,
+          selection: `${player} Over`,
+          lineValue: parsed.lineValue,
+          oddsAmerican: odds,
+        })
+      );
+
+      j += 1;
+    }
+  }
+
+  return rows;
+}
+
+function parseFanDuelVisibleLadderHeader(header) {
+  const text = normalizeLine(header);
+
+  let m = text.match(/^To Score (\d+(?:\.\d+)?)\+ Points$/i);
+  if (m) {
+    return {
+      marketType: "player_points",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^(\d+(?:\.\d+)?)\+ Made Threes$/i);
+  if (m) {
+    return {
+      marketType: "player_threes",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Rebounds$/i);
+  if (m) {
+    return {
+      marketType: "player_rebounds",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Assists$/i);
+  if (m) {
+    return {
+      marketType: "player_assists",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Pts \+ Reb \+ Ast$/i);
+  if (m) {
+    return {
+      marketType: "player_pra",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Pts \+ Reb$/i);
+  if (m) {
+    return {
+      marketType: "player_points_rebounds",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Pts \+ Ast$/i);
+  if (m) {
+    return {
+      marketType: "player_points_assists",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  m = text.match(/^To Record (\d+(?:\.\d+)?)\+ Reb \+ Ast$/i);
+  if (m) {
+    return {
+      marketType: "player_rebounds_assists",
+      lineValue: Number(m[1]) - 0.5,
+    };
+  }
+
+  return null;
+}
+
 function parseFanDuelNhlVisibleProps(lines, startIndex, event, sport) {
   const rows = [];
   const text = lines.slice(0, 260).join(" ");
@@ -861,6 +973,14 @@ function isFanDuelVisibleSectionBoundary(value) {
     /^Player Reb \+ Ast$/i.test(text) ||
     /^To Record A Double Double$/i.test(text) ||
     /^To Record A Triple Double$/i.test(text) ||
+    /^To Score \d+(?:\.\d+)?\+ Points$/i.test(text) ||
+    /^\d+(?:\.\d+)?\+ Made Threes$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Rebounds$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Assists$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Pts \+ Reb \+ Ast$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Pts \+ Reb$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Pts \+ Ast$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Reb \+ Ast$/i.test(text) ||
     /^First Goal Scorer$/i.test(text) ||
     /^First Home Team Goal Scorer$/i.test(text) ||
     /^First Away Team Goal Scorer$/i.test(text) ||
@@ -902,42 +1022,66 @@ function buildMainRows(event, away, home, sport, parsed) {
 function inferSport(lines, context) {
   if (context?.sport) return String(context.sport).toUpperCase();
 
-  const text = lines.slice(0, 220).join(" ");
+  const normalizedLines = (lines || []).map((line) => normalizeLine(line));
+  const text = normalizedLines.slice(0, 320).join(" ");
 
-  // FanDuel pages include sidebar league names like NBA / MLB / NHL, so check
-  // sport-specific page/market clues before generic sidebar words.
+  function hasBreadcrumbSport(sportLabel, oddsLabel) {
+    for (let i = 0; i < normalizedLines.length; i += 1) {
+      if (!new RegExp(`^${sportLabel}$`, "i").test(normalizedLines[i])) continue;
+
+      const nearby = normalizedLines.slice(i, i + 12).join(" ");
+      if (new RegExp(`\\b${oddsLabel}\\b`, "i").test(nearby)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // FanDuel pages include sidebar league names like NBA / NHL / MLB.
+  // Breadcrumbs are more reliable than sidebar words.
+  if (hasBreadcrumbSport("Basketball", "NBA Odds")) return "NBA";
+  if (hasBreadcrumbSport("Hockey", "NHL Odds")) return "NHL";
+  if (hasBreadcrumbSport("Baseball", "MLB Odds")) return "MLB";
+
+  // NBA page/event/team clues.
   if (
-    /\bHockey\b/i.test(text) ||
-    /\bNHL Odds\b/i.test(text) ||
+    /\bDenver Nuggets @ Minnesota Timberwolves\b/i.test(text) ||
+    /\bHouston Rockets @ Los Angeles Lakers\b/i.test(text) ||
+    /\bNew York Knicks @ Atlanta Hawks\b/i.test(text) ||
+    /\bOrlando Magic @ Detroit Pistons\b/i.test(text) ||
+    /\bToronto Raptors @ Cleveland Cavaliers\b/i.test(text) ||
+    /\bBoston Celtics @ Philadelphia 76ers\b/i.test(text) ||
+    /\bPlayer Points\b/i.test(text) ||
+    /\bPlayer Rebounds\b/i.test(text) ||
+    /\bPlayer Assists\b/i.test(text) ||
+    /\bPlayer Made Threes\b/i.test(text) ||
+    /\bPlayer Pts \+ Reb \+ Ast\b/i.test(text) ||
+    /(76ers|celtics|knicks|hawks|lakers|warriors|suns|raptors|cavaliers|pistons|spurs|rockets|nuggets|timberwolves|magic|hornets|trail blazers|thunder|mavericks|clippers|grizzlies|bucks|heat|pacers|bulls|wizards|nets|jazz|pelicans)/i.test(text)
+  ) {
+    return "NBA";
+  }
+
+  // NHL page/event/team clues.
+  if (
     /\bShots on Goal\b/i.test(text) ||
     /\bGoalies\b/i.test(text) ||
     /\bAny Time Goal Scorer\b/i.test(text) ||
     /\bTotal Saves\b/i.test(text) ||
     /\bPowerplay Points\b/i.test(text) ||
     /\bBlocked Shots\b/i.test(text) ||
-    /(canadiens|lightning|bruins|sabres|penguins|flyers|oilers|ducks|stars|wild|avalanche|kings|rangers|islanders|devils|panthers|maple leafs|jets|canucks|kraken|senators|hurricanes|golden knights|mammoth)/i.test(text)
+    /(canadiens|lightning|bruins|sabres|penguins|flyers|oilers|ducks|stars|wild|avalanche|kings|rangers|islanders|devils|panthers|maple leafs|jets|canucks|kraken|senators|hurricanes|golden knights|mammoth|utah|vgk)/i.test(text)
   ) {
     return "NHL";
-  }
-
-  if (
-    /\bBasketball\b/i.test(text) ||
-    /\bNBA Odds\b/i.test(text) ||
-    /\bPlayer Points\b/i.test(text) ||
-    /\bPlayer Rebounds\b/i.test(text) ||
-    /\bPlayer Assists\b/i.test(text) ||
-    /(76ers|celtics|knicks|hawks|lakers|warriors|suns|raptors|cavaliers|pistons|spurs|rockets|nuggets|timberwolves|magic|hornets|trail blazers)/i.test(text)
-  ) {
-    return "NBA";
   }
 
   if (/\bBaseball\b/i.test(text) || /\bMLB Odds\b/i.test(text) || /\bHome Runs\b/i.test(text)) {
     return "MLB";
   }
 
-  if (/\bNHL\b/i.test(text)) return "NHL";
-  if (/\bNBA\b/i.test(text)) return "NBA";
-  if (/\bMLB\b/i.test(text)) return "MLB";
+  if (/\bNBA Odds\b/i.test(text)) return "NBA";
+  if (/\bNHL Odds\b/i.test(text)) return "NHL";
+  if (/\bMLB Odds\b/i.test(text)) return "MLB";
 
   return "UNKNOWN";
 }
