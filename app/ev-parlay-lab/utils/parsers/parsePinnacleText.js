@@ -35,6 +35,7 @@ export function parsePinnacleText(rawText = "", context = {}) {
     );
  
     rows.push(...parsePinnaclePlayerProps(lines, marketStartIndex, { event, sport, league }));
+    rows.push(...parsePinnacleDirectVisiblePlayerProps(lines, marketStartIndex, { event, sport, league }));
     rows.push(...parsePinnacleMustStartPlayerProps(lines, { event, sport, league }));
   }
  
@@ -343,7 +344,106 @@ function parseSinglePinnaclePlayerProp(lines, startIndex, { event, sport, league
  
   return null;
 }
- 
+
+function parsePinnacleDirectVisiblePlayerProps(lines, startIndex, { event, sport, league }) {
+  const rows = [];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 4; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const meta = parsePinnacleDirectVisiblePlayerPropHeader(header);
+
+    if (!meta) continue;
+
+    const overLabel = normalizeLine(lines[i + 1]);
+    const overOdds = parseDecimal(lines[i + 2]);
+    const underLabel = normalizeLine(lines[i + 3]);
+    const underOdds = parseDecimal(lines[i + 4]);
+
+    const overLine = parsePlayerOverUnderLabel(overLabel, "over");
+    const underLine = parsePlayerOverUnderLabel(underLabel, "under");
+
+    if (
+      overLine === null ||
+      underLine === null ||
+      Math.abs(overLine - underLine) > 0.0001 ||
+      overOdds === null ||
+      underOdds === null
+    ) {
+      continue;
+    }
+
+    rows.push(
+      makeRow({
+        event,
+        selection: `${meta.player} Over`,
+        marketType: meta.marketType,
+        lineValue: overLine,
+        decimalOdds: overOdds,
+        sport,
+        league,
+      })
+    );
+
+    rows.push(
+      makeRow({
+        event,
+        selection: `${meta.player} Under`,
+        marketType: meta.marketType,
+        lineValue: underLine,
+        decimalOdds: underOdds,
+        sport,
+        league,
+      })
+    );
+
+    i += 4;
+  }
+
+  return rows;
+}
+
+function parsePinnacleDirectVisiblePlayerPropHeader(value) {
+  const text = normalizeLine(value);
+
+  const patterns = [
+    { regex: /^(.*?)\s+Total Points$/i, marketType: "player_points" },
+    { regex: /^(.*?)\s+Total Assists$/i, marketType: "player_assists" },
+    { regex: /^(.*?)\s+Total Rebounds$/i, marketType: "player_rebounds" },
+    { regex: /^(.*?)\s+Total Threes Made$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+Total Three Pointers$/i, marketType: "player_threes" },
+    { regex: /^(.*?)\s+Total Pts & Rebs & Asts$/i, marketType: "player_pra" },
+    { regex: /^(.*?)\s+Total PRA$/i, marketType: "player_pra" },
+
+    // NHL / other props
+    { regex: /^(.*?)\s+Total Goals$/i, marketType: "player_goals" },
+    { regex: /^(.*?)\s+Total Saves$/i, marketType: "player_saves" },
+    { regex: /^(.*?)\s+Total Shots On Goal$/i, marketType: "player_shots_on_goal" },
+    { regex: /^(.*?)\s+Total Power Play Points$/i, marketType: "player_power_play_points" },
+    { regex: /^(.*?)\s+Total Blocked Shots$/i, marketType: "player_blocked_shots" },
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern.regex);
+    if (!match) continue;
+
+    const player = normalizeLine(match[1]);
+
+    if (!player) continue;
+
+    // Prevent team/combo markets from becoming fake player props.
+    if (/^(moneyline and|winner and|team total|total points odd\/even|points odd\/even)$/i.test(player)) {
+      continue;
+    }
+
+    return {
+      player,
+      marketType: pattern.marketType,
+    };
+  }
+
+  return null;
+}
+
 function parsePinnacleMustStartPlayerProps(lines, { event, sport, league }) {
   const rows = [];
  
