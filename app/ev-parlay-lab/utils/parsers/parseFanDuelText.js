@@ -25,6 +25,10 @@ export function parseFanDuelText(rawText = "", context = {}) {
     // Safe visible full-game O/U parser for FanDuel NBA/NHL.
     rows.push(...parseFanDuelVisibleOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
 
+    // More direct O/U parser for FanDuel NBA simple prop pages where headers are duplicated:
+    // Player Points / OVER / UNDER / Player / O line / odds / U line / odds.
+    rows.push(...parseFanDuelDirectOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
+
     // Safe visible FanDuel ladder sections like:
     // To Score 10+ Points, 2+ Made Threes, To Record 6+ Rebounds, etc.
     rows.push(...parseFanDuelVisibleLadderSections(lines, detailEvent.startIndex, event, sport));
@@ -496,6 +500,119 @@ function parseFanDuelVisibleOverUnderBlocks(lines, startIndex, event, sport) {
   }
 
   return rows;
+}
+
+function parseFanDuelDirectOverUnderBlocks(lines, startIndex, event, sport) {
+  const rows = [];
+
+  const sections = [
+    ["Player Points", "player_points"],
+    ["Player Rebounds", "player_rebounds"],
+    ["Player Assists", "player_assists"],
+    ["Player Made Threes", "player_threes"],
+    ["Player Threes", "player_threes"],
+  ];
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 7; i += 1) {
+    const header = normalizeLine(lines[i]);
+    const found = sections.find(([label]) => normalizeLine(label).toLowerCase() === header.toLowerCase());
+
+    if (!found) continue;
+
+    const marketType = found[1];
+
+    // Require the actual O/U table shape. This avoids matching the top nav tab.
+    if (!/^OVER$/i.test(normalizeLine(lines[i + 1]))) continue;
+    if (!/^UNDER$/i.test(normalizeLine(lines[i + 2]))) continue;
+
+    let j = i + 3;
+
+    while (j < lines.length - 4) {
+      const token = normalizeLine(lines[j]);
+
+      if (isFanDuelDirectOverUnderStopLine(token)) break;
+
+      if (!looksLikePlayerName(token)) {
+        j += 1;
+        continue;
+      }
+
+      const player = token;
+      const overLine = parseTotalToken(lines[j + 1], "O");
+      const overOdds = parseAmericanOdds(lines[j + 2]);
+      const underLine = parseTotalToken(lines[j + 3], "U");
+      const underOdds = parseAmericanOdds(lines[j + 4]);
+
+      if (
+        overLine === null ||
+        underLine === null ||
+        Math.abs(overLine - underLine) > 0.0001 ||
+        overOdds === null ||
+        underOdds === null
+      ) {
+        j += 1;
+        continue;
+      }
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType,
+          selection: `${player} Over`,
+          lineValue: overLine,
+          oddsAmerican: overOdds,
+        })
+      );
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType,
+          selection: `${player} Under`,
+          lineValue: underLine,
+          oddsAmerican: underOdds,
+        })
+      );
+
+      j += 5;
+    }
+  }
+
+  return rows;
+}
+
+function isFanDuelDirectOverUnderStopLine(value) {
+  const text = normalizeLine(value);
+
+  if (!text) return false;
+  if (/^Show less$/i.test(text)) return true;
+  if (/^Show more$/i.test(text)) return true;
+
+  return (
+    /^Player Points$/i.test(text) ||
+    /^Player Rebounds$/i.test(text) ||
+    /^Player Assists$/i.test(text) ||
+    /^Player Made Threes$/i.test(text) ||
+    /^Player Threes$/i.test(text) ||
+    /^Player Pts \+ Reb \+ Ast$/i.test(text) ||
+    /^Player Pts \+ Reb$/i.test(text) ||
+    /^Player Pts \+ Ast$/i.test(text) ||
+    /^Player Reb \+ Ast$/i.test(text) ||
+    /^To Score \d+(?:\.\d+)?\+ Points$/i.test(text) ||
+    /^\d+(?:\.\d+)?\+ Made Threes$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Rebounds$/i.test(text) ||
+    /^To Record \d+(?:\.\d+)?\+ Assists$/i.test(text) ||
+    /^To Record /i.test(text) ||
+    /^.+ @ .+ Odds$/i.test(text) ||
+    /^Bet on .+ odds/i.test(text) ||
+    /^Verifying location/i.test(text) ||
+    /^ABOUT$/i.test(text) ||
+    /^Back to top$/i.test(text) ||
+    /^Betslip/i.test(text) ||
+    isHardStopLine(text)
+  );
 }
 
 function parseFanDuelVisibleLadderSections(lines, startIndex, event, sport) {
