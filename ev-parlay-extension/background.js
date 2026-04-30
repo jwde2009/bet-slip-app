@@ -1571,6 +1571,95 @@ async function extractOddsTextFromCurrentPage() {
       return totalClicked;
     }
 
+        function getFanDuelCurrentNbaTabFromText(text) {
+      const lines = String(text || "")
+        .split("\n")
+        .map((line) => clean(line))
+        .filter(Boolean);
+
+      for (const line of lines) {
+        const match = line.match(
+          / @ .+ (Player Points|Player Threes|Player Rebounds|Player Assists|Player Combos) Odds$/i
+        );
+
+        if (match?.[1]) return match[1];
+      }
+
+      return "";
+    }
+
+    function getFanDuelNextNbaTab(currentTab) {
+      const order = [
+        "Player Points",
+        "Player Threes",
+        "Player Rebounds",
+        "Player Assists",
+        "Player Combos",
+      ];
+
+      const currentIndex = order.findIndex(
+        (label) => label.toLowerCase() === String(currentTab || "").toLowerCase()
+      );
+
+      if (currentIndex === -1) return "";
+      return order[currentIndex + 1] || "";
+    }
+
+        async function buildFanDuelOneNextNbaTabRawText() {
+      const captures = [];
+
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(`FANDUEL_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      const currentTab = getFanDuelCurrentNbaTabFromText(initial);
+
+      const currentShowMoreClicked = await clickFanDuelShowMoreOnly(8);
+      await sleep(650);
+
+      const currentText = rawPageText();
+      if (currentText && currentText.trim()) {
+        captures.push(
+          `FANDUEL_CURRENT_CAPTURE: ${currentTab || "unknown"}; show more ${currentShowMoreClicked}\n${currentText}`
+        );
+      }
+
+      const nextTab = getFanDuelNextNbaTab(currentTab);
+
+      // Important:
+      // Do NOT wait after clicking the next tab inside this injected script.
+      // FanDuel can re-render/remove the frame, which causes executeScript to return null.
+      // Instead, return the current capture safely and schedule the next tab click after return.
+      if (nextTab) {
+        window.setTimeout(() => {
+          try {
+            const button = findClickableByExactVisibleText(nextTab, {
+              maxWidth: 420,
+              maxHeight: 120,
+            });
+
+            if (button) {
+              button.scrollIntoView({ block: "center", inline: "nearest" });
+              button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+              button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+              button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }));
+              button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+              button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+              button.click();
+            }
+          } catch (err) {
+            // ignore scheduled tab-click failures
+          }
+        }, 150);
+
+        captures.push(`FANDUEL_SCHEDULED_NEXT_TAB: ${currentTab || "unknown"} -> ${nextTab}`);
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
         async function buildFanDuelExpandedRawText() {
       const captures = [];
 
@@ -1818,27 +1907,13 @@ async function extractOddsTextFromCurrentPage() {
   // FanDuel test version 1:
   // Only click visible Show More buttons, then return raw text.
   // This does NOT click section tabs or market headers.
-  if (detectedSource === "FanDuel") {
+    if (detectedSource === "FanDuel") {
     try {
-      const captures = [];
-      const initial = rawPageText();
-
-      if (initial && initial.trim()) {
-        captures.push(`FANDUEL_INITIAL_CAPTURE\n${initial}`);
-      }
-
-      const clickedCount = await clickFanDuelShowMoreOnly(12);
-      await sleep(800);
-
-      const expanded = rawPageText();
-
-      if (expanded && expanded.trim()) {
-        captures.push(`FANDUEL_SHOW_MORE_ONLY_CAPTURE: clicked ${clickedCount}\n${expanded}`);
-      }
+      const fanDuelText = await buildFanDuelOneNextNbaTabRawText();
 
       return {
         source: detectedSource,
-        text: mergeRawTextBlocks(captures) || expanded || initial || rawPageText(),
+        text: String(fanDuelText || "").trim() || rawPageText(),
       };
     } catch (err) {
       return {
