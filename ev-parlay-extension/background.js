@@ -1345,23 +1345,24 @@ async function extractOddsTextFromCurrentPage() {
         .trim();
     }
 
-    function isSafeFanDuelExpandableText(value) {
+      function isSafeFanDuelExpandableText(value) {
       const text = clean(value);
 
       if (!text) return false;
 
-      // Avoid period/quarter/half markets for now.
+      // Avoid quarter/period/half markets for now.
       if (/\b(1st|2nd|3rd|4th)\s+(Quarter|Period)\b/i.test(text)) return false;
       if (/\b(1st|2nd)\s+Half\b/i.test(text)) return false;
       if (/^Overtime$/i.test(text)) return false;
 
       const exact = new Set([
-        // NBA core
+        // NBA top tabs / useful sections
         "Player Points",
         "Player Made Threes",
         "Player Threes",
         "Player Rebounds",
         "Player Assists",
+        "Player Combos",
         "Player Pts + Reb + Ast",
         "Player Pts + Reb",
         "Player Pts + Ast",
@@ -1369,42 +1370,23 @@ async function extractOddsTextFromCurrentPage() {
         "To Record A Double Double",
         "To Record A Triple Double",
 
-        // FanDuel top NBA tab labels
-        "Player Combos",
-        "Player Defense",
-
-        // NHL core
+        // NHL useful sections only
         "Any Time Goal Scorer",
         "Player 1+ Points",
-        "Player 2+ Points",
-        "Player 3+ Points",
         "Player 1+ Assists",
-        "Player 2+ Assists",
-        "Player 3+ Assists",
         "Player to Record 1+ Powerplay Points",
-        /^Player to Record \d+\+ Blocked Shots$/i.test(text) ||
         "60 Min Player to Record 1+ Shots on Goal",
-        "60 Min Player to Record 2+ Shots on Goal",
-        "60 Min Player to Record 3+ Shots on Goal",
-        "60 Min Player to Record 4+ Shots on Goal",
-        "60 Min Player to Record 5+ Shots on Goal",
-        "60 Min Player to Record 6+ Shots on Goal",
-        "60 Min Player to Record 7+ Shots on Goal",
       ]);
 
       if (exact.has(text)) return true;
 
       return (
+        // NHL full-game O/U style drawers
         /^60 Min .+ Shots on Goal$/i.test(text) ||
         /^60 Min .+ Total Saves$/i.test(text) ||
-        /^60 Min .+ Total Goals$/i.test(text) ||
-        /^.+ Total Goals$/i.test(text) ||
         /^.+ - 60 Min Alt Saves$/i.test(text) ||
-        /^Player \d+\+ Points$/i.test(text) ||
-        /^Player \d+\+ Assists$/i.test(text) ||
-        /^Player to Record \d+\+ Powerplay Points$/i.test(text) ||
-        /^Player to Record \d+\+ Blocked Shots$/i.test(text) ||
-        /^Player to Score \d+\+ Goals$/i.test(text)
+        /^60 Min .+ Total Goals$/i.test(text) ||
+        /^.+ Total Goals$/i.test(text)
       );
     }
 
@@ -1452,12 +1434,12 @@ async function extractOddsTextFromCurrentPage() {
       return unique.filter(isElementVisible).slice(0, 80);
     }
 
-       async function clickFanDuelExpandableSections(options = {}) {
+      async function clickFanDuelExpandableSections(options = {}) {
       const clicked = new Set();
       let totalClicked = 0;
 
-      const maxPasses = Number(options.maxPasses || 2);
-      const maxClicks = Number(options.maxClicks || 18);
+      const maxPasses = Number(options.maxPasses || 1);
+      const maxClicks = Number(options.maxClicks || 10);
 
       for (let pass = 0; pass < maxPasses; pass += 1) {
         const candidates = getFanDuelExpandableCandidates();
@@ -1475,8 +1457,7 @@ async function extractOddsTextFromCurrentPage() {
 
           if (!label) continue;
 
-          // Important: key by label only, not screen position.
-          // FanDuel shifts the page after each open, so position-based keys caused repeat loops.
+          // Key by label only. Position keys caused loops when FanDuel shifted content.
           const key = normalizeFanDuelLabel(label);
           if (clicked.has(key)) continue;
 
@@ -1488,7 +1469,7 @@ async function extractOddsTextFromCurrentPage() {
             totalClicked += 1;
 
             await sleep(650);
-            await clickSafeExpandButtons();
+            await clickFanDuelShowMoreOnly(5);
             await sleep(250);
           }
 
@@ -1497,7 +1478,94 @@ async function extractOddsTextFromCurrentPage() {
 
         if (totalClicked >= maxClicks || clickedThisPass === 0) break;
 
-        await sleep(500);
+        await sleep(450);
+      }
+
+      return totalClicked;
+    }
+
+        function getFanDuelShowMoreCandidates() {
+      const directButtons = Array.from(
+        document.querySelectorAll("button, a, [role='button']")
+      );
+
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = getElementText(el);
+          if (!/^Show more$/i.test(text)) return false;
+
+          const rect = el.getBoundingClientRect();
+
+          return (
+            rect.width > 8 &&
+            rect.height > 8 &&
+            rect.width < 420 &&
+            rect.height < 100
+          );
+        })
+        .map(findClickableAncestor);
+
+      const all = [...directButtons, ...textMatches];
+      const seen = new Set();
+      const unique = [];
+
+      for (const el of all) {
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+
+        if (!isElementVisible(el)) continue;
+
+        const text = getElementText(el);
+        const childText = Array.from(el.querySelectorAll("*"))
+          .map((child) => getElementText(child))
+          .find((value) => /^Show more$/i.test(value));
+
+        if (!/^Show more$/i.test(text) && !childText) continue;
+
+        const rect = el.getBoundingClientRect();
+
+        // Avoid giant containers.
+        if (rect.width > 560 || rect.height > 160) continue;
+
+        unique.push(el);
+      }
+
+      return unique.slice(0, 12);
+    }
+
+    async function clickFanDuelShowMoreOnly(maxClicks = 8) {
+      const clicked = new Set();
+      let totalClicked = 0;
+
+      for (let pass = 0; pass < 2; pass += 1) {
+        const candidates = getFanDuelShowMoreCandidates();
+        let clickedThisPass = 0;
+
+        for (const el of candidates) {
+          if (!isElementVisible(el)) continue;
+
+          const rect = el.getBoundingClientRect();
+          const key = `show-more::${Math.round(rect.top)}::${Math.round(rect.left)}::${Math.round(rect.width)}x${Math.round(rect.height)}`;
+
+          if (clicked.has(key)) continue;
+
+          const ok = await clickElementReliably(el);
+
+          if (ok) {
+            clicked.add(key);
+            clickedThisPass += 1;
+            totalClicked += 1;
+            await sleep(450);
+          }
+
+          if (totalClicked >= maxClicks) break;
+        }
+
+        if (totalClicked >= maxClicks || clickedThisPass === 0) break;
+
+        await sleep(450);
       }
 
       return totalClicked;
@@ -1523,7 +1591,8 @@ async function extractOddsTextFromCurrentPage() {
           /\bplayer points\b/i.test(pageText) ||
           /\bplayer rebounds\b/i.test(pageText) ||
           /\bplayer assists\b/i.test(pageText) ||
-          /\bplayer combos\b/i.test(pageText);
+          /\bplayer combos\b/i.test(pageText) ||
+          /\bplayer pts \+ reb/i.test(pageText);
 
         if (isLikelyNhl) {
           return ["Goals", "Shots", "Points/Assists", "Goalies"];
@@ -1543,9 +1612,7 @@ async function extractOddsTextFromCurrentPage() {
       }
 
       async function captureFanDuelSnapshot(label) {
-        await openDetailsDrawers();
-        await clickSafeExpandButtons();
-        await sleep(500);
+        await sleep(450);
 
         const text = rawPageText();
 
@@ -1554,10 +1621,6 @@ async function extractOddsTextFromCurrentPage() {
         }
       }
 
-      await openDetailsDrawers();
-      await clickSafeExpandButtons();
-      await sleep(500);
-
       const initial = rawPageText();
       if (initial && initial.trim()) {
         captures.push(`FANDUEL_INITIAL_CAPTURE\n${initial}`);
@@ -1565,33 +1628,152 @@ async function extractOddsTextFromCurrentPage() {
 
       const sectionLabels = getFanDuelSectionLabelsForPage(initial);
 
-      // Expand the current section first.
-      const initialClicked = await clickFanDuelExpandableSections({
-        maxPasses: 2,
-        maxClicks: 14,
+      // Expand the current visible section first.
+      const initialShowMoreClicked = await clickFanDuelShowMoreOnly(8);
+      const initialHeaderClicked = await clickFanDuelExpandableSections({
+        maxPasses: 1,
+        maxClicks: 10,
       });
+      await clickFanDuelShowMoreOnly(8);
 
-      await captureFanDuelSnapshot(`initial expanded clicked ${initialClicked}`);
+      await captureFanDuelSnapshot(
+        `initial expanded headers ${initialHeaderClicked}, show more ${initialShowMoreClicked}`
+      );
 
-      // Then jump FanDuel top sections one by one and expand each page/section.
+      // Then jump specific FanDuel top tabs one by one.
       for (const label of sectionLabels) {
         const clickedTab = await clickExactVisibleText(label, {
           maxWidth: 420,
           maxHeight: 120,
-          sleepMs: 1300,
+          sleepMs: 1200,
         });
 
-        if (!clickedTab) continue;
+        if (!clickedTab) {
+          captures.push(`FANDUEL_MISSING_TAB: ${label}\n${rawPageText()}`);
+          continue;
+        }
 
-        await openDetailsDrawers();
-        await sleep(500);
+        await sleep(650);
+
+        const showMoreClicked = await clickFanDuelShowMoreOnly(8);
 
         const expandedClicked = await clickFanDuelExpandableSections({
-          maxPasses: 2,
-          maxClicks: 14,
+          maxPasses: 1,
+          maxClicks: 10,
         });
 
-        await captureFanDuelSnapshot(`${label} clicked ${expandedClicked}`);
+        await clickFanDuelShowMoreOnly(8);
+
+        await captureFanDuelSnapshot(
+          `${label} headers ${expandedClicked}, show more ${showMoreClicked}`
+        );
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
+
+        function getBetMgmShowMoreCandidates() {
+      const directButtons = Array.from(
+        document.querySelectorAll("button, a, [role='button']")
+      );
+
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = getElementText(el);
+          if (!/^Show More$/i.test(text)) return false;
+
+          const rect = el.getBoundingClientRect();
+
+          return (
+            rect.width > 8 &&
+            rect.height > 8 &&
+            rect.width < 360 &&
+            rect.height < 90
+          );
+        })
+        .map(findClickableAncestor);
+
+      const all = [...directButtons, ...textMatches];
+      const seen = new Set();
+      const unique = [];
+
+      for (const el of all) {
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+
+        if (!isElementVisible(el)) continue;
+
+        const text = getElementText(el);
+        const childText = Array.from(el.querySelectorAll("*"))
+          .map((child) => getElementText(child))
+          .find((value) => /^Show More$/i.test(value));
+
+        if (!/^Show More$/i.test(text) && !childText) continue;
+
+        const rect = el.getBoundingClientRect();
+
+        // Avoid giant page containers.
+        if (rect.width > 520 || rect.height > 140) continue;
+
+        unique.push(el);
+      }
+
+      return unique.slice(0, 30);
+    }
+
+    async function clickBetMgmShowMoreOnly() {
+      const clicked = new Set();
+      let totalClicked = 0;
+
+      for (let pass = 0; pass < 2; pass += 1) {
+        const candidates = getBetMgmShowMoreCandidates();
+        let clickedThisPass = 0;
+
+        for (const el of candidates) {
+          if (!isElementVisible(el)) continue;
+
+          const rect = el.getBoundingClientRect();
+          const key = `show-more::${Math.round(rect.top)}::${Math.round(rect.left)}::${Math.round(rect.width)}x${Math.round(rect.height)}`;
+
+          if (clicked.has(key)) continue;
+
+          const ok = await clickElementReliably(el);
+
+          if (ok) {
+            clicked.add(key);
+            clickedThisPass += 1;
+            totalClicked += 1;
+            await sleep(500);
+          }
+
+          if (totalClicked >= 20) break;
+        }
+
+        if (totalClicked >= 20 || clickedThisPass === 0) break;
+
+        await sleep(500);
+      }
+
+      return totalClicked;
+    }
+
+    async function buildBetMgmShowMoreRawText() {
+      const captures = [];
+
+      const initial = rawPageText();
+      if (initial && initial.trim()) {
+        captures.push(`BETMGM_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      const clickedCount = await clickBetMgmShowMoreOnly();
+      await sleep(700);
+
+      const expanded = rawPageText();
+      if (expanded && expanded.trim()) {
+        captures.push(`BETMGM_SHOW_MORE_CAPTURE: clicked ${clickedCount}\n${expanded}`);
       }
 
       return mergeRawTextBlocks(captures) || rawPageText();
@@ -1616,11 +1798,59 @@ async function extractOddsTextFromCurrentPage() {
 
   const detectedSource = detectBookSource();
 
+  // BetMGM keeps the small Show More helper because that has been stable.
+  if (detectedSource === "BetMGM") {
+    try {
+      const betMgmText = await buildBetMgmShowMoreRawText();
+
+      return {
+        source: detectedSource,
+        text: String(betMgmText || "").trim() || rawPageText(),
+      };
+    } catch (err) {
+      return {
+        source: detectedSource,
+        text: rawPageText(),
+      };
+    }
+  }
+
+  // FanDuel test version 1:
+  // Only click visible Show More buttons, then return raw text.
+  // This does NOT click section tabs or market headers.
+  if (detectedSource === "FanDuel") {
+    try {
+      const captures = [];
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(`FANDUEL_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      const clickedCount = await clickFanDuelShowMoreOnly(12);
+      await sleep(800);
+
+      const expanded = rawPageText();
+
+      if (expanded && expanded.trim()) {
+        captures.push(`FANDUEL_SHOW_MORE_ONLY_CAPTURE: clicked ${clickedCount}\n${expanded}`);
+      }
+
+      return {
+        source: detectedSource,
+        text: mergeRawTextBlocks(captures) || expanded || initial || rawPageText(),
+      };
+    } catch (err) {
+      return {
+        source: detectedSource,
+        text: rawPageText(),
+      };
+    }
+  }
+
   if (
     detectedSource === "Pinnacle" ||
-    detectedSource === "FanDuel" ||
-    detectedSource === "DraftKings" ||
-    detectedSource === "BetMGM"
+    detectedSource === "DraftKings"
   ) {
     return {
       source: detectedSource,
