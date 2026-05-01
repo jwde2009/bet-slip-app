@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import SavedPlacedParlaysLedgerPanel from "./SavedPlacedParlaysLedgerPanel";
 import { useState } from "react";
 
 export default function ParlayResults({
@@ -11,10 +12,16 @@ export default function ParlayResults({
   onSavePlacedParlay,
   onClearSavedParlays,
   onDeleteSavedParlay,
+  onUpdateSavedParlay,
+  onConfirmSavedParlayPlaced,
+  onSetSavedParlayResult,
   formatSavedDateTime,
+  boostWallet = [],
 }) {  const [converterInput, setConverterInput] = useState("");
 const [converterResult, setConverterResult] = useState(null);
   const [collapsedMap, setCollapsedMap] = useState({});
+  const [selectedBoostByParlayId, setSelectedBoostByParlayId] = useState({});
+  const [stakeByParlayId, setStakeByParlayId] = useState({});
 
   function toggleParlay(id) {
     setCollapsedMap((prev) => ({
@@ -114,9 +121,47 @@ const [converterResult, setConverterResult] = useState(null);
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <select
+                      value={selectedBoostByParlayId[parlay.id] || ""}
+                      onChange={(event) =>
+                        setSelectedBoostByParlayId((prev) => ({
+                          ...prev,
+                          [parlay.id]: event.target.value,
+                        }))
+                      }
+                      style={boostSelectStyle}
+                    >
+                      <option value="">No boost attached</option>
+                      {boostWallet
+                        .filter((boost) => boost.status !== "used" && boost.status !== "expired")
+                        .map((boost) => (
+                          <option key={boost.id} value={boost.id}>
+                            {boost.sportsbook} — {boost.name} ({boost.boostPct}%)
+                          </option>
+                        ))}
+                    </select>
+
+                    <input
+                      type="number"
+                      value={stakeByParlayId[parlay.id] ?? ""}
+                      placeholder="Stake"
+                      onChange={(event) =>
+                        setStakeByParlayId((prev) => ({
+                          ...prev,
+                          [parlay.id]: event.target.value,
+                        }))
+                      }
+                      style={stakeInputStyle}
+                    />
+
                     <button
                       type="button"
-                      onClick={() => onSavePlacedParlay?.(parlay)}
+                      onClick={() =>
+                        onSavePlacedParlay?.(parlay, {
+                          boostId: selectedBoostByParlayId[parlay.id] || "",
+                          placedStake: stakeByParlayId[parlay.id],
+                        })
+                      }
                       style={savePlacedButtonStyle}
                     >
                       Save Placed Parlay
@@ -205,69 +250,16 @@ const [converterResult, setConverterResult] = useState(null);
         </div>
       )}
 
-      <div style={savedParlaysPanelStyle}>
-        <div style={savedParlaysHeaderStyle}>
-          <div>
-            <h3 style={{ margin: 0 }}>Saved / Placed Parlays</h3>
-            <div style={savedParlaysSubtleStyle}>
-              Saved parlays persist across refreshes so you can avoid repeating legs later today or tomorrow.
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onClearSavedParlays?.()}
-            disabled={!savedPlacedParlays.length}
-            style={{
-              ...clearSavedButtonStyle,
-              opacity: savedPlacedParlays.length ? 1 : 0.55,
-              cursor: savedPlacedParlays.length ? "pointer" : "not-allowed",
-            }}
-          >
-            Clear Saved Parlays
-          </button>
-        </div>
-
-        {savedPlacedParlays.length === 0 ? (
-          <div style={savedParlaysEmptyStyle}>
-            No saved placed parlays yet.
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {savedPlacedParlays.slice(0, 20).map((saved) => (
-              <div key={saved.id} style={savedParlayCardStyle}>
-                <div style={savedParlayTopRowStyle}>
-                  <div>
-                    <div style={{ fontWeight: 900 }}>
-                      {saved.gradeTier || "Saved"} / {saved.playLabel || "Placed Parlay"}
-                      {" "}• {formatAmerican(saved.boostedParlayAmerican)}
-                    </div>
-                    <div style={savedParlaysSubtleStyle}>
-                      Saved {formatSavedDateTime ? formatSavedDateTime(saved.savedAt) : saved.savedAt}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => onDeleteSavedParlay?.(saved.id)}
-                    style={deleteSavedButtonStyle}
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                  {(saved.legs || []).map((leg, idx) => (
-                    <div key={`${saved.id}_${idx}`} style={savedLegLineStyle}>
-                      • {leg.eventName} — {formatSavedLeg(leg)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <SavedPlacedParlaysLedgerPanel
+        savedPlacedParlays={savedPlacedParlays}
+        savedLegUsageMap={savedLegUsageMap}
+        onClearSavedParlays={onClearSavedParlays}
+        onDeleteSavedParlay={onDeleteSavedParlay}
+        onUpdateSavedParlay={onUpdateSavedParlay}
+        onConfirmSavedParlayPlaced={onConfirmSavedParlayPlaced}
+        onSetSavedParlayResult={onSetSavedParlayResult}
+        formatSavedDateTime={formatSavedDateTime}
+      />
     </section>
   );
 }
@@ -685,6 +677,27 @@ const rejectionPillStyle = {
   fontSize: 12,
   fontWeight: 700,
 };
+
+const boostSelectStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "7px 9px",
+  fontSize: 12,
+  fontWeight: 700,
+  background: "#fff",
+  minWidth: 220,
+};
+
+const stakeInputStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "7px 9px",
+  fontSize: 12,
+  fontWeight: 700,
+  background: "#fff",
+  width: 90,
+};
+
 
 const savePlacedButtonStyle = {
   border: "1px solid #86efac",

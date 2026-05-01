@@ -11,6 +11,7 @@ import TopEdgeBetsPanel from "./components/TopEdgeBetsPanel";
 import LoadCoveragePanel from "./components/LoadCoveragePanel";
 import ParlayFilters from "./components/ParlayFilters";
 import ParlayResults from "./components/ParlayResults";
+import BoostWalletPanel from "./components/BoostWalletPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsText } from "./utils/parseOddsText";
@@ -23,6 +24,7 @@ import { normalizeMarketType } from "./utils/marketNormalization";
 const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
 const SAVED_SESSION_KEY = "EV_PARLAY_LAB_SESSION";
 const SAVED_PLACED_PARLAYS_KEY = "EV_PARLAY_LAB_PLACED_PARLAYS";
+const BOOST_WALLET_KEY = "EV_PARLAY_LAB_BOOST_WALLET";
 const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function readImportQueue() {
@@ -50,6 +52,26 @@ function readSavedPlacedParlays() {
     return [];
   }
 }
+
+function readBoostWallet() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BOOST_WALLET_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeBoostWallet(boosts) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    BOOST_WALLET_KEY,
+    JSON.stringify(Array.isArray(boosts) ? boosts : [])
+  );
+}
+
 
 function writeSavedPlacedParlays(parlays) {
   if (typeof window === "undefined") return;
@@ -79,8 +101,21 @@ function buildSavedLegKeyFromLeg(leg = {}) {
 
 function buildSavedLegUsageMap(savedPlacedParlays = []) {
   const usage = new Map();
+  const todayKey = new Date().toISOString().slice(0, 10);
 
   for (const parlay of savedPlacedParlays || []) {
+    const status = String(parlay.status || "").toLowerCase();
+    const placedDateKey = String(parlay.placedDate || parlay.placedAt || parlay.savedAt || "").slice(0, 10);
+
+    // Saved/placed parlays are permanent history, but repeat-leg blocking should only
+    // use active/current-slate parlays. Settled historical parlays should not suppress
+    // new candidates on future dates.
+    const isActiveForRepeatBlocking =
+      (status === "placed" || status === "pending") &&
+      placedDateKey === todayKey;
+
+    if (!isActiveForRepeatBlocking) continue;
+
     for (const leg of parlay?.legs || []) {
       const key = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
       if (!key) continue;
@@ -96,20 +131,53 @@ function buildSavedLegUsageMap(savedPlacedParlays = []) {
   return usage;
 }
 
-function makePlacedParlayRecord(parlay) {
+
+function makePlacedParlayRecord(parlay, options = {}) {
   const savedAt = new Date().toISOString();
+  const selectedBoost = options.selectedBoost || null;
+  const placedStake = Number(options.placedStake);
+  const placedOddsAmerican =
+    Number.isFinite(Number(options.placedOddsAmerican))
+      ? Number(options.placedOddsAmerican)
+      : Number.isFinite(Number(parlay?.boostedParlayAmerican))
+        ? Number(parlay.boostedParlayAmerican)
+        : Number.isFinite(Number(parlay?.rawParlayAmerican))
+          ? Number(parlay.rawParlayAmerican)
+          : null;
 
   return {
     id: `placed_parlay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+
+    // Lifecycle:
+    // saved = idea saved but not confirmed as placed
+    // placed = confirmed placed / pending settlement
+    // won/lost/push/void = settled history
+    status: "saved",
+    confirmedPlaced: false,
+
     savedAt,
-    placedDate: savedAt.slice(0, 10),
-    boostPct: Number(parlay?.boostPctUsed || 0),
+    placedAt: "",
+    settledAt: "",
+    placedDate: "",
+
+    placedStake: Number.isFinite(placedStake) ? placedStake : Number(parlay?.stake ?? 0),
+    placedOddsAmerican,
+    result: "",
+    profitLoss: 0,
+
+    boostId: selectedBoost?.id || "",
+    boostName: selectedBoost?.name || "",
+    boostSportsbook: selectedBoost?.sportsbook || "",
+    boostExpiresAt: selectedBoost?.expiresAt || "",
+    boostPct: Number(selectedBoost?.boostPct ?? parlay?.boostPctUsed ?? 0),
+
     rawParlayAmerican: parlay?.rawParlayAmerican ?? null,
     boostedParlayAmerican: parlay?.boostedParlayAmerican ?? null,
     expectedValuePct: parlay?.expectedValuePct ?? null,
     fairHitProbability: parlay?.fairHitProbability ?? null,
     gradeTier: parlay?.gradeTier || "",
     playLabel: parlay?.playLabel || "",
+
     legs: (parlay?.legs || []).map((leg) => {
       const savedLegKey = buildSavedLegKeyFromLeg(leg);
 
@@ -128,6 +196,31 @@ function makePlacedParlayRecord(parlay) {
     }),
   };
 }
+
+function calculateAmericanOddsProfit(stake, americanOdds) {
+  const s = Number(stake);
+  const odds = Number(americanOdds);
+
+  if (!Number.isFinite(s) || s <= 0 || !Number.isFinite(odds) || odds === 0) {
+    return 0;
+  }
+
+  if (odds > 0) return s * (odds / 100);
+  return s * (100 / Math.abs(odds));
+}
+
+function calculateSavedParlayProfitLoss(parlay, statusOverride) {
+  const status = String(statusOverride || parlay?.status || "").toLowerCase();
+  const stake = Number(parlay?.placedStake || 0);
+  const odds = Number(parlay?.placedOddsAmerican ?? parlay?.boostedParlayAmerican ?? parlay?.rawParlayAmerican);
+
+  if (status === "won") return calculateAmericanOddsProfit(stake, odds);
+  if (status === "lost") return -stake;
+  if (status === "push" || status === "void") return 0;
+
+  return Number(parlay?.profitLoss || 0);
+}
+
 
 function formatSavedDateTime(value) {
   if (!value) return "Unknown time";
@@ -448,6 +541,7 @@ export default function EVParlayLabPage() {
   const [pendingUrlImport, setPendingUrlImport] = useState(null);
   const [pendingImports, setPendingImports] = useState([]);
   const [savedPlacedParlays, setSavedPlacedParlays] = useState([]);
+  const [boostWallet, setBoostWallet] = useState([]);
   const [fanDuelSharpMode, setFanDuelSharpMode] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
     function resolveImportBatchRole(sourceName) {
@@ -547,9 +641,12 @@ export default function EVParlayLabPage() {
   });
 
   const parsedAt = Date.now();
+  const parsedAtIso = new Date(parsedAt).toISOString();
 
   const normalized = (normalizeParsedRows(withBatchRole) || []).map((row, index) => ({
     ...row,
+    loadedAt: row.loadedAt || parsedAtIso,
+    parsedAt: row.parsedAt || parsedAtIso,
     id: makeParsedRowId(row, parsedAt, index),
   }));
 
@@ -568,7 +665,7 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     return [...prev, ...additions];
   });
 
-  setLastParsedAt(new Date().toISOString());
+  setLastParsedAt(parsedAtIso);
   alert(`Parsed rows: ${normalized.length}`);
 }
 
@@ -646,16 +743,185 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     setShowManualMatchPanel(false);
   }
 
-function handleSavePlacedParlay(parlay) {
+function handleSavePlacedParlay(parlay, options = {}) {
     if (!parlay || !Array.isArray(parlay.legs) || parlay.legs.length === 0) {
       alert("No parlay legs found to save.");
       return;
     }
 
-    const record = makePlacedParlayRecord(parlay);
+    const selectedBoost = options.boostId
+      ? boostWallet.find((boost) => boost.id === options.boostId)
+      : null;
+
+    const record = makePlacedParlayRecord(parlay, {
+      selectedBoost,
+      placedStake: options.placedStake,
+      placedOddsAmerican: options.placedOddsAmerican,
+    });
 
     setSavedPlacedParlays((prev) => {
-      const next = [record, ...(prev || [])].slice(0, 250);
+      const next = [record, ...(prev || [])].slice(0, 1000);
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+
+    if (selectedBoost?.id) {
+      setBoostWallet((prev) => {
+        const next = (prev || []).map((boost) =>
+          boost.id === selectedBoost.id
+            ? {
+                ...boost,
+                status: "used",
+                usedAt: record.savedAt,
+                usedParlayId: record.id,
+              }
+            : boost
+        );
+
+        writeBoostWallet(next);
+        return next;
+      });
+    }
+  }
+
+
+  function handleLoadBoostIntoFilters(boost) {
+    if (!boost) return;
+
+    const nextSport = String(boost.league || "ALL").trim().toUpperCase();
+    const nextBook = String(boost.sportsbook || "ALL").trim();
+
+    setFilters((prev) => ({
+      ...prev,
+
+      // Main boost/search criteria
+      selectedSport: nextSport || "ALL",
+      selectedTargetBook: nextBook || "ALL",
+      boostPct: Number.isFinite(Number(boost.boostPct))
+        ? Number(boost.boostPct)
+        : prev.boostPct,
+      maxLegs: Number.isFinite(Number(boost.minLegs))
+        ? Number(boost.minLegs)
+        : prev.maxLegs,
+      minTotalAmericanOdds:
+        boost.minTotalAmericanOdds !== null &&
+        boost.minTotalAmericanOdds !== undefined &&
+        Number.isFinite(Number(boost.minTotalAmericanOdds))
+          ? Number(boost.minTotalAmericanOdds)
+          : prev.minTotalAmericanOdds,
+      stake: Number.isFinite(Number(boost.maxStake))
+        ? Number(boost.maxStake)
+        : prev.stake,
+
+      // SGP boost behavior
+      forceSameGame: boost.isSgp === true,
+      allowSameGame: boost.isSgp === true ? true : prev.allowSameGame,
+    }));
+
+    alert(`Loaded filters for: ${boost.name || "saved boost"}`);
+  }
+
+  function handleAddBoost(boost) {
+    setBoostWallet((prev) => {
+      const next = [boost, ...(prev || [])].slice(0, 200);
+      writeBoostWallet(next);
+      return next;
+    });
+  }
+
+  function handleUpdateBoost(boostId, patch = {}) {
+    setBoostWallet((prev) => {
+      const next = (prev || []).map((boost) =>
+        boost.id === boostId ? { ...boost, ...patch } : boost
+      );
+
+      writeBoostWallet(next);
+      return next;
+    });
+  }
+
+  function handleDeleteBoost(boostId) {
+    const ok = window.confirm("Delete this saved boost?");
+    if (!ok) return;
+
+    setBoostWallet((prev) => {
+      const next = (prev || []).filter((boost) => boost.id !== boostId);
+      writeBoostWallet(next);
+      return next;
+    });
+  }
+
+ function handleUpdateSavedPlacedParlay(parlayId, patch = {}) {
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).map((parlay) => {
+        if (parlay.id !== parlayId) return parlay;
+
+        const updated = {
+          ...parlay,
+          ...patch,
+        };
+
+        if (
+          Object.prototype.hasOwnProperty.call(patch, "placedStake") ||
+          Object.prototype.hasOwnProperty.call(patch, "placedOddsAmerican") ||
+          Object.prototype.hasOwnProperty.call(patch, "status")
+        ) {
+          updated.profitLoss = calculateSavedParlayProfitLoss(updated);
+        }
+
+        return updated;
+      });
+
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+  }
+
+  function handleConfirmSavedParlayPlaced(parlayId) {
+    const now = new Date().toISOString();
+
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).map((parlay) => {
+        if (parlay.id !== parlayId) return parlay;
+
+        return {
+          ...parlay,
+          status: "placed",
+          confirmedPlaced: true,
+          placedAt: parlay.placedAt || now,
+          placedDate: parlay.placedDate || now.slice(0, 10),
+          profitLoss: 0,
+        };
+      });
+
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+  }
+
+  function handleSetSavedParlayResult(parlayId, status) {
+    const resolvedStatus = String(status || "").toLowerCase();
+    const now = new Date().toISOString();
+
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).map((parlay) => {
+        if (parlay.id !== parlayId) return parlay;
+
+        const updated = {
+          ...parlay,
+          status: resolvedStatus,
+          result: resolvedStatus,
+          confirmedPlaced: true,
+          placedAt: parlay.placedAt || now,
+          placedDate: parlay.placedDate || now.slice(0, 10),
+          settledAt: ["won", "lost", "push", "void"].includes(resolvedStatus) ? now : parlay.settledAt || "",
+        };
+
+        updated.profitLoss = calculateSavedParlayProfitLoss(updated, resolvedStatus);
+
+        return updated;
+      });
+
       writeSavedPlacedParlays(next);
       return next;
     });
@@ -688,9 +954,112 @@ function handleSavePlacedParlay(parlay) {
 
   function handleDeleteRow(rowId) {
     setRows((prev) => prev.filter((row) => row.id !== rowId));
+
     setManualMatches((prev) =>
-      prev.filter((match) => match.sourceRowId !== rowId && match.targetRowId !== rowId)
+      prev.filter(
+        (match) => match.sourceRowId !== rowId && match.targetRowId !== rowId
+      )
     );
+  }
+
+  function handleDeleteRows(rowIds = []) {
+    const ids = new Set(rowIds);
+
+    setRows((prev) => prev.filter((row) => !ids.has(row.id)));
+
+    setManualMatches((prev) =>
+      prev.filter(
+        (match) => !ids.has(match.sourceRowId) && !ids.has(match.targetRowId)
+      )
+    );
+  }
+
+    function normalizeCoverageEventName(value) {
+    const text = String(value || "").trim().replace(/\s+/g, " ");
+
+    if (!text.includes("@")) return normalizeCoverageTeamName(text);
+
+    const parts = text.split(/\s+@\s+/).map((part) => String(part || "").trim()).filter(Boolean);
+
+    if (parts.length !== 2) return text;
+
+    return `${normalizeCoverageTeamName(parts[0])} @ ${normalizeCoverageTeamName(parts[1])}`;
+  }
+
+  function normalizeCoverageTeamName(value) {
+    const text = String(value || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/\s+Odds$/i, "");
+
+    const lower = text.toLowerCase();
+
+    const aliases = new Map([
+      ["atl hawks", "Atlanta Hawks"],
+      ["atlanta hawks", "Atlanta Hawks"],
+      ["bos celtics", "Boston Celtics"],
+      ["boston celtics", "Boston Celtics"],
+      ["cle cavaliers", "Cleveland Cavaliers"],
+      ["cleveland cavaliers", "Cleveland Cavaliers"],
+      ["den nuggets", "Denver Nuggets"],
+      ["denver nuggets", "Denver Nuggets"],
+      ["det pistons", "Detroit Pistons"],
+      ["detroit pistons", "Detroit Pistons"],
+      ["hou rockets", "Houston Rockets"],
+      ["houston rockets", "Houston Rockets"],
+      ["la lakers", "Los Angeles Lakers"],
+      ["lal lakers", "Los Angeles Lakers"],
+      ["los angeles lakers", "Los Angeles Lakers"],
+      ["min timberwolves", "Minnesota Timberwolves"],
+      ["minnesota timberwolves", "Minnesota Timberwolves"],
+      ["ny knicks", "New York Knicks"],
+      ["nyk knicks", "New York Knicks"],
+      ["new york knicks", "New York Knicks"],
+      ["orl magic", "Orlando Magic"],
+      ["orlando magic", "Orlando Magic"],
+      ["phi 76ers", "Philadelphia 76ers"],
+      ["philadelphia 76ers", "Philadelphia 76ers"],
+      ["tor raptors", "Toronto Raptors"],
+      ["toronto raptors", "Toronto Raptors"],
+    ]);
+
+    return aliases.get(lower) || text;
+  }
+
+  function handleDeleteCoverageRows({ bookmaker, sport, eventName } = {}) {
+    const normalizedBook = String(bookmaker || "").trim().toLowerCase();
+    const normalizedSport = String(sport || "").trim().toUpperCase();
+    const normalizedEvent = normalizeCoverageEventName(eventName).toLowerCase();
+
+    const idsToDelete = rows
+      .filter((row) => {
+        const rowBook = String(row.sportsbook || row.bookmaker || "Unknown Book")
+          .trim()
+          .toLowerCase();
+
+        const rowSport = String(row.sport || row.league || "UNKNOWN")
+          .trim()
+          .toUpperCase();
+
+        const rowEvent = normalizeCoverageEventName(
+          row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event"
+        ).toLowerCase();
+
+        if (normalizedBook && rowBook !== normalizedBook) return false;
+        if (normalizedSport && rowSport !== normalizedSport) return false;
+        if (normalizedEvent && rowEvent !== normalizedEvent) return false;
+
+        return true;
+      })
+      .map((row) => row.id)
+      .filter(Boolean);
+
+    if (!idsToDelete.length) {
+      alert("No matching rows found to delete.");
+      return;
+    }
+
+    handleDeleteRows(idsToDelete);
   }
 
     const rowsWithManualMatches = useMemo(
@@ -716,18 +1085,6 @@ function handleSavePlacedParlay(parlay) {
     return true;
   });
 }, [rowsWithManualMatches, filters]);
-
-  function handleDeleteRows(rowIds = []) {
-    const ids = new Set(rowIds);
-
-    setRows((prev) => prev.filter((row) => !ids.has(row.id)));
-
-    setManualMatches((prev) =>
-      prev.filter(
-        (match) => !ids.has(match.sourceRowId) && !ids.has(match.targetRowId)
-      )
-    );
-  }
 
 const manualMatchCandidates = useMemo(() => {
   if (!showManualMatchPanel) return [];
@@ -824,6 +1181,7 @@ const marketBundle = useMemo(() => {
       setPendingUrlImport(null);
       setPendingImports([]);
       setSavedPlacedParlays(readSavedPlacedParlays());
+      setBoostWallet(readBoostWallet());
 
       params.delete("evSafe");
       params.delete("evReset");
@@ -1248,7 +1606,10 @@ const marketBundle = useMemo(() => {
           Debug: rows in state = {rows.length}
         </div>
 
-        <LoadCoveragePanel rows={rows} />
+        <LoadCoveragePanel
+          rows={rows}
+          onDeleteCoverageRows={handleDeleteCoverageRows}
+        />
 
         <CoverageWarningsPanel warnings={coverageWarnings} />
 
@@ -1320,6 +1681,15 @@ const marketBundle = useMemo(() => {
 
         <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 
+        <BoostWalletPanel
+          boosts={boostWallet}
+          filters={filters}
+          onAddBoost={handleAddBoost}
+          onUpdateBoost={handleUpdateBoost}
+          onDeleteBoost={handleDeleteBoost}
+          onLoadBoostIntoFilters={handleLoadBoostIntoFilters}
+        />
+
         <ParlayFilters filters={filters} setFilters={setFilters} />
 
         <ParlayResults
@@ -1330,7 +1700,10 @@ const marketBundle = useMemo(() => {
           onSavePlacedParlay={handleSavePlacedParlay}
           onClearSavedParlays={handleClearSavedPlacedParlays}
           onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
-          formatSavedDateTime={formatSavedDateTime}
+          onUpdateSavedParlay={handleUpdateSavedPlacedParlay}
+          onConfirmSavedParlayPlaced={handleConfirmSavedParlayPlaced}
+          onSetSavedParlayResult={handleSetSavedParlayResult}          formatSavedDateTime={formatSavedDateTime}
+          boostWallet={boostWallet}
         />
       </div>
     </div>
