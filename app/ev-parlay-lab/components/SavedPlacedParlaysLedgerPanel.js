@@ -117,7 +117,15 @@ export default function SavedPlacedParlaysLedgerPanel({
               return (
                 <div key={saved.id} style={cardStyle}>
                   <div style={cardTopStyle}>
-                    <div>
+                    <div>                    <label style={labelStyle}>
+                      Stake
+                      <input
+                        type="number"
+                        value={saved.placedStake ?? ""}
+                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedStake: Number(event.target.value) })}
+                        style={inputStyle}
+                      />
+                    </label>
                       <div style={cardTitleStyle}>
                         {saved.gradeTier || "Saved"} / {saved.playLabel || "Placed Parlay"}{" "}
                         <span style={statusPillStyle(status)}>{status}</span>
@@ -125,14 +133,37 @@ export default function SavedPlacedParlaysLedgerPanel({
 
                       <div style={subtleStyle}>
                         Saved {formatSavedDateTime ? formatSavedDateTime(saved.savedAt) : saved.savedAt}
+                        {getSavedParlayBook(saved) ? ` • Book: ${getSavedParlayBook(saved)}` : ""}
                         {saved.boostName ? ` • Boost: ${saved.boostName}` : ""}
                       </div>
                     </div>
 
                     <button type="button" onClick={() => onDeleteSavedParlay?.(saved.id)} style={deleteButtonStyle}>
                       Delete
-                    </button>
-                  </div>
+                    </button>                    <label style={labelStyle}>
+                      Book
+                      <input
+                        type="text"
+                        value={saved.bookmaker || saved.targetSportsbook || saved.boostSportsbook || saved.legs?.[0]?.sportsbook || ""}
+                        onChange={(event) =>
+                          onUpdateSavedParlay?.(saved.id, {
+                            bookmaker: event.target.value,
+                            targetSportsbook: event.target.value,
+                          })
+                        }
+                        style={inputStyle}
+                      />
+                    </label>
+
+                    <label style={labelStyle}>
+                      Stake
+                      <input
+                        type="number"
+                        value={saved.placedStake ?? ""}
+                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedStake: Number(event.target.value) })}
+                        style={inputStyle}
+                      />
+                    </label>               </div>
 
                   <div style={editGridStyle}>
                     <label style={labelStyle}>
@@ -202,6 +233,17 @@ export default function SavedPlacedParlaysLedgerPanel({
   );
 }
 
+function getSavedParlayBook(parlay = {}) {
+  return (
+    parlay.bookmaker ||
+    parlay.targetSportsbook ||
+    parlay.boostSportsbookLabel ||
+    parlay.boostSportsbook ||
+    parlay.legs?.[0]?.sportsbook ||
+    ""
+  );
+}
+
 function SummaryPill({ label, value }) {
   return (
     <div style={summaryPillStyle}>
@@ -250,7 +292,7 @@ function buildLedgerStats(parlays = []) {
     if (status === "lost") { stats.lostCount += 1; stats.settledCount += 1; }
     if (status === "push" || status === "void") { stats.pushVoidCount += 1; stats.settledCount += 1; }
 
-    const book = parlay.boostSportsbook || parlay.legs?.[0]?.sportsbook || "Unknown";
+    const book = getSavedParlayBook(parlay) || "Unknown";
     if (!byBook.has(book)) byBook.set(book, { book, count: 0, stake: 0, net: 0, roi: null });
 
     const bucket = byBook.get(book);

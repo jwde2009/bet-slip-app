@@ -145,8 +145,22 @@ function makePlacedParlayRecord(parlay, options = {}) {
           ? Number(parlay.rawParlayAmerican)
           : null;
 
+  const legBooks = Array.from(
+    new Set(
+      (parlay?.legs || [])
+        .map((leg) => String(leg.sportsbook || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const bookmaker =
+    selectedBoost?.sportsbook ||
+    (legBooks.length === 1 ? legBooks[0] : legBooks.length > 1 ? "Multiple" : "");
+
   return {
     id: `placed_parlay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    bookmaker,
+    targetSportsbook: bookmaker,
 
     // Lifecycle:
     // saved = idea saved but not confirmed as placed
@@ -168,6 +182,7 @@ function makePlacedParlayRecord(parlay, options = {}) {
     boostId: selectedBoost?.id || "",
     boostName: selectedBoost?.name || "",
     boostSportsbook: selectedBoost?.sportsbook || "",
+    boostSportsbookLabel: selectedBoost?.sportsbookLabel || selectedBoost?.sportsbook || "",
     boostExpiresAt: selectedBoost?.expiresAt || "",
     boostPct: Number(selectedBoost?.boostPct ?? parlay?.boostPctUsed ?? 0),
 
