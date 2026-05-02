@@ -44,9 +44,12 @@ export default function SavedPlacedParlaysLedgerPanel({
         </button>
       </div>
 
-      <div style={pnlSummaryStyle}>
-        <div style={pnlMainStyle}>
-          Net P&L: <span style={stats.netProfitLoss >= 0 ? profitStyle : lossStyle}>{formatMoney(stats.netProfitLoss)}</span>
+      <div style={pnlSummaryStyle(stats.netProfitLoss)}>
+        <div>
+          <div style={pnlLabelStyle}>Placed Parlay Net P&L</div>
+          <div style={pnlMainStyle(stats.netProfitLoss)}>
+            {formatMoney(stats.netProfitLoss)}
+          </div>
         </div>
 
         <div style={summaryGridStyle}>
@@ -60,11 +63,19 @@ export default function SavedPlacedParlaysLedgerPanel({
       </div>
 
       <div style={toggleRowStyle}>
-        <button type="button" onClick={() => setSavedCollapsed((prev) => !prev)} style={toggleButtonStyle}>
+        <button
+          type="button"
+          onClick={() => setSavedCollapsed((prev) => !prev)}
+          style={toggleButtonStyle}
+        >
           {savedCollapsed ? "Show Saved Parlays" : "Hide Saved Parlays"}
         </button>
 
-        <button type="button" onClick={() => setPerformanceCollapsed((prev) => !prev)} style={toggleButtonStyle}>
+        <button
+          type="button"
+          onClick={() => setPerformanceCollapsed((prev) => !prev)}
+          style={toggleButtonStyle}
+        >
           {performanceCollapsed ? "Show Performance Summary" : "Hide Performance Summary"}
         </button>
       </div>
@@ -108,24 +119,18 @@ export default function SavedPlacedParlaysLedgerPanel({
         savedPlacedParlays.length === 0 ? (
           <div style={emptyStyle}>No saved placed parlays yet.</div>
         ) : (
-          <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gap: 10 }}>
             {savedPlacedParlays.slice(0, 250).map((saved) => {
               const status = String(saved.status || "saved").toLowerCase();
               const isConfirmed = saved.confirmedPlaced === true || status !== "saved";
+              const isSettled = ["won", "lost", "push", "void"].includes(status);
+              const isPending = status === "placed" || status === "pending";
               const profitLoss = Number(saved.profitLoss || 0);
 
               return (
-                <div key={saved.id} style={cardStyle}>
+                <div key={saved.id} style={cardStyle(status)}>
                   <div style={cardTopStyle}>
-                    <div>                    <label style={labelStyle}>
-                      Stake
-                      <input
-                        type="number"
-                        value={saved.placedStake ?? ""}
-                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedStake: Number(event.target.value) })}
-                        style={inputStyle}
-                      />
-                    </label>
+                    <div style={{ minWidth: 0 }}>
                       <div style={cardTitleStyle}>
                         {saved.gradeTier || "Saved"} / {saved.playLabel || "Placed Parlay"}{" "}
                         <span style={statusPillStyle(status)}>{status}</span>
@@ -138,13 +143,21 @@ export default function SavedPlacedParlaysLedgerPanel({
                       </div>
                     </div>
 
-                    <button type="button" onClick={() => onDeleteSavedParlay?.(saved.id)} style={deleteButtonStyle}>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteSavedParlay?.(saved.id)}
+                      style={deleteButtonStyle}
+                    >
                       Delete
-                    </button>                    <label style={labelStyle}>
+                    </button>
+                  </div>
+
+                  <div style={editGridStyle}>
+                    <label style={labelStyle}>
                       Book
                       <input
                         type="text"
-                        value={saved.bookmaker || saved.targetSportsbook || saved.boostSportsbook || saved.legs?.[0]?.sportsbook || ""}
+                        value={getSavedParlayBook(saved)}
                         onChange={(event) =>
                           onUpdateSavedParlay?.(saved.id, {
                             bookmaker: event.target.value,
@@ -160,18 +173,11 @@ export default function SavedPlacedParlaysLedgerPanel({
                       <input
                         type="number"
                         value={saved.placedStake ?? ""}
-                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedStake: Number(event.target.value) })}
-                        style={inputStyle}
-                      />
-                    </label>               </div>
-
-                  <div style={editGridStyle}>
-                    <label style={labelStyle}>
-                      Stake
-                      <input
-                        type="number"
-                        value={saved.placedStake ?? ""}
-                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedStake: Number(event.target.value) })}
+                        onChange={(event) =>
+                          onUpdateSavedParlay?.(saved.id, {
+                            placedStake: Number(event.target.value),
+                          })
+                        }
                         style={inputStyle}
                       />
                     </label>
@@ -181,7 +187,11 @@ export default function SavedPlacedParlaysLedgerPanel({
                       <input
                         type="number"
                         value={saved.placedOddsAmerican ?? saved.boostedParlayAmerican ?? ""}
-                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedOddsAmerican: Number(event.target.value) })}
+                        onChange={(event) =>
+                          onUpdateSavedParlay?.(saved.id, {
+                            placedOddsAmerican: Number(event.target.value),
+                          })
+                        }
                         style={inputStyle}
                       />
                     </label>
@@ -191,32 +201,75 @@ export default function SavedPlacedParlaysLedgerPanel({
                       <input
                         type="date"
                         value={saved.placedDate || ""}
-                        onChange={(event) => onUpdateSavedParlay?.(saved.id, { placedDate: event.target.value })}
+                        onChange={(event) =>
+                          onUpdateSavedParlay?.(saved.id, { placedDate: event.target.value })
+                        }
                         style={inputStyle}
                       />
                     </label>
 
-                    <div style={smallMetricStyle}>
-                      <span>P&L</span>
-                      <strong style={profitLoss >= 0 ? profitStyle : lossStyle}>{formatMoney(profitLoss)}</strong>
+                    <div style={pnlCardStyle(profitLoss)}>
+                      <span style={pnlCardLabelStyle}>P&L</span>
+                      <strong style={pnlCardValueStyle}>{formatMoney(profitLoss)}</strong>
                     </div>
                   </div>
 
                   <div style={buttonRowStyle}>
                     {!isConfirmed ? (
-                      <button type="button" onClick={() => onConfirmSavedParlayPlaced?.(saved.id)} style={confirmButtonStyle}>
+                      <button
+                        type="button"
+                        onClick={() => onConfirmSavedParlayPlaced?.(saved.id)}
+                        style={confirmButtonStyle}
+                      >
                         Confirm Placed
                       </button>
                     ) : null}
 
-                    <button type="button" onClick={() => onSetSavedParlayResult?.(saved.id, "won")} style={winButtonStyle}>Won</button>
-                    <button type="button" onClick={() => onSetSavedParlayResult?.(saved.id, "lost")} style={lossButtonStyle}>Lost</button>
-                    <button type="button" onClick={() => onSetSavedParlayResult?.(saved.id, "push")} style={neutralButtonStyle}>Push</button>
-                    <button type="button" onClick={() => onSetSavedParlayResult?.(saved.id, "void")} style={neutralButtonStyle}>Void</button>
-                    <button type="button" onClick={() => onSetSavedParlayResult?.(saved.id, "placed")} style={neutralButtonStyle}>Back to Pending</button>
+                    {isConfirmed && !isSettled ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onSetSavedParlayResult?.(saved.id, "won")}
+                          style={winButtonStyle}
+                        >
+                          Won
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSetSavedParlayResult?.(saved.id, "lost")}
+                          style={lossButtonStyle}
+                        >
+                          Lost
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSetSavedParlayResult?.(saved.id, "push")}
+                          style={neutralButtonStyle}
+                        >
+                          Push
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSetSavedParlayResult?.(saved.id, "void")}
+                          style={neutralButtonStyle}
+                        >
+                          Void
+                        </button>
+                      </>
+                    ) : null}
+
+                    {isConfirmed || isSettled || isPending ? (
+                      <button
+                        type="button"
+                        onClick={() => onSetSavedParlayResult?.(saved.id, "placed")}
+                        style={neutralButtonStyle}
+                      >
+                        Back to Pending
+                      </button>
+                    ) : null}
                   </div>
 
-                  <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                  <div style={legsWrapStyle}>
                     {(saved.legs || []).map((leg, idx) => (
                       <div key={`${saved.id}_${idx}`} style={legLineStyle}>
                         • {leg.eventName} — {formatSavedLeg(leg)}
@@ -288,9 +341,18 @@ function buildLedgerStats(parlays = []) {
     stats.netProfitLoss += Number.isFinite(pnl) ? pnl : 0;
 
     if (status === "placed" || status === "pending") stats.pendingCount += 1;
-    if (status === "won") { stats.wonCount += 1; stats.settledCount += 1; }
-    if (status === "lost") { stats.lostCount += 1; stats.settledCount += 1; }
-    if (status === "push" || status === "void") { stats.pushVoidCount += 1; stats.settledCount += 1; }
+    if (status === "won") {
+      stats.wonCount += 1;
+      stats.settledCount += 1;
+    }
+    if (status === "lost") {
+      stats.lostCount += 1;
+      stats.settledCount += 1;
+    }
+    if (status === "push" || status === "void") {
+      stats.pushVoidCount += 1;
+      stats.settledCount += 1;
+    }
 
     const book = getSavedParlayBook(parlay) || "Unknown";
     if (!byBook.has(book)) byBook.set(book, { book, count: 0, stake: 0, net: 0, roi: null });
@@ -321,50 +383,320 @@ function formatPct(value) {
 }
 
 function formatSavedLeg(leg) {
-  const lineText = leg.lineValue !== null && leg.lineValue !== undefined && leg.lineValue !== "" ? ` ${leg.lineValue}` : "";
+  const lineText =
+    leg.lineValue !== null && leg.lineValue !== undefined && leg.lineValue !== ""
+      ? ` ${leg.lineValue}`
+      : "";
   const subject = String(leg.subjectName || "").trim();
   const selection = String(leg.selectionLabel || "").trim();
   return subject ? `${subject} ${selection}${lineText}` : `${selection}${lineText}`.trim();
 }
 
-const panelStyle = { border: "1px solid #d1d5db", borderRadius: 12, padding: 12, background: "#fff", marginTop: 16 };
-const headerStyle = { display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" };
-const subtleStyle = { color: "#6b7280", fontSize: 12 };
-const pnlSummaryStyle = { marginTop: 10, border: "1px solid #bbf7d0", background: "#ecfdf5", borderRadius: 10, padding: 10 };
-const pnlMainStyle = { fontSize: 18, fontWeight: 900, marginBottom: 8 };
-const profitStyle = { color: "#166534" };
-const lossStyle = { color: "#991b1b" };
-const summaryGridStyle = { display: "flex", flexWrap: "wrap", gap: 8 };
-const summaryPillStyle = { display: "inline-flex", gap: 6, alignItems: "center", border: "1px solid #d1d5db", background: "#fff", borderRadius: 999, padding: "5px 8px", fontSize: 12 };
-const toggleRowStyle = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, marginBottom: 10 };
-const toggleButtonStyle = { border: "1px solid #bfdbfe", borderRadius: 999, padding: "6px 10px", background: "#eff6ff", color: "#1d4ed8", fontWeight: 900, cursor: "pointer" };
-const clearButtonStyle = { border: "1px solid #fca5a5", borderRadius: 999, padding: "6px 10px", background: "#fff", color: "#991b1b", fontWeight: 900 };
-const performanceBoxStyle = { border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, background: "#f8fafc", marginBottom: 10 };
-const miniHeaderStyle = { margin: "0 0 8px" };
-const performanceTableStyle = { display: "grid", gap: 4, marginTop: 10 };
-const performanceHeaderRowStyle = { display: "grid", gridTemplateColumns: "1.5fr 0.6fr 0.8fr 0.6fr", gap: 8, fontSize: 12, color: "#374151" };
-const performanceRowStyle = { display: "grid", gridTemplateColumns: "1.5fr 0.6fr 0.8fr 0.6fr", gap: 8, fontSize: 12, borderTop: "1px solid #e5e7eb", paddingTop: 4 };
-const emptyStyle = { border: "1px dashed #d1d5db", borderRadius: 10, padding: 10, color: "#6b7280", background: "#f9fafb", fontWeight: 700 };
-const cardStyle = { border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, background: "#f9fafb" };
-const cardTopStyle = { display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" };
-const cardTitleStyle = { fontWeight: 900, color: "#111827" };
+const panelStyle = {
+  border: "1px solid #d1d5db",
+  borderRadius: 12,
+  padding: 12,
+  background: "#fff",
+  marginTop: 16,
+};
+
+const headerStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+};
+
+const subtleStyle = {
+  color: "#6b7280",
+  fontSize: 12,
+  marginTop: 4,
+};
+
+function pnlSummaryStyle(net) {
+  const positive = Number(net || 0) >= 0;
+  return {
+    marginTop: 12,
+    border: positive ? "2px solid #86efac" : "2px solid #fca5a5",
+    background: positive ? "#ecfdf5" : "#fef2f2",
+    borderRadius: 14,
+    padding: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 16,
+    flexWrap: "wrap",
+    alignItems: "center",
+  };
+}
+
+const pnlLabelStyle = {
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  color: "#475569",
+  marginBottom: 2,
+};
+
+function pnlMainStyle(net) {
+  return {
+    fontSize: 34,
+    lineHeight: 1,
+    fontWeight: 1000,
+    color: Number(net || 0) >= 0 ? "#166534" : "#991b1b",
+  };
+}
+
+const profitStyle = {
+  color: "#166534",
+};
+
+const lossStyle = {
+  color: "#991b1b",
+};
+
+const summaryGridStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const summaryPillStyle = {
+  display: "inline-flex",
+  gap: 6,
+  alignItems: "center",
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  borderRadius: 999,
+  padding: "6px 9px",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const toggleRowStyle = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
+  marginBottom: 10,
+};
+
+const toggleButtonStyle = {
+  border: "1px solid #bfdbfe",
+  borderRadius: 999,
+  padding: "6px 10px",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const clearButtonStyle = {
+  border: "1px solid #fca5a5",
+  borderRadius: 999,
+  padding: "6px 10px",
+  background: "#fff",
+  color: "#991b1b",
+  fontWeight: 900,
+};
+
+const performanceBoxStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: 10,
+  background: "#f8fafc",
+  marginBottom: 10,
+};
+
+const miniHeaderStyle = {
+  margin: "0 0 8px",
+};
+
+const performanceTableStyle = {
+  display: "grid",
+  gap: 4,
+  marginTop: 10,
+};
+
+const performanceHeaderRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.6fr 0.8fr 0.6fr",
+  gap: 8,
+  fontSize: 12,
+  color: "#374151",
+};
+
+const performanceRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.6fr 0.8fr 0.6fr",
+  gap: 8,
+  fontSize: 12,
+  borderTop: "1px solid #e5e7eb",
+  paddingTop: 4,
+};
+
+const emptyStyle = {
+  border: "1px dashed #d1d5db",
+  borderRadius: 10,
+  padding: 10,
+  color: "#6b7280",
+  background: "#f9fafb",
+  fontWeight: 700,
+};
+
+function cardStyle(status) {
+  const key = String(status || "saved").toLowerCase();
+  const borderColor = key === "won" ? "#86efac" : key === "lost" ? "#fca5a5" : "#e5e7eb";
+  const background = key === "won" ? "#f7fee7" : key === "lost" ? "#fff7f7" : "#f9fafb";
+
+  return {
+    border: `1px solid ${borderColor}`,
+    borderRadius: 12,
+    padding: 12,
+    background,
+  };
+}
+
+const cardTopStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+};
+
+const cardTitleStyle = {
+  fontWeight: 900,
+  color: "#111827",
+};
+
 function statusPillStyle(status) {
   const key = String(status || "saved").toLowerCase();
-  const common = { borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 900, marginLeft: 6 };
+  const common = {
+    borderRadius: 999,
+    padding: "2px 7px",
+    fontSize: 10,
+    fontWeight: 900,
+    marginLeft: 6,
+    textTransform: "uppercase",
+  };
   if (key === "won") return { ...common, border: "1px solid #86efac", background: "#dcfce7", color: "#166534" };
   if (key === "lost") return { ...common, border: "1px solid #fca5a5", background: "#fee2e2", color: "#991b1b" };
   if (key === "placed" || key === "pending") return { ...common, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8" };
   if (key === "push" || key === "void") return { ...common, border: "1px solid #d1d5db", background: "#f3f4f6", color: "#374151" };
   return { ...common, border: "1px solid #fbbf24", background: "#fffbeb", color: "#92400e" };
 }
-const editGridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 10 };
-const labelStyle = { display: "grid", gap: 3, fontSize: 11, fontWeight: 800, color: "#374151" };
-const inputStyle = { border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 12 };
-const smallMetricStyle = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, display: "grid", gap: 3, background: "#fff", fontSize: 12 };
-const buttonRowStyle = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 };
-const confirmButtonStyle = { border: "1px solid #86efac", background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "6px 10px", fontWeight: 900, cursor: "pointer" };
-const winButtonStyle = { ...confirmButtonStyle };
-const lossButtonStyle = { border: "1px solid #fca5a5", background: "#fee2e2", color: "#991b1b", borderRadius: 999, padding: "6px 10px", fontWeight: 900, cursor: "pointer" };
-const neutralButtonStyle = { border: "1px solid #d1d5db", background: "#fff", color: "#374151", borderRadius: 999, padding: "6px 10px", fontWeight: 900, cursor: "pointer" };
-const deleteButtonStyle = { border: "1px solid #fca5a5", background: "#fff", color: "#991b1b", borderRadius: 999, padding: "6px 10px", fontWeight: 900, cursor: "pointer" };
-const legLineStyle = { color: "#374151", fontSize: 12, fontWeight: 700 };
+
+const editGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: 10,
+  marginTop: 12,
+  alignItems: "stretch",
+};
+
+const labelStyle = {
+  display: "grid",
+  gap: 3,
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#374151",
+};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "8px 9px",
+  fontSize: 12,
+  background: "#fff",
+};
+
+function pnlCardStyle(value) {
+  const n = Number(value || 0);
+  return {
+    border: n >= 0 ? "1px solid #86efac" : "1px solid #fca5a5",
+    borderRadius: 10,
+    padding: "8px 10px",
+    display: "grid",
+    gap: 2,
+    background: n >= 0 ? "#ecfdf5" : "#fef2f2",
+  };
+}
+
+const pnlCardLabelStyle = {
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  color: "#475569",
+};
+
+const pnlCardValueStyle = {
+  fontSize: 22,
+  lineHeight: 1.1,
+  fontWeight: 1000,
+};
+
+const buttonRowStyle = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 12,
+};
+
+const confirmButtonStyle = {
+  border: "1px solid #86efac",
+  background: "#dcfce7",
+  color: "#166534",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const winButtonStyle = {
+  ...confirmButtonStyle,
+};
+
+const lossButtonStyle = {
+  border: "1px solid #fca5a5",
+  background: "#fee2e2",
+  color: "#991b1b",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const neutralButtonStyle = {
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#374151",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const deleteButtonStyle = {
+  border: "1px solid #fca5a5",
+  background: "#fff",
+  color: "#991b1b",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const legsWrapStyle = {
+  marginTop: 10,
+  display: "grid",
+  gap: 4,
+};
+
+const legLineStyle = {
+  color: "#374151",
+  fontSize: 12,
+  fontWeight: 700,
+};

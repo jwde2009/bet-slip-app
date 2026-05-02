@@ -58,19 +58,41 @@ function readBoostWallet() {
 
   try {
     const parsed = JSON.parse(localStorage.getItem(BOOST_WALLET_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
+    const boosts = Array.isArray(parsed) ? parsed : [];
+    const activeBoosts = pruneExpiredBoosts(boosts);
+
+    if (activeBoosts.length !== boosts.length) {
+      localStorage.setItem(BOOST_WALLET_KEY, JSON.stringify(activeBoosts));
+    }
+
+    return activeBoosts;
   } catch (err) {
     return [];
   }
 }
 
+function pruneExpiredBoosts(boosts = []) {
+  const now = Date.now();
+
+  return (boosts || []).filter((boost) => {
+    if (!boost?.expiresAt) return true;
+
+    const expiresAt = new Date(boost.expiresAt).getTime();
+
+    if (!Number.isFinite(expiresAt)) return true;
+
+    return expiresAt > now;
+  });
+}
+
 function writeBoostWallet(boosts) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(
-    BOOST_WALLET_KEY,
-    JSON.stringify(Array.isArray(boosts) ? boosts : [])
-  );
+
+  const activeBoosts = pruneExpiredBoosts(Array.isArray(boosts) ? boosts : []);
+
+  localStorage.setItem(BOOST_WALLET_KEY, JSON.stringify(activeBoosts));
 }
+
 
 
 function writeSavedPlacedParlays(parlays) {
@@ -677,7 +699,11 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
       return true;
     });
 
-    return [...prev, ...additions];
+    // Important:
+    // Re-normalize the full loaded row set, not just the newest import.
+    // This lets A. Black from one book match Anthony Black from another book
+    // after both books are loaded.
+    return normalizeParsedRows([...prev, ...additions]) || [...prev, ...additions];
   });
 
   setLastParsedAt(parsedAtIso);
@@ -1181,6 +1207,10 @@ const marketBundle = useMemo(() => {
       return;
     }
 
+        // Saved boosts live outside the 2-hour session restore.
+    // Always reload them from persistent localStorage and prune expired boosts.
+    setBoostWallet(readBoostWallet());
+
     const params = new URLSearchParams(window.location.search);
     const safeReset = params.get("evSafe") === "1" || params.get("evReset") === "1";
 
@@ -1329,6 +1359,28 @@ const marketBundle = useMemo(() => {
       console.warn("Failed to save EV Parlay Lab session", err);
     }
   }, [hasRestoredSession, rawText, sportsbook, batchRole, fanDuelSharpMode, rows, filters, manualMatches, lastParsedAt]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function pruneBoostWalletNow() {
+      setBoostWallet((prev) => {
+        const next = pruneExpiredBoosts(prev || []);
+        if (next.length !== (prev || []).length) {
+          writeBoostWallet(next);
+        }
+        return next;
+      });
+    }
+
+    pruneBoostWalletNow();
+
+    const intervalId = window.setInterval(pruneBoostWalletNow, 60 * 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1658,7 +1710,7 @@ const marketBundle = useMemo(() => {
               fontWeight: 700,
             }}
           >
-            {showManualMatchPanel ? "Hide Manual Match Review" : "Show Manual Match Review"}
+            {showManualMatchPanel ? "Hide Advanced Manual Match" : "Show Advanced Manual Match"}
           </button>
         </div>
 

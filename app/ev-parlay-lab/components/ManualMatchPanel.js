@@ -21,7 +21,7 @@ export default function ManualMatchPanel({
   if (!candidates?.length) {
     return (
       <section style={sectionStyle}>
-        <h2 style={h2Style}>3. Manual Match Review</h2>
+        <h2 style={h2Style}>Advanced Manual Match Review</h2>
         <p style={mutedStyle}>No manual review candidates right now.</p>
       </section>
     );

@@ -47,7 +47,7 @@ export default function ParlayFilters({ filters, setFilters }) {
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
         <div>
-          <h2 style={h2Style}>6. Parlay Filters</h2>
+            <h2 style={h2Style}>7. Parlay Filters</h2>
           <div style={helpTextStyle}>
             Edit filters freely, then click Apply Filters to recalculate parlays.
           </div>

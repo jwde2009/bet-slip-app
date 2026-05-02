@@ -32,8 +32,7 @@ const [converterResult, setConverterResult] = useState(null);
 
   return (
     <section style={sectionStyle}>
-      <h2 style={h2Style}>7. Parlay Results</h2>
-
+      <h2 style={h2Style}>8. Parlay Results</h2>
     <div style={countsRowStyle}>
   <span style={countPillStyle}>
     Eligible Markets: {counts?.eligibleMarkets ?? 0}
