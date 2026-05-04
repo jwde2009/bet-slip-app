@@ -16,7 +16,10 @@ export default function ParlayResults({
   onConfirmSavedParlayPlaced,
   onSetSavedParlayResult,
   formatSavedDateTime,
-  boostWallet = [],
+    boostWallet = [],
+  blockedParlayLegs = [],
+  onBlockParlayLeg,
+  onUnblockParlayLeg,
 }) {  const [converterInput, setConverterInput] = useState("");
 const [converterResult, setConverterResult] = useState(null);
   const [collapsedMap, setCollapsedMap] = useState({});
@@ -45,6 +48,31 @@ const [converterResult, setConverterResult] = useState(null);
   </span>
 </div>
 
+{blockedParlayLegs.length ? (
+  <div style={blockedLegsPanelStyle}>
+    <div style={blockedLegsTitleStyle}>Blocked Legs</div>
+    <div style={blockedLegsSubtleStyle}>
+      These legs are manually excluded from suggested parlay calculations.
+    </div>
+
+    <div style={blockedLegsListStyle}>
+      {blockedParlayLegs.map((blocked) => (
+        <div key={blocked.id} style={blockedLegPillStyle}>
+          <span>{blocked.displayLabel || formatBlockedLegLabel(blocked)}</span>
+          <button
+            type="button"
+            onClick={() => onUnblockParlayLeg?.(blocked.id)}
+            style={removeBlockedLegButtonStyle}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+) : null}
+
+
 {counts?.rejections ? (
   <div style={rejectionsRowStyle}>
     <span style={rejectionPillStyle}>
@@ -66,9 +94,17 @@ const [converterResult, setConverterResult] = useState(null);
       Repeats Blocked: {counts.rejections.repeatsBlocked ?? 0}
     </span>
     <span style={rejectionPillStyle}>
+      Manual Blocks: {counts.rejections.manualBlocked ?? 0}
+    </span>
+    <span style={rejectionPillStyle}>
       Non-Positive EV: {counts.rejections.nonPositiveParlayEv ?? 0}
     </span>
-  </div>
+    <span style={rejectionPillStyle}>
+      Market Mode Filtered: {counts.rejections.filteredByMarketMode ?? 0}
+    </span>
+    <span style={rejectionPillStyle}>
+      Extreme Odds Filtered: {counts.rejections.filteredByExtremeOdds ?? 0}
+    </span>  </div>
 ) : null}
 
       <div style={converterBlockStyle}>
@@ -163,12 +199,16 @@ const [converterResult, setConverterResult] = useState(null);
                       }
                       style={savePlacedButtonStyle}
                     >
-                      Save Placed Parlay
+                      Save Candidate
                     </button>
 
                     <button type="button" onClick={() => toggleParlay(parlay.id)} style={toggleButtonStyle}>
                       {isCollapsed ? "Show" : "Hide"}
                     </button>
+                     <span style={subtleStyle}>
+                      Saved candidates do not count in P&L until Confirm Placed.
+                    </span>
+
                   </div>
                 </div>
 
@@ -186,13 +226,23 @@ const [converterResult, setConverterResult] = useState(null);
                     <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
                       {parlay.legs?.map((leg, legIdx) => (
                         <div key={`${parlay.id}_${legIdx}`} style={legBreakdownRowStyle}>
-                          <div style={{ fontWeight: 700 }}>
-                            • {leg.eventName} — {formatLegSelection(leg)}
-                            {getSavedLegUsage(leg, savedLegUsageMap)?.count ? (
-                              <span style={usedLegBadgeStyle}>
-                                Used {getSavedLegUsage(leg, savedLegUsageMap).count}x
-                              </span>
-                            ) : null}
+                          <div style={legTitleRowStyle}>
+                            <span>
+                              • {leg.eventName} — {formatLegSelection(leg)}
+                              {getSavedLegUsage(leg, savedLegUsageMap)?.count ? (
+                                <span style={usedLegBadgeStyle}>
+                                  Used {getSavedLegUsage(leg, savedLegUsageMap).count}x
+                                </span>
+                              ) : null}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => onBlockParlayLeg?.(leg)}
+                              style={blockLegButtonStyle}
+                            >
+                              Block Leg
+                            </button>
                           </div>
                           <div style={legBreakdownMetaStyle}>
                             Target {formatAmerican(leg.oddsAmerican)} at {leg.sportsbook}
@@ -305,6 +355,35 @@ function formatSavedLeg(leg) {
   return `${selection}${lineText} (${formatMarketLabel(leg.marketType, leg.sport)})`;
 }
 
+function formatBlockedLegLabel(leg = {}) {
+  if (leg.displayLabel) return leg.displayLabel;
+
+  const marketLabel = formatMarketLabel(leg.marketType, leg.sport);
+  const subject = String(leg.subjectName || "").trim();
+  const selection = String(leg.selectionLabel || "").trim();
+  const lineText =
+    leg.lineValue !== null && leg.lineValue !== undefined && leg.lineValue !== ""
+      ? ` ${leg.lineValue}`
+      : "";
+
+  if (subject) {
+    const side = /\bover\b/i.test(selection)
+      ? "Over"
+      : /\bunder\b/i.test(selection)
+        ? "Under"
+        : /^yes$/i.test(selection)
+          ? "Yes"
+          : /^no$/i.test(selection)
+            ? "No"
+            : "";
+
+    if (side) return `${subject} ${side}${lineText} ${marketLabel}`.trim();
+    return `${subject}${lineText} ${marketLabel}`.trim();
+  }
+
+  return `${selection}${lineText} ${marketLabel}`.trim();
+}
+
 
 function buildToolsLink(parlay) {
   const legs = (parlay?.legs || [])
@@ -346,6 +425,7 @@ function buildToolsLink(parlay) {
 }
 
 function formatLegSelection(leg) {
+    if (leg?.displayLabel) return leg.displayLabel;
   const marketLabel = formatMarketLabel(leg.marketType, leg.sport);
   const selection = String(leg.selectionLabel || "Selection");
   const subjectName = String(leg.subjectName || "").trim();
@@ -786,4 +866,75 @@ const savedLegLineStyle = {
   fontSize: 12,
   color: "#374151",
   lineHeight: 1.35,
+};
+
+const blockedLegsPanelStyle = {
+  border: "1px solid #fbbf24",
+  background: "#fffbeb",
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 12,
+};
+
+const blockedLegsTitleStyle = {
+  fontWeight: 900,
+  color: "#92400e",
+  marginBottom: 3,
+};
+
+const blockedLegsSubtleStyle = {
+  color: "#92400e",
+  fontSize: 12,
+  fontWeight: 700,
+  marginBottom: 8,
+};
+
+const blockedLegsListStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const blockedLegPillStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  border: "1px solid #fbbf24",
+  background: "#fff",
+  color: "#78350f",
+  borderRadius: 999,
+  padding: "5px 8px",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const removeBlockedLegButtonStyle = {
+  border: "1px solid #fca5a5",
+  background: "#fff",
+  color: "#991b1b",
+  borderRadius: 999,
+  padding: "2px 6px",
+  fontSize: 11,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const legTitleRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  fontWeight: 700,
+};
+
+const blockLegButtonStyle = {
+  border: "1px solid #fbbf24",
+  background: "#fffbeb",
+  color: "#92400e",
+  borderRadius: 999,
+  padding: "3px 7px",
+  fontSize: 11,
+  fontWeight: 900,
+  cursor: "pointer",
 };

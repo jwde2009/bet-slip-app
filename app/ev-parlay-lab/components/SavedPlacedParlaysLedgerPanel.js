@@ -383,14 +383,77 @@ function formatPct(value) {
 }
 
 function formatSavedLeg(leg) {
+  if (leg?.displayLabel) return leg.displayLabel;
+
   const lineText =
     leg.lineValue !== null && leg.lineValue !== undefined && leg.lineValue !== ""
       ? ` ${leg.lineValue}`
       : "";
+
   const subject = String(leg.subjectName || "").trim();
   const selection = String(leg.selectionLabel || "").trim();
-  return subject ? `${subject} ${selection}${lineText}` : `${selection}${lineText}`.trim();
+  const marketLabel = formatSavedMarketLabel(leg.marketType);
+
+  const side = /\bover\b/i.test(selection)
+    ? "Over"
+    : /\bunder\b/i.test(selection)
+      ? "Under"
+      : /^yes$/i.test(selection)
+        ? "Yes"
+        : /^no$/i.test(selection)
+          ? "No"
+          : "";
+
+  if (subject && side) {
+    return `${subject} ${side}${lineText}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && lineText && isSavedPlayerPropMarket(leg.marketType)) {
+    return `${subject} Over${lineText}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && selection && selection.toLowerCase() !== subject.toLowerCase()) {
+    return `${subject} ${selection}${lineText}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (selection) {
+    return `${selection}${lineText}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  return `${subject || "Leg"}${lineText}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
 }
+
+function isSavedPlayerPropMarket(marketType = "") {
+  const text = String(marketType || "").toLowerCase();
+
+  return (
+    text.startsWith("player_") ||
+    text === "double_double" ||
+    text === "triple_double"
+  );
+}
+
+function formatSavedMarketLabel(marketType = "") {
+  const labels = {
+    player_points: "Points",
+    player_assists: "Assists",
+    player_rebounds: "Rebounds",
+    player_threes: "Threes",
+    player_pra: "PRA",
+    player_points_rebounds: "Points + Rebounds",
+    player_points_assists: "Points + Assists",
+    player_rebounds_assists: "Rebounds + Assists",
+    double_double: "Double-Double",
+    triple_double: "Triple-Double",
+    spread: "Spread",
+    total: "Total",
+    moneyline_2way: "Moneyline",
+    moneyline_3way: "Moneyline",
+  };
+
+  return labels[String(marketType || "")] || String(marketType || "").replace(/_/g, " ");
+}
+
 
 const panelStyle = {
   border: "1px solid #d1d5db",

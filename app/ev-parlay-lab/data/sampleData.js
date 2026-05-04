@@ -24,4 +24,9 @@ export const SAMPLE_FILTERS = {
   maxGeneratedCombos: 1000,
   maxDisplayedParlays: 10,
   parlaySortMode: "best_overall",
+
+  // Workflow / quality controls
+  preferredMarketMode: "all", // all | ou_only | main_and_ou
+  maxAbsAmericanOdds: 1000,
+  staleWarningMinutes: 15,
 };

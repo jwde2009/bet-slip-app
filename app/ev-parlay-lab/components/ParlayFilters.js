@@ -49,8 +49,7 @@ export default function ParlayFilters({ filters, setFilters }) {
         <div>
             <h2 style={h2Style}>7. Parlay Filters</h2>
           <div style={helpTextStyle}>
-            Edit filters freely, then click Apply Filters to recalculate parlays.
-          </div>
+            Edit filters freely, then click Apply Filters. Loading a saved boost applies filters immediately.          </div>
         </div>
 
         <div style={buttonRowStyle}>
@@ -104,6 +103,19 @@ export default function ParlayFilters({ filters, setFilters }) {
             <option value="TENNIS">Tennis</option>
             <option value="UFC">UFC</option>
             <option value="GOLF">Golf</option>
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          Market Mode
+          <select
+            value={draftFilters.preferredMarketMode || "all"}
+            onChange={(e) => updateField("preferredMarketMode", e.target.value)}
+            style={inputStyle}
+          >
+            <option value="all">All matched markets</option>
+            <option value="ou_only">O/U player props only</option>
+            <option value="main_and_ou">Main lines + O/U props</option>
           </select>
         </label>
 
@@ -216,6 +228,18 @@ export default function ParlayFilters({ filters, setFilters }) {
         </label>
 
         <label style={labelStyle}>
+          Max Absolute Odds
+          <input
+            type="number"
+            min="100"
+            max="10000"
+            value={draftFilters.maxAbsAmericanOdds ?? 1000}
+            onChange={(e) => updateField("maxAbsAmericanOdds", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
           Max Candidate Legs
           <input
             type="number"
@@ -247,6 +271,18 @@ export default function ParlayFilters({ filters, setFilters }) {
             max="10000"
             value={draftFilters.maxGeneratedCombos ?? 1000}
             onChange={(e) => updateField("maxGeneratedCombos", Number(e.target.value))}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Stale Warning Minutes
+          <input
+            type="number"
+            min="1"
+            max="120"
+            value={draftFilters.staleWarningMinutes ?? 15}
+            onChange={(e) => updateField("staleWarningMinutes", Number(e.target.value))}
             style={inputStyle}
           />
         </label>

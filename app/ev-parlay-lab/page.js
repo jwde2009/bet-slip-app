@@ -12,6 +12,7 @@ import LoadCoveragePanel from "./components/LoadCoveragePanel";
 import ParlayFilters from "./components/ParlayFilters";
 import ParlayResults from "./components/ParlayResults";
 import BoostWalletPanel from "./components/BoostWalletPanel";
+import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsText } from "./utils/parseOddsText";
@@ -25,6 +26,7 @@ const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
 const SAVED_SESSION_KEY = "EV_PARLAY_LAB_SESSION";
 const SAVED_PLACED_PARLAYS_KEY = "EV_PARLAY_LAB_PLACED_PARLAYS";
 const BOOST_WALLET_KEY = "EV_PARLAY_LAB_BOOST_WALLET";
+const BLOCKED_PARLAY_LEGS_KEY = "EV_PARLAY_LAB_BLOCKED_PARLAY_LEGS";
 const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function readImportQueue() {
@@ -93,6 +95,27 @@ function writeBoostWallet(boosts) {
   localStorage.setItem(BOOST_WALLET_KEY, JSON.stringify(activeBoosts));
 }
 
+function readBlockedParlayLegs() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BLOCKED_PARLAY_LEGS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeBlockedParlayLegs(blockedLegs) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(
+    BLOCKED_PARLAY_LEGS_KEY,
+    JSON.stringify(Array.isArray(blockedLegs) ? blockedLegs : [])
+  );
+}
+
+
 
 
 function writeSavedPlacedParlays(parlays) {
@@ -121,36 +144,305 @@ function buildSavedLegKeyFromLeg(leg = {}) {
   ].join("::");
 }
 
-function buildSavedLegUsageMap(savedPlacedParlays = []) {
+function buildSavedLegFamilyKeyFromLeg(leg = {}) {
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(leg.marketType),
+    normalizeLegKeyPart(leg.subjectName || leg.selectionLabel),
+    normalizeLegKeyPart(leg.selectionLabel),
+    normalizeLegKeyPart(leg.lineValue),
+  ].join("::");
+}
+
+function buildSavedLegRepeatKeyFromLeg(leg = {}) {
+  const selection = String(leg.selectionLabel || "").trim().toLowerCase();
+
+  const side =
+    /\bover\b/.test(selection)
+      ? "over"
+      : /\bunder\b/.test(selection)
+        ? "under"
+        : /\byes\b/.test(selection)
+          ? "yes"
+          : /\bno\b/.test(selection)
+            ? "no"
+            : selection;
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(leg.marketType),
+    normalizeLegKeyPart(leg.subjectName || leg.selectionLabel),
+    normalizeLegKeyPart(side),
+  ].join("::");
+}
+
+function getLocalTodayKeyForRepeatBlocking() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getDateKeyForRepeatBlocking(value) {
+  if (!value) return "";
+
+  const text = String(value || "").trim();
+
+  // ISO style: 2026-05-03 or 2026-05-03T21:29:32.000Z
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  // Browser/local display style: 05/03/2026
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    const month = String(slashMatch[1]).padStart(2, "0");
+    const day = String(slashMatch[2]).padStart(2, "0");
+    const year = slashMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  return text.slice(0, 10);
+}
+
+function normalizeLegDisplayForRepeat(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\b\d+(\.\d+)?\b/g, " ")
+    .replace(/[^\w+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSavedLegDisplayKeyFromLeg(leg = {}) {
+  const label = leg.displayLabel || formatBlockedLegDisplay(leg);
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(label),
+  ].join("::");
+}
+
+function buildSavedLegDisplayRepeatKeyFromLeg(leg = {}) {
+  const label = leg.displayLabel || formatBlockedLegDisplay(leg);
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegDisplayForRepeat(label),
+  ].join("::");
+}
+
+function buildSavedLegUsageMap(savedPlacedParlays = [], blockedParlayLegs = []) {
   const usage = new Map();
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getLocalTodayKeyForRepeatBlocking();
 
-  for (const parlay of savedPlacedParlays || []) {
-    const status = String(parlay.status || "").toLowerCase();
-    const placedDateKey = String(parlay.placedDate || parlay.placedAt || parlay.savedAt || "").slice(0, 10);
+  function addUsageKey(key, payload = {}) {
+    if (!key) return;
 
-    // Saved/placed parlays are permanent history, but repeat-leg blocking should only
-    // use active/current-slate parlays. Settled historical parlays should not suppress
-    // new candidates on future dates.
-    const isActiveForRepeatBlocking =
-      (status === "placed" || status === "pending") &&
-      placedDateKey === todayKey;
+    usage.set(key, {
+      count: (usage.get(key)?.count || 0) + 1,
+      lastUsedAt: payload.lastUsedAt || usage.get(key)?.lastUsedAt || "",
+      parlayIds: Array.from(
+        new Set([...(usage.get(key)?.parlayIds || []), ...(payload.parlayIds || [])])
+      ),
+      blocked: payload.blocked === true || usage.get(key)?.blocked === true,
+      blockedLabel: payload.blockedLabel || usage.get(key)?.blockedLabel || "",
+      source: payload.source || usage.get(key)?.source || "",
+    });
+  }
 
-    if (!isActiveForRepeatBlocking) continue;
+  // Manual blocked legs persist until manually removed.
+  for (const blocked of blockedParlayLegs || []) {
+      const keys = Array.from(
+        new Set([
+          blocked.savedLegKey,
+          blocked.savedLegFamilyKey,
+          blocked.savedLegRepeatKey,
+          blocked.savedLegDisplayKey,
+          blocked.savedLegDisplayRepeatKey,
+          buildSavedLegKeyFromLeg(blocked),
+          buildSavedLegFamilyKeyFromLeg(blocked),
+          buildSavedLegRepeatKeyFromLeg(blocked),
+          buildSavedLegDisplayKeyFromLeg(blocked),
+          buildSavedLegDisplayRepeatKeyFromLeg(blocked),
+        ].filter(Boolean))
+      );
 
-    for (const leg of parlay?.legs || []) {
-      const key = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
-      if (!key) continue;
-
-      usage.set(key, {
-        count: (usage.get(key)?.count || 0) + 1,
-        lastUsedAt: parlay.savedAt || "",
-        parlayIds: [...(usage.get(key)?.parlayIds || []), parlay.id],
+    for (const key of keys) {
+      addUsageKey(key, {
+        blocked: true,
+        blockedLabel: blocked.displayLabel || formatBlockedLegDisplay(blocked),
+        source: "manual_block",
+        lastUsedAt: blocked.blockedAt || "",
       });
     }
   }
 
+  // Confirmed placed parlays are permanent history, but repeat-leg blocking
+  // should only use active/current-day pending parlays.
+  for (const parlay of savedPlacedParlays || []) {
+    const status = String(parlay.status || "").toLowerCase();
+    const placedDateKey = getDateKeyForRepeatBlocking(
+      parlay.placedDate || parlay.placedAt || parlay.savedAt || ""
+    );
+
+    const isSettled = ["won", "lost", "push", "void"].includes(status);
+    const isConfirmedOrPending =
+      parlay.confirmedPlaced === true ||
+      status === "placed" ||
+      status === "pending";
+
+    const isSameLocalSlate =
+      !placedDateKey ||
+      placedDateKey === todayKey;
+
+    const isActiveForRepeatBlocking =
+      isConfirmedOrPending &&
+      !isSettled &&
+      isSameLocalSlate;
+
+
+    if (!isActiveForRepeatBlocking) continue;
+
+    for (const leg of parlay?.legs || []) {
+      const keys = Array.from(
+        new Set([
+          leg.savedLegKey || buildSavedLegKeyFromLeg(leg),
+          leg.savedLegFamilyKey || buildSavedLegFamilyKeyFromLeg(leg),
+          leg.savedLegRepeatKey || buildSavedLegRepeatKeyFromLeg(leg),
+          leg.savedLegDisplayKey || buildSavedLegDisplayKeyFromLeg(leg),
+          leg.savedLegDisplayRepeatKey || buildSavedLegDisplayRepeatKeyFromLeg(leg),
+        ].filter(Boolean))
+      );
+
+      for (const key of keys) {
+        addUsageKey(key, {
+          parlayIds: [parlay.id],
+          lastUsedAt: parlay.savedAt || parlay.placedAt || "",
+          source: "placed_parlay",
+        });
+      }
+    }
+  }
+
   return usage;
+}
+
+function formatMarketLabelForSavedLeg(marketType = "") {
+  const text = String(marketType || "").trim();
+
+  const labels = {
+    moneyline_2way: "Moneyline",
+    moneyline_3way: "Moneyline",
+    spread: "Spread",
+    total: "Total",
+    player_points: "Points",
+    player_assists: "Assists",
+    player_rebounds: "Rebounds",
+    player_threes: "Threes",
+    player_pra: "PRA",
+    player_points_rebounds: "Points + Rebounds",
+    player_points_assists: "Points + Assists",
+    player_rebounds_assists: "Rebounds + Assists",
+    double_double: "Double-Double",
+    triple_double: "Triple-Double",
+  };
+
+  return labels[text] || text.replace(/_/g, " ");
+}
+
+function getSelectionSideForSavedLeg(leg = {}) {
+  const selection = String(leg.selectionLabel || "").trim();
+
+  if (/\bover\b/i.test(selection)) return "Over";
+  if (/\bunder\b/i.test(selection)) return "Under";
+  if (/^yes$/i.test(selection) || /\byes\b/i.test(selection)) return "Yes";
+  if (/^no$/i.test(selection) || /\bno\b/i.test(selection)) return "No";
+
+  return "";
+}
+
+function formatBlockedLegDisplay(leg = {}) {
+  const subject = String(leg.subjectName || "").trim();
+  const selection = String(leg.selectionLabel || "").trim();
+  const side = getSelectionSideForSavedLeg(leg);
+  const line =
+    leg.lineValue !== null && leg.lineValue !== undefined && leg.lineValue !== ""
+      ? String(leg.lineValue)
+      : "";
+  const marketLabel = formatMarketLabelForSavedLeg(leg.marketType);
+
+  if (subject && side) {
+    return `${subject} ${side}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && line && isPlayerPropMarketName(leg.marketType)) {
+    return `${subject} Over ${line}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && selection && selection.toLowerCase() !== subject.toLowerCase()) {
+    return `${subject} ${selection}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (selection) {
+    return `${selection}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  return `${subject || "Blocked leg"}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+}
+
+function isPlayerPropMarketName(marketType = "") {
+  const text = String(marketType || "").toLowerCase();
+
+  return (
+    text.startsWith("player_") ||
+    text === "double_double" ||
+    text === "triple_double"
+  );
+}
+
+function makeBlockedLegRecordFromLeg(leg = {}) {
+  const savedLegKey = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
+  const savedLegFamilyKey =
+    leg.savedLegFamilyKey || buildSavedLegFamilyKeyFromLeg(leg);
+  const savedLegRepeatKey =
+    leg.savedLegRepeatKey || buildSavedLegRepeatKeyFromLeg(leg);
+  const savedLegDisplayKey =
+    leg.savedLegDisplayKey || buildSavedLegDisplayKeyFromLeg(leg);
+  const savedLegDisplayRepeatKey =
+    leg.savedLegDisplayRepeatKey || buildSavedLegDisplayRepeatKeyFromLeg(leg);
+
+  return {
+    id: `blocked_${savedLegFamilyKey || savedLegKey || Date.now()}`,
+    blockedAt: new Date().toISOString(),
+    savedLegKey,
+    savedLegFamilyKey,
+    savedLegRepeatKey,
+    savedLegDisplayKey,
+    savedLegDisplayRepeatKey,
+    displayLabel: leg.displayLabel || formatBlockedLegDisplay(leg),
+    eventName: leg.eventName || "",
+    sport: leg.sport || "",
+    marketType: leg.marketType || "",
+    subjectName: leg.subjectName || "",
+    selectionLabel: leg.selectionLabel || "",
+    lineValue: leg.lineValue ?? null,
+    sportsbook: leg.sportsbook || "",
+    oddsAmerican: leg.oddsAmerican ?? null,
+  };
 }
 
 
@@ -216,10 +508,23 @@ function makePlacedParlayRecord(parlay, options = {}) {
     playLabel: parlay?.playLabel || "",
 
     legs: (parlay?.legs || []).map((leg) => {
-      const savedLegKey = buildSavedLegKeyFromLeg(leg);
+      const savedLegKey = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
+      const savedLegFamilyKey =
+        leg.savedLegFamilyKey || buildSavedLegFamilyKeyFromLeg(leg);
+      const savedLegRepeatKey =
+        leg.savedLegRepeatKey || buildSavedLegRepeatKeyFromLeg(leg);
+      const savedLegDisplayKey =
+        leg.savedLegDisplayKey || buildSavedLegDisplayKeyFromLeg(leg);
+      const savedLegDisplayRepeatKey =
+        leg.savedLegDisplayRepeatKey || buildSavedLegDisplayRepeatKeyFromLeg(leg);
 
       return {
         savedLegKey,
+        savedLegFamilyKey,
+        savedLegRepeatKey,
+        savedLegDisplayKey,
+        savedLegDisplayRepeatKey,
+        displayLabel: leg.displayLabel || formatBlockedLegDisplay(leg),
         eventName: leg.eventName || "",
         eventDate: leg.eventDate || leg.startTime || "",
         sport: leg.sport || "",
@@ -579,6 +884,9 @@ export default function EVParlayLabPage() {
   const [pendingImports, setPendingImports] = useState([]);
   const [savedPlacedParlays, setSavedPlacedParlays] = useState([]);
   const [boostWallet, setBoostWallet] = useState([]);
+  const [blockedParlayLegs, setBlockedParlayLegs] = useState([]);
+  const [activeBoostId, setActiveBoostId] = useState("");
+  const [importMode, setImportMode] = useState("append");
   const [fanDuelSharpMode, setFanDuelSharpMode] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
     function resolveImportBatchRole(sourceName) {
@@ -690,7 +998,11 @@ export default function EVParlayLabPage() {
 console.log("HANDLE PARSE NORMALIZED", normalized);
 
   setRows((prev) => {
-    const existingKeys = new Set(prev.map((row) => makeRowMergeKey(row)));
+    const baseRows = (prev || []).filter(
+      (existingRow) => !shouldRemoveExistingRowForImportMode(existingRow, normalized, importMode)
+    );
+
+    const existingKeys = new Set(baseRows.map((row) => makeRowMergeKey(row)));
 
     const additions = normalized.filter((row) => {
       const key = makeRowMergeKey(row);
@@ -699,11 +1011,7 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
       return true;
     });
 
-    // Important:
-    // Re-normalize the full loaded row set, not just the newest import.
-    // This lets A. Black from one book match Anthony Black from another book
-    // after both books are loaded.
-    return normalizeParsedRows([...prev, ...additions]) || [...prev, ...additions];
+    return normalizeParsedRows([...baseRows, ...additions]) || [...baseRows, ...additions];
   });
 
   setLastParsedAt(parsedAtIso);
@@ -758,6 +1066,42 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
         )
         .join("__");
     }
+
+function shouldRemoveExistingRowForImportMode(existingRow, incomingRows, mode) {
+    if (!existingRow || !Array.isArray(incomingRows) || !incomingRows.length) return false;
+    if (mode === "append") return false;
+
+    const existingBook = String(existingRow.sportsbook || existingRow.bookmaker || "").trim().toLowerCase();
+    const existingSport = String(existingRow.sport || "").trim().toUpperCase();
+    const existingEvent = normalizeCoverageEventName(
+      existingRow.eventLabelRaw || existingRow.eventName || existingRow.fixture || ""
+    ).toLowerCase();
+
+    return incomingRows.some((incoming) => {
+      const incomingBook = String(incoming.sportsbook || incoming.bookmaker || "").trim().toLowerCase();
+      const incomingSport = String(incoming.sport || "").trim().toUpperCase();
+      const incomingEvent = normalizeCoverageEventName(
+        incoming.eventLabelRaw || incoming.eventName || incoming.fixture || ""
+      ).toLowerCase();
+
+      if (mode === "replace_book") {
+        return incomingBook && existingBook === incomingBook;
+      }
+
+      if (mode === "replace_book_event") {
+        return (
+          incomingBook &&
+          incomingSport &&
+          incomingEvent &&
+          existingBook === incomingBook &&
+          existingSport === incomingSport &&
+          existingEvent === incomingEvent
+        );
+      }
+
+      return false;
+    });
+  }
 
   function makeRowMergeKey(row) {
     return [
@@ -825,6 +1169,46 @@ function handleSavePlacedParlay(parlay, options = {}) {
     }
   }
 
+  function handleBlockParlayLeg(leg) {
+    if (!leg) return;
+
+    const record = makeBlockedLegRecordFromLeg(leg);
+
+    setBlockedParlayLegs((prev) => {
+      const existingKeys = new Set(
+        (prev || []).flatMap((blocked) => [
+          blocked.savedLegKey,
+          blocked.savedLegFamilyKey,
+          blocked.savedLegRepeatKey,
+          blocked.savedLegDisplayKey,
+          blocked.savedLegDisplayRepeatKey,
+        ])
+      );
+
+      if (
+        existingKeys.has(record.savedLegKey) ||
+        existingKeys.has(record.savedLegFamilyKey) ||
+        existingKeys.has(record.savedLegRepeatKey) ||
+        existingKeys.has(record.savedLegDisplayKey) ||
+        existingKeys.has(record.savedLegDisplayRepeatKey)
+      ) {
+        return prev || [];
+      }
+
+      const next = [record, ...(prev || [])].slice(0, 500);
+      writeBlockedParlayLegs(next);
+      return next;
+    });
+  }
+
+  function handleUnblockParlayLeg(blockedLegId) {
+    setBlockedParlayLegs((prev) => {
+      const next = (prev || []).filter((blocked) => blocked.id !== blockedLegId);
+      writeBlockedParlayLegs(next);
+      return next;
+    });
+  }
+
 
   function handleLoadBoostIntoFilters(boost) {
     if (!boost) return;
@@ -832,10 +1216,12 @@ function handleSavePlacedParlay(parlay, options = {}) {
     const nextSport = String(boost.league || "ALL").trim().toUpperCase();
     const nextBook = String(boost.sportsbook || "ALL").trim();
 
+    setActiveBoostId(boost.id || "");
+
+    // This directly updates the live filters. Parlay results recalculate immediately;
+    // you do not need to click Apply Filters after loading a saved boost.
     setFilters((prev) => ({
       ...prev,
-
-      // Main boost/search criteria
       selectedSport: nextSport || "ALL",
       selectedTargetBook: nextBook || "ALL",
       boostPct: Number.isFinite(Number(boost.boostPct))
@@ -853,13 +1239,9 @@ function handleSavePlacedParlay(parlay, options = {}) {
       stake: Number.isFinite(Number(boost.maxStake))
         ? Number(boost.maxStake)
         : prev.stake,
-
-      // SGP boost behavior
       forceSameGame: boost.isSgp === true,
       allowSameGame: boost.isSgp === true ? true : prev.allowSameGame,
     }));
-
-    alert(`Loaded filters for: ${boost.name || "saved boost"}`);
   }
 
   function handleAddBoost(boost) {
@@ -1067,6 +1449,40 @@ function handleSavePlacedParlay(parlay, options = {}) {
     return aliases.get(lower) || text;
   }
 
+ function handleDeleteStaleRows(staleMinutes = 15) {
+    const cutoff = Date.now() - Number(staleMinutes || 15) * 60 * 1000;
+
+    const idsToDelete = (rows || [])
+      .filter((row) => {
+        const loadedAt =
+          row.loadedAt ||
+          row.parsedAt ||
+          row.importedAt ||
+          row.createdAt ||
+          row.savedAt ||
+          "";
+
+        if (!loadedAt) return false;
+
+        const time = new Date(loadedAt).getTime();
+        if (!Number.isFinite(time)) return false;
+
+        return time < cutoff;
+      })
+      .map((row) => row.id)
+      .filter(Boolean);
+
+    if (!idsToDelete.length) {
+      alert("No stale rows found.");
+      return;
+    }
+
+    const ok = window.confirm(`Delete ${idsToDelete.length} stale rows older than ${staleMinutes} minutes?`);
+    if (!ok) return;
+
+    handleDeleteRows(idsToDelete);
+  }
+
   function handleDeleteCoverageRows({ bookmaker, sport, eventName } = {}) {
     const normalizedBook = String(bookmaker || "").trim().toLowerCase();
     const normalizedSport = String(sport || "").trim().toUpperCase();
@@ -1135,8 +1551,13 @@ const manualMatchCandidates = useMemo(() => {
 }, [showManualMatchPanel, rows, manualMatches]);
 
 const savedLegUsageMap = useMemo(
-  () => buildSavedLegUsageMap(savedPlacedParlays),
-  [savedPlacedParlays]
+  () => buildSavedLegUsageMap(savedPlacedParlays, blockedParlayLegs),
+  [savedPlacedParlays, blockedParlayLegs]
+);
+
+const activeBoost = useMemo(
+  () => (boostWallet || []).find((boost) => boost.id === activeBoostId) || null,
+  [boostWallet, activeBoostId]
 );
 
 const marketBundle = useMemo(() => {
@@ -1177,6 +1598,7 @@ const marketBundle = useMemo(() => {
             sameSportBlocked: 0,
             sameGameBlocked: 0,
             repeatsBlocked: 0,
+            manualBlocked: 0,
             nonPositiveParlayEv: 0,
           },
         },
@@ -1210,6 +1632,8 @@ const marketBundle = useMemo(() => {
         // Saved boosts live outside the 2-hour session restore.
     // Always reload them from persistent localStorage and prune expired boosts.
     setBoostWallet(readBoostWallet());
+    setBlockedParlayLegs(readBlockedParlayLegs());
+
 
     const params = new URLSearchParams(window.location.search);
     const safeReset = params.get("evSafe") === "1" || params.get("evReset") === "1";
@@ -1227,6 +1651,8 @@ const marketBundle = useMemo(() => {
       setPendingImports([]);
       setSavedPlacedParlays(readSavedPlacedParlays());
       setBoostWallet(readBoostWallet());
+      setBlockedParlayLegs(readBlockedParlayLegs());
+
 
       params.delete("evSafe");
       params.delete("evReset");
@@ -1619,6 +2045,35 @@ const marketBundle = useMemo(() => {
               Append newest import
             </button>
 
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 900,
+                color: "#166534",
+              }}
+            >
+              Import Mode
+              <select
+                value={importMode}
+                onChange={(event) => setImportMode(event.target.value)}
+                style={{
+                  border: "1px solid #86efac",
+                  borderRadius: 8,
+                  padding: "7px 9px",
+                  fontWeight: 800,
+                  color: "#166534",
+                  background: "#fff",
+                }}
+              >
+                <option value="append">Append / dedupe</option>
+                <option value="replace_book">Replace this book</option>
+                <option value="replace_book_event">Replace this book + event</option>
+              </select>
+            </label>
+
             <button
               type="button"
               onClick={handleClearPendingImports}
@@ -1669,9 +2124,13 @@ const marketBundle = useMemo(() => {
           </div>
         ) : null}
 
-        <div style={{ marginBottom: 12, fontWeight: 700, color: "#166534" }}>
-          Debug: rows in state = {rows.length}
-        </div>
+        <SessionReadinessPanel
+          rows={rowsForAnalysis}
+          filters={filters}
+          activeBoost={activeBoost}
+          coverageWarnings={coverageWarnings}
+          onDeleteStaleRows={handleDeleteStaleRows}
+        />
 
         <LoadCoveragePanel
           rows={rows}
@@ -1710,7 +2169,7 @@ const marketBundle = useMemo(() => {
               fontWeight: 700,
             }}
           >
-            {showManualMatchPanel ? "Hide Advanced Manual Match" : "Show Advanced Manual Match"}
+              {showManualMatchPanel ? "Hide Advanced Match Review" : "Show Advanced Match Review"}
           </button>
         </div>
 
@@ -1771,6 +2230,9 @@ const marketBundle = useMemo(() => {
           onConfirmSavedParlayPlaced={handleConfirmSavedParlayPlaced}
           onSetSavedParlayResult={handleSetSavedParlayResult}          formatSavedDateTime={formatSavedDateTime}
           boostWallet={boostWallet}
+          blockedParlayLegs={blockedParlayLegs}
+          onBlockParlayLeg={handleBlockParlayLeg}
+          onUnblockParlayLeg={handleUnblockParlayLeg}
         />
       </div>
     </div>

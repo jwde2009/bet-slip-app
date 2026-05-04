@@ -29,10 +29,14 @@ export default function ManualMatchPanel({
 
   return (
     <section style={sectionStyle}>
-      <h2 style={h2Style}>3. Manual Match Review</h2>
+      <h2 style={h2Style}>Advanced Match Review</h2>
       <p style={mutedStyle}>
-        Same market, different selections. Choose the matching target selection to use in final calculations.
+        Advanced fallback for ambiguous names/selections. Avoid using this for different-line matches unless you intentionally want a manual override.
       </p>
+      
+      <div style={warningBoxStyle}>
+        Different lines should usually NOT be matched manually. Example: Over 8.5 and Over 9.5 are different markets unless you intentionally want an alternate-line override.
+      </div>
 
       <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
         {candidates.map((candidate) => {
@@ -207,6 +211,17 @@ const mutedStyle = {
   color: "#166534",
   fontSize: 14,
   margin: 0,
+};
+
+const warningBoxStyle = {
+  border: "1px solid #fbbf24",
+  background: "#fffbeb",
+  color: "#92400e",
+  borderRadius: 10,
+  padding: 10,
+  fontSize: 12,
+  fontWeight: 800,
+  marginTop: 10,
 };
 
 const cardStyle = {

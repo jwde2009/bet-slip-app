@@ -10,6 +10,42 @@ function normalizeLegKeyPart(value) {
     .replace(/\s+/g, " ");
 }
 
+function isMainLineMarket(marketType = "") {
+  const type = String(marketType || "").toLowerCase();
+
+  return (
+    type === "moneyline_2way" ||
+    type === "moneyline_3way" ||
+    type === "spread" ||
+    type === "total"
+  );
+}
+
+function isOuPlayerPropMarket(marketType = "") {
+  const type = String(marketType || "").toLowerCase();
+
+  return [
+    "player_points",
+    "player_assists",
+    "player_rebounds",
+    "player_threes",
+    "player_pra",
+    "player_points_rebounds",
+    "player_points_assists",
+    "player_rebounds_assists",
+    "player_goals",
+    "player_shots_on_goal",
+    "player_saves",
+    "player_power_play_points",
+    "player_blocked_shots",
+    "pitcher_strikeouts",
+    "pitcher_outs_recorded",
+    "pitcher_hits_allowed",
+    "pitcher_earned_runs_allowed",
+  ].includes(type);
+}
+
+
 function buildSavedLegKeyFromLeg(leg = {}) {
   return [
     normalizeLegKeyPart(leg.sport),
@@ -21,6 +57,82 @@ function buildSavedLegKeyFromLeg(leg = {}) {
   ].join("::");
 }
 
+function buildSavedLegFamilyKeyFromLeg(leg = {}) {
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(leg.marketType),
+    normalizeLegKeyPart(leg.subjectName || leg.selectionLabel),
+    normalizeLegKeyPart(leg.selectionLabel),
+    normalizeLegKeyPart(leg.lineValue),
+  ].join("::");
+}
+
+function buildSavedLegRepeatKeyFromLeg(leg = {}) {
+  const selection = String(leg.selectionLabel || "").trim().toLowerCase();
+
+  const side =
+    /\bover\b/.test(selection)
+      ? "over"
+      : /\bunder\b/.test(selection)
+        ? "under"
+        : /\byes\b/.test(selection)
+          ? "yes"
+          : /\bno\b/.test(selection)
+            ? "no"
+            : selection;
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(leg.marketType),
+    normalizeLegKeyPart(leg.subjectName || leg.selectionLabel),
+    normalizeLegKeyPart(side),
+  ].join("::");
+}
+
+function normalizeLegDisplayForRepeat(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\b\d+(\.\d+)?\b/g, " ")
+    .replace(/[^\w+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSavedLegDisplayKeyFromLeg(leg = {}) {
+  const label =
+    leg.displayLabel ||
+    buildLegDisplayLabel({
+      subjectName: leg.subjectName,
+      selectionLabel: leg.selectionLabel,
+      lineValue: leg.lineValue,
+      marketType: leg.marketType,
+    });
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegKeyPart(label),
+  ].join("::");
+}
+
+function buildSavedLegDisplayRepeatKeyFromLeg(leg = {}) {
+  const label =
+    leg.displayLabel ||
+    buildLegDisplayLabel({
+      subjectName: leg.subjectName,
+      selectionLabel: leg.selectionLabel,
+      lineValue: leg.lineValue,
+      marketType: leg.marketType,
+    });
+
+  return [
+    normalizeLegKeyPart(leg.sport),
+    normalizeLegKeyPart(leg.eventName),
+    normalizeLegDisplayForRepeat(label),
+  ].join("::");
+}
 
 function dedupeLegsByFamily(legs) {
   const bestByFamily = new Map();
@@ -105,14 +217,33 @@ export function buildParlayCandidates({
     sameSportBlocked: 0,
     sameGameBlocked: 0,
     repeatsBlocked: 0,
+    manualBlocked: 0,
     nonPositiveParlayEv: 0,
-  };
+    filteredByMarketMode: 0,
+    filteredByExtremeOdds: 0,  };
 
   for (const market of markets) {
     for (const selection of market.selections) {
       const fair = fairMap.get(`${market.id}::${selection.id}`);
       if (!fair) {
         rejectionCounts.noFairOdds += 1;
+        continue;
+      }
+
+      const preferredMarketMode = String(filters?.preferredMarketMode || "all").toLowerCase();
+      const normalizedMarketType = String(market.marketType || "").toLowerCase();
+
+      if (preferredMarketMode === "ou_only" && !isOuPlayerPropMarket(normalizedMarketType)) {
+        rejectionCounts.filteredByMarketMode += 1;
+        continue;
+      }
+
+      if (
+        preferredMarketMode === "main_and_ou" &&
+        !isMainLineMarket(normalizedMarketType) &&
+        !isOuPlayerPropMarket(normalizedMarketType)
+      ) {
+        rejectionCounts.filteredByMarketMode += 1;
         continue;
       }
 
@@ -135,6 +266,18 @@ export function buildParlayCandidates({
       const bestTargetQuote = [...targetQuotes].sort(
         (a, b) => b.oddsDecimal - a.oddsDecimal
       )[0];
+
+      const maxAbsAmericanOdds = Number.isFinite(Number(filters?.maxAbsAmericanOdds))
+        ? Math.max(100, Number(filters.maxAbsAmericanOdds))
+        : 1000;
+
+      if (
+        Number.isFinite(Number(bestTargetQuote.oddsAmerican)) &&
+        Math.abs(Number(bestTargetQuote.oddsAmerican)) > maxAbsAmericanOdds
+      ) {
+        rejectionCounts.filteredByExtremeOdds += 1;
+        continue;
+      }
 
       const sharpQuotes = selection.quotes.filter(
         (q) =>
@@ -184,13 +327,47 @@ export function buildParlayCandidates({
         selectionLabel: selection.label,
       };
 
+      const legDisplayLabel = buildLegDisplayLabel({
+        subjectName: savedLegProbe.subjectName,
+        selectionLabel: selection.label,
+        lineValue: market.lineValue,
+        marketType: market.marketType,
+      });
+
       const savedLegKey = buildSavedLegKeyFromLeg(savedLegProbe);
+      const savedLegFamilyKey = buildSavedLegFamilyKeyFromLeg(savedLegProbe);
+      const savedLegRepeatKey = buildSavedLegRepeatKeyFromLeg(savedLegProbe);
+      const savedLegDisplayKey = buildSavedLegDisplayKeyFromLeg({
+        ...savedLegProbe,
+        displayLabel: legDisplayLabel,
+      });
+      const savedLegDisplayRepeatKey = buildSavedLegDisplayRepeatKeyFromLeg({
+        ...savedLegProbe,
+        displayLabel: legDisplayLabel,
+      });
+
       const savedUsage =
         typeof savedLegUsageMap?.get === "function"
-          ? savedLegUsageMap.get(savedLegKey)
+          ? savedLegUsageMap.get(savedLegKey) ||
+            savedLegUsageMap.get(savedLegFamilyKey) ||
+            savedLegUsageMap.get(savedLegRepeatKey) ||
+            savedLegUsageMap.get(savedLegDisplayKey) ||
+            savedLegUsageMap.get(savedLegDisplayRepeatKey)
           : null;
 
-      if (savedUsage?.count && filters?.allowPreviouslyUsedLegs !== true) {
+      // Manually blocked legs should always stay blocked until removed.
+      if (savedUsage?.blocked === true) {
+        rejectionCounts.manualBlocked += 1;
+        continue;
+      }
+
+      const allowRepeatLegs =
+        filters?.allowPreviouslyUsedLegs === true ||
+        filters?.allowRepeats === true;
+
+      // Confirmed active/pending same-day placed parlays only block when the
+      // repeat toggle is OFF.
+      if (savedUsage?.count && !allowRepeatLegs) {
         rejectionCounts.repeatsBlocked += 1;
         continue;
       }
@@ -223,6 +400,11 @@ export function buildParlayCandidates({
 
         legEvPct,
         savedLegKey,
+        savedLegFamilyKey,
+        savedLegRepeatKey,
+        savedLegDisplayKey,
+        savedLegDisplayRepeatKey,
+        displayLabel: legDisplayLabel,
         savedUsageCount: savedUsage?.count || 0,
       });
     }
@@ -864,6 +1046,81 @@ function compareNumberAsc(a, b) {
   if (left !== right) return left - right;
   return 0;
 }
+
+function buildLegDisplayLabel({
+  subjectName = "",
+  selectionLabel = "",
+  lineValue = null,
+  marketType = "",
+}) {
+  const subject = String(subjectName || "").trim();
+  const selection = String(selectionLabel || "").trim();
+  const marketLabel = formatLegMarketLabel(marketType);
+  const line =
+    lineValue !== null && lineValue !== undefined && lineValue !== ""
+      ? String(lineValue)
+      : "";
+
+  const side = /\bover\b/i.test(selection)
+    ? "Over"
+    : /\bunder\b/i.test(selection)
+      ? "Under"
+      : /^yes$/i.test(selection)
+        ? "Yes"
+        : /^no$/i.test(selection)
+          ? "No"
+          : "";
+
+  if (subject && side) {
+    return `${subject} ${side}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && line && isPlayerPropMarketType(marketType)) {
+    return `${subject} Over ${line}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && selection && selection.toLowerCase() !== subject.toLowerCase()) {
+    return `${subject} ${selection}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (selection) {
+    return `${selection}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  return `${subject || "Leg"}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+}
+
+function isPlayerPropMarketType(marketType = "") {
+  const text = String(marketType || "").toLowerCase();
+
+  return (
+    text.startsWith("player_") ||
+    text === "double_double" ||
+    text === "triple_double"
+  );
+}
+
+function formatLegMarketLabel(marketType = "") {
+  const labels = {
+    player_points: "Points",
+    player_assists: "Assists",
+    player_rebounds: "Rebounds",
+    player_threes: "Threes",
+    player_pra: "PRA",
+    player_points_rebounds: "Points + Rebounds",
+    player_points_assists: "Points + Assists",
+    player_rebounds_assists: "Rebounds + Assists",
+    double_double: "Double-Double",
+    triple_double: "Triple-Double",
+    spread: "Spread",
+    total: "Total",
+    moneyline_2way: "Moneyline",
+    moneyline_3way: "Moneyline",
+  };
+
+  return labels[String(marketType || "")] || String(marketType || "").replace(/_/g, " ");
+}
+
 
 function extractSubjectNameFromMarket(market) {
   const subjectKey = String(market?.subjectKey || "");
