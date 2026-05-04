@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-export default function LoadCoveragePanel({ rows = [] }) {
+export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
   const [collapsedBooks, setCollapsedBooks] = useState({});
   const [collapsedSports, setCollapsedSports] = useState({});
   const [collapsedEvents, setCollapsedEvents] = useState({});
@@ -24,6 +24,16 @@ export default function LoadCoveragePanel({ rows = [] }) {
         }))
         .filter((book) => book.sports.length > 0)
     : coverage.books;
+
+  function confirmDeleteCoverage({ bookmaker, sport, eventName, label }) {
+    if (typeof onDeleteCoverageRows !== "function") return;
+
+    const ok = window.confirm(`Delete ${label}? This removes matching parsed rows from EV Lab.`);
+
+    if (!ok) return;
+
+    onDeleteCoverageRows({ bookmaker, sport, eventName });
+  }
 
   if (!Array.isArray(rows) || rows.length === 0) {
     return (
@@ -116,23 +126,38 @@ export default function LoadCoveragePanel({ rows = [] }) {
 
             return (
               <div key={bookKey} style={bookCardStyle}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCollapsedBooks((prev) => ({
-                      ...prev,
-                      [bookKey]: !prev[bookKey],
-                    }))
-                  }
-                  style={bookHeaderButtonStyle}
-                >
-                  <span>
-                    {bookCollapsed ? "Show" : "Hide"} {book.bookmaker}
-                  </span>
-                  <span style={bookMetaStyle}>
-                    {book.eventCount} events • {book.marketCount} markets • {book.rowCount} rows
-                  </span>
-                </button>
+                <div style={coverageHeaderActionRowStyle}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedBooks((prev) => ({
+                        ...prev,
+                        [bookKey]: !prev[bookKey],
+                      }))
+                    }
+                    style={bookHeaderButtonStyle}
+                  >
+                    <span>
+                      {bookCollapsed ? "Show" : "Hide"} {book.bookmaker}
+                    </span>
+                    <span style={bookMetaStyle}>
+                      {book.eventCount} events • {book.marketCount} markets • {book.rowCount} rows
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      confirmDeleteCoverage({
+                        bookmaker: book.bookmaker,
+                        label: `all ${book.bookmaker} rows`,
+                      })
+                    }
+                    style={deleteCoverageButtonStyle}
+                  >
+                    Delete Book
+                  </button>
+                </div>
 
                 {!bookCollapsed ? (
                   <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
@@ -142,23 +167,39 @@ export default function LoadCoveragePanel({ rows = [] }) {
 
                       return (
                         <div key={sportKey} style={sportCardStyle}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCollapsedSports((prev) => ({
-                                ...prev,
-                                [sportKey]: !prev[sportKey],
-                              }))
-                            }
-                            style={sportHeaderButtonStyle}
-                          >
-                            <span>
-                              {sportCollapsed ? "Show" : "Hide"} {sport.sport || "UNKNOWN"} ({sport.eventCount} events)
-                            </span>
-                            <span style={sportMetaStyle}>
-                              {sport.marketCount} markets • {sport.rowCount} rows
-                            </span>
-                          </button>
+                          <div style={{ ...coverageHeaderActionRowStyle, marginBottom: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCollapsedSports((prev) => ({
+                                  ...prev,
+                                  [sportKey]: !prev[sportKey],
+                                }))
+                              }
+                              style={{ ...sportHeaderButtonStyle, flex: 1, marginBottom: 0 }}
+                            >
+                              <span>
+                                {sportCollapsed ? "Show" : "Hide"} {sport.sport || "UNKNOWN"} ({sport.eventCount} events)
+                              </span>
+                              <span style={sportMetaStyle}>
+                                {sport.marketCount} markets • {sport.rowCount} rows
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                confirmDeleteCoverage({
+                                  bookmaker: book.bookmaker,
+                                  sport: sport.sport,
+                                  label: `${book.bookmaker} ${sport.sport || "UNKNOWN"} rows`,
+                                })
+                              }
+                              style={deleteCoverageButtonStyle}
+                            >
+                              Delete Sport
+                            </button>
+                          </div>
 
                           {!sportCollapsed ? (
                             <div style={{ display: "grid", gap: 8 }}>
@@ -174,41 +215,100 @@ export default function LoadCoveragePanel({ rows = [] }) {
                                       ...(event.isThin ? thinEventStyle : null),
                                     }}
                                   >
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setCollapsedEvents((prev) => ({
-                                          ...prev,
-                                          [eventKey]: !prev[eventKey],
-                                        }))
-                                      }
-                                      style={eventHeaderButtonStyle}
-                                    >
-                                      <span>
-                                        {eventCollapsed ? "Show" : "Hide"} {event.eventName}
-                                      </span>
-
-                                      <span style={eventMetaWrapStyle}>
-                                        {event.isThin ? (
-                                          <span style={thinBadgeStyle}>
-                                            Possibly incomplete
-                                          </span>
-                                        ) : null}
-                                        <span style={eventMetaStyle}>
-                                          {event.marketCount} markets • {event.rowCount} rows
+                                    <div style={coverageHeaderActionRowStyle}>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setCollapsedEvents((prev) => ({
+                                            ...prev,
+                                            [eventKey]: !prev[eventKey],
+                                          }))
+                                        }
+                                        style={{ ...eventHeaderButtonStyle, flex: 1 }}
+                                      >
+                                        <span>
+                                          {eventCollapsed ? "Show" : "Hide"} {event.eventName}
                                         </span>
-                                      </span>
-                                    </button>
+
+                                        <span style={eventMetaWrapStyle}>
+                                          {event.isThin ? (
+                                            <span style={thinBadgeStyle}>
+                                              Possibly incomplete
+                                            </span>
+                                          ) : null}
+
+                                          {event.loadedAtLabel ? (
+                                            <span style={eventTimestampStyle}>
+                                              {event.loadedAtLabel}
+                                            </span>
+                                          ) : null}
+
+                                          <span style={eventMetaStyle}>
+                                            {event.marketCount} markets • {event.rowCount} rows
+                                          </span>
+                                        </span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          confirmDeleteCoverage({
+                                            bookmaker: book.bookmaker,
+                                            sport: sport.sport,
+                                            eventName: event.eventName,
+                                            label: `${book.bookmaker} ${sport.sport || "UNKNOWN"} ${event.eventName}`,
+                                          })
+                                        }
+                                        style={deleteCoverageButtonStyle}
+                                      >
+                                        Delete Event
+                                      </button>
+                                    </div>
 
                                     {!eventCollapsed ? (
-                                      <div style={marketGridStyle}>
-                                        {event.markets.map((market) => (
-                                          <div key={`${eventKey}_${market.marketType}`} style={marketPillStyle}>
-                                            <span style={marketNameStyle}>{formatMarketLabel(market.marketType)}</span>
-                                            <span style={marketCountStyle}>{market.rowCount} rows</span>
+                                      <>
+                                        <div style={marketGridStyle}>
+                                          {event.markets.map((market) => (
+                                            <div
+                                              key={`${eventKey}_${market.marketType}`}
+                                              style={{
+                                                ...marketPillStyle,
+                                                ...(market.noSharpMatch ? unmatchedMarketPillStyle : null),
+                                              }}
+                                              title={
+                                                market.noSharpMatch
+                                                  ? "No matching sharp/fair market loaded for this target market."
+                                                  : ""
+                                              }
+                                            >
+                                              <span style={marketNameStyle}>{formatMarketLabel(market.marketType)}</span>
+                                              <span style={marketCountStyle}>{market.rowCount} rows</span>
+                                              {market.noSharpMatch ? (
+                                                <span style={noSharpBadgeStyle}>No sharp</span>
+                                              ) : null}
+                                            </div>
+                                          ))}
+                                        </div>
+
+                                        {event.missingSharpMarkets?.length ? (
+                                          <div style={coverageWarningsStyle}>
+                                            <div style={coverageWarningsTitleStyle}>
+                                              Sharp markets missing from {book.bookmaker}
+                                            </div>
+
+                                            {event.missingSharpMarkets.map((missing) => (
+                                              <div
+                                                key={`${eventKey}_missing_${missing.marketType}`}
+                                                style={missingSharpMarketStyle}
+                                              >
+                                                {formatMarketLabel(missing.marketType)} present on{" "}
+                                                <strong>{missing.sharpBooksLabel}</strong>, NOT loaded on{" "}
+                                                <strong>{book.bookmaker}</strong>.
+                                              </div>
+                                            ))}
                                           </div>
-                                        ))}
-                                      </div>
+                                        ) : null}
+                                      </>
                                     ) : null}
                                   </div>
                                 );
@@ -233,12 +333,16 @@ function buildCoverage(rows = []) {
   const bookMap = new Map();
   const uniqueEvents = new Set();
   const uniqueMarkets = new Set();
+  const sharpMarketMap = buildSharpMarketMap(rows);
 
   for (const row of rows || []) {
     const bookmaker = clean(row.sportsbook || row.bookmaker || "Unknown Book");
     const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
-    const eventName = clean(row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event");
+    const rawEventName = clean(row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event");
+    const eventName = normalizeCoverageEventName(rawEventName);
     const marketType = clean(row.marketType || row.betType || "unknown_market");
+    const isSharp = isCoverageSharpRow(row);
+    const isTarget = !isSharp;
 
     if (!bookMap.has(bookmaker)) {
       bookMap.set(bookmaker, {
@@ -267,20 +371,32 @@ function buildCoverage(rows = []) {
         eventName,
         marketsMap: new Map(),
         rowCount: 0,
+        targetRowCount: 0,
+        sharpRowCount: 0,
       });
     }
 
     const event = sportBucket.eventsMap.get(eventName);
     event.rowCount += 1;
 
+    if (isTarget) event.targetRowCount += 1;
+    if (isSharp) event.sharpRowCount += 1;
+
     if (!event.marketsMap.has(marketType)) {
       event.marketsMap.set(marketType, {
         marketType,
         rowCount: 0,
+        targetRowCount: 0,
+        sharpRowCount: 0,
+        noSharpMatch: false,
       });
     }
 
-    event.marketsMap.get(marketType).rowCount += 1;
+    const market = event.marketsMap.get(marketType);
+    market.rowCount += 1;
+
+    if (isTarget) market.targetRowCount += 1;
+    if (isSharp) market.sharpRowCount += 1;
 
     uniqueEvents.add(`${bookmaker}::${sport}::${eventName}`);
     uniqueMarkets.add(`${bookmaker}::${sport}::${eventName}::${marketType}`);
@@ -292,17 +408,59 @@ function buildCoverage(rows = []) {
         .map((sport) => {
           const events = Array.from(sport.eventsMap.values())
             .map((event) => {
-              const markets = Array.from(event.marketsMap.values()).sort((a, b) =>
-                formatMarketLabel(a.marketType).localeCompare(formatMarketLabel(b.marketType))
+              const eventSharpMarkets = getSharpMarketsForEvent(
+                sharpMarketMap,
+                sport.sport,
+                event.eventName
               );
 
+              const markets = Array.from(event.marketsMap.values())
+                .map((market) => {
+                  const sharpBooks = getSharpBooksForMarket(
+                    sharpMarketMap,
+                    sport.sport,
+                    event.eventName,
+                    market.marketType
+                  );
+
+                  return {
+                    ...market,
+                    noSharpMatch: market.targetRowCount > 0 && sharpBooks.length === 0,
+                    sharpBooks,
+                    sharpBooksLabel: formatSharpBooksLabel(sharpBooks),
+                  };
+                })
+                .sort((a, b) =>
+                  formatMarketLabel(a.marketType).localeCompare(formatMarketLabel(b.marketType))
+                );
+
               const marketCount = markets.length;
+              const currentMarketTypes = new Set(markets.map((market) => market.marketType));
+
+              const missingSharpMarkets =
+                event.targetRowCount > 0
+                  ? Array.from(eventSharpMarkets.entries())
+                      .filter(([marketType]) => !currentMarketTypes.has(marketType))
+                      .map(([marketType, sharpBooksSet]) => {
+                        const sharpBooks = Array.from(sharpBooksSet).sort();
+
+                        return {
+                          marketType,
+                          sharpBooks,
+                          sharpBooksLabel: formatSharpBooksLabel(sharpBooks),
+                        };
+                      })
+                      .sort((a, b) =>
+                        formatMarketLabel(a.marketType).localeCompare(formatMarketLabel(b.marketType))
+                      )
+                  : [];
 
               return {
                 eventName: event.eventName,
                 rowCount: event.rowCount,
                 markets,
                 marketCount,
+                missingSharpMarkets,
                 isThin: isThinEvent({ marketCount, rowCount: event.rowCount, markets }),
               };
             })
@@ -356,6 +514,169 @@ function isThinEvent({ marketCount, rowCount, markets }) {
 
 function clean(value) {
   return String(value || "").trim();
+}
+
+function isCoverageSharpRow(row = {}) {
+  return (
+    row.isSharpSource === true ||
+    String(row.batchRole || "").toLowerCase() === "fair_odds" ||
+    String(row.role || "").toLowerCase() === "sharp"
+  );
+}
+
+function buildSharpMarketMap(rows = []) {
+  const map = new Map();
+
+  for (const row of rows || []) {
+    if (!isCoverageSharpRow(row)) continue;
+
+    const bookmaker = clean(row.sportsbook || row.bookmaker || "Sharp");
+    const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
+    const eventName = normalizeCoverageEventName(
+      row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event"
+    );
+    const marketType = clean(row.marketType || row.betType || "unknown_market");
+
+    if (!sport || !eventName || !marketType) continue;
+
+    const eventKey = `${sport}::${eventName}`;
+
+    if (!map.has(eventKey)) {
+      map.set(eventKey, new Map());
+    }
+
+    const eventMarkets = map.get(eventKey);
+
+    if (!eventMarkets.has(marketType)) {
+      eventMarkets.set(marketType, new Set());
+    }
+
+    eventMarkets.get(marketType).add(bookmaker);
+  }
+
+  return map;
+}
+
+function getSharpMarketsForEvent(sharpMarketMap, sport, eventName) {
+  const key = `${clean(sport).toUpperCase()}::${normalizeCoverageEventName(eventName)}`;
+  return sharpMarketMap.get(key) || new Map();
+}
+
+function getSharpBooksForMarket(sharpMarketMap, sport, eventName, marketType) {
+  const eventMarkets = getSharpMarketsForEvent(sharpMarketMap, sport, eventName);
+  return Array.from(eventMarkets.get(marketType) || []).sort();
+}
+
+function formatSharpBooksLabel(sharpBooks = []) {
+  if (!sharpBooks.length) return "no sharp book";
+
+  const unique = Array.from(new Set(sharpBooks)).sort();
+
+  if (unique.length === 1) return unique[0];
+  if (unique.length === 2) return `${unique[0]} & ${unique[1]}`;
+
+  return `${unique.slice(0, -1).join(", ")} & ${unique[unique.length - 1]}`;
+}
+
+function normalizeCoverageEventName(value) {
+  const text = clean(value).replace(/\s+/g, " ");
+
+  if (!text.includes("@") && !/\svs\.?\s/i.test(text)) {
+    return normalizeCoverageTeamName(text);
+  }
+
+  const parts = text
+    .split(/\s@\s|\svs\.?\s/i)
+    .map((part) => clean(part))
+    .filter(Boolean);
+
+  if (parts.length !== 2) return text;
+
+  return `${normalizeCoverageTeamName(parts[0])} @ ${normalizeCoverageTeamName(parts[1])}`;
+}
+
+function normalizeCoverageTeamName(value) {
+  const text = clean(value).replace(/\s+/g, " ");
+  const lower = text.toLowerCase();
+
+  const aliases = new Map([
+    ["knicks", "New York Knicks"],
+    ["ny knicks", "New York Knicks"],
+    ["new york knicks", "New York Knicks"],
+
+    ["hawks", "Atlanta Hawks"],
+    ["atl hawks", "Atlanta Hawks"],
+    ["atlanta hawks", "Atlanta Hawks"],
+
+    ["celtics", "Boston Celtics"],
+    ["bos celtics", "Boston Celtics"],
+    ["boston celtics", "Boston Celtics"],
+
+    ["76ers", "Philadelphia 76ers"],
+    ["sixers", "Philadelphia 76ers"],
+    ["phi 76ers", "Philadelphia 76ers"],
+    ["philadelphia 76ers", "Philadelphia 76ers"],
+
+    ["nuggets", "Denver Nuggets"],
+    ["den nuggets", "Denver Nuggets"],
+    ["denver nuggets", "Denver Nuggets"],
+
+    ["timberwolves", "Minnesota Timberwolves"],
+    ["min timberwolves", "Minnesota Timberwolves"],
+    ["minnesota timberwolves", "Minnesota Timberwolves"],
+
+    ["pistons", "Detroit Pistons"],
+    ["det pistons", "Detroit Pistons"],
+    ["detroit pistons", "Detroit Pistons"],
+
+    ["magic", "Orlando Magic"],
+    ["orl magic", "Orlando Magic"],
+    ["orlando magic", "Orlando Magic"],
+
+    ["cavaliers", "Cleveland Cavaliers"],
+    ["cle cavaliers", "Cleveland Cavaliers"],
+    ["cleveland cavaliers", "Cleveland Cavaliers"],
+
+    ["raptors", "Toronto Raptors"],
+    ["tor raptors", "Toronto Raptors"],
+    ["toronto raptors", "Toronto Raptors"],
+
+    ["lakers", "Los Angeles Lakers"],
+    ["la lakers", "Los Angeles Lakers"],
+    ["lal lakers", "Los Angeles Lakers"],
+    ["los angeles lakers", "Los Angeles Lakers"],
+
+    ["rockets", "Houston Rockets"],
+    ["hou rockets", "Houston Rockets"],
+    ["houston rockets", "Houston Rockets"],
+  ]);
+
+  return aliases.get(lower) || text;
+}
+
+function getRowLoadedAt(row = {}) {
+  return (
+    row.loadedAt ||
+    row.parsedAt ||
+    row.importedAt ||
+    row.createdAt ||
+    row.savedAt ||
+    row.loadedAtIso ||
+    row.parsedAtIso ||
+    ""
+  );
+}
+
+function formatCoverageTimestamp(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return `Loaded ${date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
 }
 
 function formatMarketLabel(value) {
@@ -486,6 +807,25 @@ const bookHeaderButtonStyle = {
   textAlign: "left",
 };
 
+const coverageHeaderActionRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+};
+
+const deleteCoverageButtonStyle = {
+  border: "1px solid #fca5a5",
+  borderRadius: 999,
+  padding: "4px 8px",
+  fontSize: 11,
+  fontWeight: 900,
+  background: "#fff",
+  color: "#991b1b",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 const bookMetaStyle = {
   color: "#4b5563",
   fontSize: 12,
@@ -572,6 +912,16 @@ const thinBadgeStyle = {
   fontWeight: 900,
 };
 
+const eventTimestampStyle = {
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  borderRadius: 999,
+  padding: "2px 7px",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
 const eventMetaStyle = {
   color: "#6b7280",
   fontSize: 12,
@@ -583,6 +933,44 @@ const marketGridStyle = {
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
+};
+
+const unmatchedMarketPillStyle = {
+  border: "1px solid #fca5a5",
+  background: "#fee2e2",
+};
+
+const noSharpBadgeStyle = {
+  border: "1px solid #fca5a5",
+  background: "#fff",
+  color: "#991b1b",
+  borderRadius: 999,
+  padding: "1px 6px",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const coverageWarningsStyle = {
+  marginTop: 8,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#991b1b",
+  borderRadius: 10,
+  padding: 8,
+  display: "grid",
+  gap: 4,
+};
+
+const coverageWarningsTitleStyle = {
+  fontSize: 12,
+  fontWeight: 900,
+  marginBottom: 2,
+};
+
+const missingSharpMarketStyle = {
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
 };
 
 const marketPillStyle = {

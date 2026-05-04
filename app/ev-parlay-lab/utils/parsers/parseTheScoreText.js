@@ -416,8 +416,11 @@ function parseDetailYesNoProps(lines, startIndex, event, sport) {
 
   const sections = [
     ["Double Double", "double_double"],
+    ["To Record A Double Double", "double_double"],
     ["Triple Double", "triple_double"],
+    ["To Record A Triple Double", "triple_double"],
     ["Player Shutout", "player_shutout"],
+    ["To Record A Shutout", "player_shutout"],
   ];
 
   for (const [header, marketType] of sections) {
@@ -796,7 +799,7 @@ function isLikelySectionHeader(value) {
 function isComboHeader(value) {
   const text = normalizeLine(value);
 
-  return /^(Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Double Double|Triple Double)$/i.test(text);
+  return /^(Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Double Double|To Record A Double Double|Triple Double|To Record A Triple Double)$/i.test(text);
 }
 
 function findPropSectionIndex(lines, startIndex, header, event) {

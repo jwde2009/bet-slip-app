@@ -14,6 +14,13 @@ export function parseFanDuelText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
 
+  // FanDuel landing/home pages contain multiple sports, promos, futures,
+  // parlay-builder sections, and unrelated player/team names.
+  // On that shape, only parse the NBA main-line table.
+  if (isFanDuelNbaLandingPage(lines)) {
+    return dedupeRows(parseFanDuelNbaLandingMainLines(lines));
+  }
+
   const sport = inferSport(lines, context);
   const rows = [];
 
@@ -24,10 +31,6 @@ export function parseFanDuelText(rawText = "", context = {}) {
 
     // Safe visible full-game O/U parser for FanDuel NBA/NHL.
     rows.push(...parseFanDuelVisibleOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
-
-    // More direct O/U parser for FanDuel NBA simple prop pages where headers are duplicated:
-    // Player Points / OVER / UNDER / Player / O line / odds / U line / odds.
-    rows.push(...parseFanDuelDirectOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
 
     // Safe visible FanDuel ladder sections like:
     // To Score 10+ Points, 2+ Made Threes, To Record 6+ Rebounds, etc.
@@ -49,6 +52,132 @@ export function parseFanDuelText(rawText = "", context = {}) {
   }
 
   return dedupeRows(rows);
+}
+
+function isFanDuelNbaLandingPage(lines) {
+  const text = (lines || []).join(" ");
+
+  return (
+    /\bNBA Odds\b/i.test(text) &&
+    /\bSPREAD\b/i.test(text) &&
+    /\bMONEY\b/i.test(text) &&
+    /\bTOTAL\b/i.test(text) &&
+    /\bMore wagers\b/i.test(text) &&
+    (
+      /\bPopular Same Game Parlay/i.test(text) ||
+      /\bNBA Finals Odds\b/i.test(text) ||
+      /\bMLB Odds\b/i.test(text) ||
+      /\bNHL Odds\b/i.test(text) ||
+      /\bEnglish Premier League Odds\b/i.test(text)
+    ) &&
+    !/\bBasketball\s*\/\s*NBA Odds\s*\/.+?\s+@\s+.+?\s+Odds\s*\//i.test(text)
+  );
+}
+
+function parseFanDuelNbaLandingMainLines(lines) {
+  const rows = [];
+  const sport = "NBA";
+
+  const startIndex = findFanDuelNbaLandingMainLinesStart(lines);
+  if (startIndex === -1) return rows;
+
+  const endIndex = findFanDuelNbaLandingMainLinesEnd(lines, startIndex);
+
+  for (let i = startIndex; i < Math.min(lines.length - 11, endIndex); i += 1) {
+    const away = normalizeLine(lines[i]);
+    const home = normalizeLine(lines[i + 1]);
+
+    if (!isLikelyTeamName(away) || !isLikelyTeamName(home)) continue;
+    if (away === home) continue;
+
+    const parsed = parseFanDuelMarketBlockFromTeams(lines, i);
+    if (!parsed) continue;
+
+    const normalizedAway = normalizeFanDuelLandingTeamName(away);
+    const normalizedHome = normalizeFanDuelLandingTeamName(home);
+    const event = `${normalizedAway} @ ${normalizedHome}`;
+
+    rows.push(...buildMainRows(event, normalizedAway, normalizedHome, sport, parsed));
+
+    i += 11;
+  }
+
+  return rows;
+}
+
+function findFanDuelNbaLandingMainLinesStart(lines) {
+  for (let i = 0; i < lines.length - 4; i += 1) {
+    if (
+      /^NBA$/i.test(normalizeLine(lines[i])) &&
+      /^SPREAD$/i.test(normalizeLine(lines[i + 1])) &&
+      /^MONEY$/i.test(normalizeLine(lines[i + 2])) &&
+      /^TOTAL$/i.test(normalizeLine(lines[i + 3]))
+    ) {
+      return i + 4;
+    }
+  }
+
+  return -1;
+}
+
+function findFanDuelNbaLandingMainLinesEnd(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const line = normalizeLine(lines[i]);
+
+    if (
+      /^To Score /i.test(line) ||
+      /^First Basket/i.test(line) ||
+      /^NBA Finals Odds$/i.test(line) ||
+      /^2025-26 NBA Finals Winner$/i.test(line) ||
+      /^World Series Odds$/i.test(line) ||
+      /^MLB Odds$/i.test(line) ||
+      /^NHL Odds$/i.test(line) ||
+      /^English Premier League Odds$/i.test(line) ||
+      /^UEFA Champions League Odds$/i.test(line) ||
+      /^NCAAF Odds$/i.test(line) ||
+      /^NFL /i.test(line) ||
+      /^WNBA Odds$/i.test(line) ||
+      /^Live Tennis Odds$/i.test(line) ||
+      /^UFC Fight Odds$/i.test(line) ||
+      /^Legal Sports Betting Online/i.test(line)
+    ) {
+      return i;
+    }
+  }
+
+  return lines.length;
+}
+
+function normalizeFanDuelLandingTeamName(value) {
+  const text = normalizeLine(value);
+
+  const aliases = new Map([
+    ["NY Knicks", "New York Knicks"],
+    ["ATL Hawks", "Atlanta Hawks"],
+    ["BOS Celtics", "Boston Celtics"],
+    ["PHI 76ers", "Philadelphia 76ers"],
+    ["DEN Nuggets", "Denver Nuggets"],
+    ["MIN Timberwolves", "Minnesota Timberwolves"],
+    ["DET Pistons", "Detroit Pistons"],
+    ["ORL Magic", "Orlando Magic"],
+    ["CLE Cavaliers", "Cleveland Cavaliers"],
+    ["TOR Raptors", "Toronto Raptors"],
+    ["LA Lakers", "Los Angeles Lakers"],
+    ["LAL Lakers", "Los Angeles Lakers"],
+    ["HOU Rockets", "Houston Rockets"],
+    ["Boston Celtics", "Boston Celtics"],
+    ["Philadelphia 76ers", "Philadelphia 76ers"],
+    ["Denver Nuggets", "Denver Nuggets"],
+    ["Minnesota Timberwolves", "Minnesota Timberwolves"],
+    ["Detroit Pistons", "Detroit Pistons"],
+    ["Orlando Magic", "Orlando Magic"],
+    ["Cleveland Cavaliers", "Cleveland Cavaliers"],
+    ["Toronto Raptors", "Toronto Raptors"],
+    ["Los Angeles Lakers", "Los Angeles Lakers"],
+    ["Houston Rockets", "Houston Rockets"],
+  ]);
+
+  return aliases.get(text) || text;
 }
 
 function parseLandingGames(lines, sport) {

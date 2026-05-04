@@ -1,13 +1,31 @@
 "use client";
  
 import Link from "next/link";
+import { useState } from "react";
  
 export default function TopEdgeBetsPanel({ bets = [] }) {
+  const [isCollapsed, setIsCollapsed] = useState(true);
+
   return (
     <section style={sectionStyle}>
-      <h2 style={h2Style}>5. Top Single-Edge Bets</h2>
- 
-      {bets.length === 0 ? (
+      <div style={topEdgeHeaderRowStyle}>
+        <div>
+          <h2 style={h2Style}>5. Top Single-Edge Bets</h2>
+          <div style={subtleStyle}>
+            {bets.length} positive single-bet edge{bets.length === 1 ? "" : "s"} found.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          style={togglePanelButtonStyle}
+        >
+          {isCollapsed ? "Show Top Edges" : "Hide Top Edges"}
+        </button>
+      </div>
+
+      {isCollapsed ? null : bets.length === 0 ? (
         <div style={emptyStyle}>No positive single-bet edges found.</div>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
@@ -25,20 +43,20 @@ export default function TopEdgeBetsPanel({ bets = [] }) {
                     {bet.eventName || "Unknown Event"} • {formatMarketLabel(bet.marketType, bet.sport)}
                   </div>
                 </div>
- 
+
                 <div style={edgeBadgeStyle}>EV {formatPct(bet.evPct)}</div>
               </div>
- 
+
               <div style={topEdgeActionRowStyle}>
                 <Link href={buildToolsLink(bet)} style={toolsLinkStyle}>
                   Send to Tools
                 </Link>
- 
+
                 <Link href={buildBoostTargetingLink(bet)} style={secondaryToolsLinkStyle}>
                   Use for Boost Targeting
                 </Link>
               </div>
- 
+
               <div style={metricsGridStyle}>
                 <MetricCard
                   label="Best Target"
@@ -63,7 +81,6 @@ export default function TopEdgeBetsPanel({ bets = [] }) {
     </section>
   );
 }
- 
 function formatSingleBetSelection(bet) {
   const marketLabel = formatMarketLabel(bet.marketType, bet.sport);
   const selection = String(bet.selectionLabel || "Selection");
@@ -201,7 +218,27 @@ function formatPct(value) {
   if (typeof value !== "number" || Number.isNaN(value)) return "—";
   return `${(value * 100).toFixed(2)}%`;
 }
- 
+
+const topEdgeHeaderRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const togglePanelButtonStyle = {
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "7px 12px",
+  fontSize: 12,
+  fontWeight: 900,
+  background: "#ecfdf5",
+  color: "#166534",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 const sectionStyle = {
   background: "#fff",
   border: "1px solid #ddd",
@@ -212,7 +249,7 @@ const sectionStyle = {
  
 const h2Style = {
   marginTop: 0,
-  marginBottom: 12,
+  marginBottom: 4,
 };
  
 const emptyStyle = {

@@ -132,6 +132,374 @@ function estimateExtractedRows(text = "", source = "") {
     return line.includes("|") && /[-+]\d+|EVEN/i.test(line);
   }).length;
 }
+
+function isBetMgmTabUrl(url = "") {
+  return /betmgm/i.test(String(url || ""));
+}
+
+function isFanDuelTabUrl(url = "") {
+  return /fanduel/i.test(String(url || ""));
+}
+
+function isDraftKingsTabUrl(url = "") {
+  return /draftkings/i.test(String(url || ""));
+}
+
+function sleepBackground(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeExtractionBlock(text = "") {
+  return String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function mergeExtractionBlocks(blocks = []) {
+  const seen = new Set();
+  const merged = [];
+
+  for (const block of blocks) {
+    const normalized = normalizeExtractionBlock(block);
+
+    if (!normalized || seen.has(normalized)) continue;
+
+    seen.add(normalized);
+    merged.push(String(block || "").trim());
+  }
+
+  return merged.join("\n\n").trim();
+}
+
+async function extractSinglePayloadFromTab(tabId) {
+  const extractionResult = await safeExecuteScript({
+    tabId,
+    func: extractOddsTextFromCurrentPage,
+  });
+
+  const [{ result: payload } = {}] = extractionResult || [];
+
+  return {
+    source: String(payload?.source || ""),
+    text: String(payload?.text || ""),
+    action: String(payload?.action || ""),
+    message: String(payload?.message || ""),
+  };
+}
+
+async function extractDraftKingsMultiPassPayload(tabId) {
+  const captures = [];
+  let source = "DraftKings";
+
+  const maxPasses = 18;
+
+  await safeShowToast(
+    tabId,
+    "Extracting DraftKings…",
+    "Starting DraftKings section capture. Keep this tab open.",
+    {
+      loading: true,
+      pulse: true,
+    }
+  );
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    await safeShowToast(
+      tabId,
+      "Extracting DraftKings…",
+      pass === 0
+        ? `Pass ${pass + 1} of ${maxPasses}: capturing starting page.`
+        : `Pass ${pass + 1} of ${maxPasses}: capturing newly opened section.`,
+      {
+        loading: true,
+        pulse: pass === 0,
+      }
+    );
+
+    const payload = await extractSinglePayloadFromTab(tabId);
+    const text = String(payload?.text || "");
+    const detectedSource = String(payload?.source || "");
+
+    if (detectedSource) {
+      source = detectedSource;
+    }
+
+    if (!text.trim()) {
+      await safeShowToast(
+        tabId,
+        "DraftKings capture paused",
+        `Pass ${pass + 1} returned no text. Using what was already captured.`,
+        {
+          loading: true,
+          pulse: true,
+        }
+      );
+      break;
+    }
+
+    captures.push(`DRAFTKINGS_AUTOPASS_${pass + 1}\n${text}`);
+
+    const scheduledMatch = text.match(/DRAFTKINGS_SCHEDULED_STEP:\s*(.+)/i);
+
+    if (!scheduledMatch?.[1]) {
+      await safeShowToast(
+        tabId,
+        "DraftKings capture finishing…",
+        `No next DraftKings step found after pass ${pass + 1}.`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
+      break;
+    }
+
+    const nextLabel = String(scheduledMatch[1]).trim();
+
+    await safeShowToast(
+      tabId,
+      "Extracting DraftKings…",
+      /^[A-Z\s]+$/.test(nextLabel)
+        ? `Opening DraftKings top tab: ${nextLabel}.`
+        : `Opening DraftKings combo section: ${nextLabel}.`,
+      {
+        loading: true,
+        pulse: /^[A-Z\s]+$/.test(nextLabel),
+      }
+    );
+
+    await sleepBackground(/^[A-Z\s]+$/.test(nextLabel) ? 2750 : 1500);
+  }
+
+  return {
+    source,
+    text: mergeExtractionBlocks(captures),
+  };
+}
+
+async function extractBetMgmMultiPassPayload(tabId) {
+  const captures = [];
+  let source = "BetMGM";
+
+  const maxPasses = 24;
+
+  await safeShowToast(
+    tabId,
+    "Extracting BetMGM…",
+    "Starting BetMGM player-props capture. Keep this tab open.",
+    {
+      loading: true,
+      pulse: true,
+    }
+  );
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    await safeShowToast(
+      tabId,
+      "Extracting BetMGM…",
+      pass === 0
+        ? `Pass ${pass + 1} of ${maxPasses}: capturing starting section.`
+        : `Pass ${pass + 1} of ${maxPasses}: capturing newly opened section.`,
+      {
+        loading: true,
+        pulse: pass === 0,
+      }
+    );
+
+    const payload = await extractSinglePayloadFromTab(tabId);
+    const text = String(payload?.text || "");
+    const detectedSource = String(payload?.source || "");
+
+    if (detectedSource) {
+      source = detectedSource;
+    }
+
+    if (!text.trim()) {
+      break;
+    }
+
+    captures.push(`BETMGM_AUTOPASS_${pass + 1}\n${text}`);
+
+    const scheduledPlayerPropsMatch = text.match(/BETMGM_SCHEDULED_PLAYER_PROPS:\s*(.+)/i);
+    const scheduledTopTabMatch = text.match(/BETMGM_SCHEDULED_TOP_TAB:\s*(.+)/i);
+    const scheduledDrawerMatch = text.match(/BETMGM_SCHEDULED_DRAWER:\s*(.+)/i);
+    const scheduledHeaderMatch =
+      scheduledPlayerPropsMatch ||
+      scheduledTopTabMatch ||
+      scheduledDrawerMatch ||
+      text.match(/BETMGM_SCHEDULED_PLAYER_HEADER:\s*(.+)/i);
+
+    if (!scheduledHeaderMatch?.[1]) {
+      break;
+    }
+
+    await safeShowToast(
+      tabId,
+      "Extracting BetMGM…",
+      scheduledPlayerPropsMatch?.[1]
+        ? "Opening top section: Player props."
+        : scheduledTopTabMatch?.[1]
+          ? `Opening top tab: ${String(scheduledTopTabMatch[1]).trim()}.`
+          : scheduledDrawerMatch?.[1]
+            ? `Opening drawer: ${String(scheduledDrawerMatch[1]).trim()}.`
+            : `Opening BetMGM section: ${String(scheduledHeaderMatch[1]).trim()}.`,
+      {
+        loading: true,
+        pulse: !!scheduledTopTabMatch?.[1] || !!scheduledPlayerPropsMatch?.[1],
+      }
+    );
+
+    await sleepBackground(
+      scheduledTopTabMatch?.[1] || scheduledPlayerPropsMatch?.[1] ? 3000 : 2300
+    );
+  }
+
+  return {
+    source,
+    text: mergeExtractionBlocks(captures),
+  };
+}
+
+async function extractFanDuelMultiPassPayload(tabId) {
+  const captures = [];
+  let source = "FanDuel";
+
+  // FanDuel NBA full pass can require many scheduled clicks:
+  // ladders, O/U drawer, next tab, repeat.
+  const maxPasses = 35;
+
+  await safeShowToast(
+    tabId,
+    "Extracting FanDuel…",
+    "Starting FanDuel multi-pass capture. Keep this tab open.",
+    {
+      loading: true,
+      pulse: true,
+    }
+  );
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    await safeShowToast(
+      tabId,
+      "Extracting FanDuel…",
+      `Running pass ${pass + 1} of ${maxPasses}. Keep this tab open.`,
+      {
+        loading: true,
+        pulse: pass === 0,
+      }
+    );
+
+    const payload = await extractSinglePayloadFromTab(tabId);
+
+    const text = String(payload?.text || "");
+    const detectedSource = String(payload?.source || "");
+    const action = String(payload?.action || "");
+    const message = String(payload?.message || "");
+
+    if (detectedSource) {
+      source = detectedSource;
+    }
+
+    if (action === "navigate_only") {
+      await safeShowToast(
+        tabId,
+        "Extracting FanDuel…",
+        message || "Moved to Player Points. Continuing capture after page loads.",
+        {
+          loading: true,
+          pulse: true,
+        }
+      );
+
+      await sleepBackground(3500);
+      continue;
+    }
+
+    if (!text.trim()) {
+      await safeShowToast(
+        tabId,
+        "FanDuel capture paused",
+        `Pass ${pass + 1} returned no text. Using what was already captured.`,
+        {
+          loading: true,
+          pulse: true,
+        }
+      );
+      break;
+    }
+
+    captures.push(`FANDUEL_AUTOPASS_${pass + 1}\n${text}`);
+
+    const hasScheduledNextStep = /FANDUEL_SCHEDULED_/i.test(text);
+
+    if (!hasScheduledNextStep) {
+      await safeShowToast(
+        tabId,
+        "FanDuel capture finishing…",
+        `No next FanDuel step found after pass ${pass + 1}.`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
+      break;
+    }
+
+    const scheduledTopTabMatch = text.match(/FANDUEL_SCHEDULED_NEXT_TAB:\s*(.+?)\s*->\s*(.+)/i);
+    const scheduledInternalMatch = text.match(/FANDUEL_SCHEDULED_INTERNAL_HEADER:\s*(.+?)\s*->\s*(.+)/i);
+    const scheduledOuMatch = text.match(/FANDUEL_SCHEDULED_OU_DRAWER:\s*(.+?)\s*->\s*(.+)/i);
+
+    if (scheduledTopTabMatch?.[2]) {
+      await safeShowToast(
+        tabId,
+        "Extracting FanDuel…",
+        `Moving to ${String(scheduledTopTabMatch[2]).trim()}.`,
+        {
+          loading: true,
+          pulse: true,
+        }
+      );
+
+      // Top-tab navigation causes FanDuel to re-render much more heavily than
+      // opening a drawer/header, so give it more time before the next extract.
+      await sleepBackground(2750);
+    } else if (scheduledInternalMatch?.[2]) {
+      await safeShowToast(
+        tabId,
+        "Extracting FanDuel…",
+        `Opening combo section: ${String(scheduledInternalMatch[2]).trim()}.`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
+
+      await sleepBackground(1700);
+    } else if (scheduledOuMatch?.[2]) {
+      await safeShowToast(
+        tabId,
+        "Extracting FanDuel…",
+        `Opening ${String(scheduledOuMatch[2]).trim()} O/U.`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
+
+      await sleepBackground(1800);
+    } else {
+      await sleepBackground(1500);
+    }
+  }
+
+  return {
+    source,
+    text: mergeExtractionBlocks(captures),
+  };
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return;
 
@@ -149,15 +517,35 @@ chrome.action.onClicked.addListener(async (tab) => {
     }
   );
 
-  const extractionResult = await safeExecuteScript({
-    tabId: sourceTabId,
-    func: extractOddsTextFromCurrentPage,
-  });
-
-  const [{ result: payload } = {}] = extractionResult || [];
+  const payload = isFanDuelTabUrl(tab.url)
+    ? await extractFanDuelMultiPassPayload(sourceTabId)
+    : isBetMgmTabUrl(tab.url)
+      ? await extractBetMgmMultiPassPayload(sourceTabId)
+      : isDraftKingsTabUrl(tab.url)
+        ? await extractDraftKingsMultiPassPayload(sourceTabId)
+        : await extractSinglePayloadFromTab(sourceTabId);
 
   const finalText = String(payload?.text || "");
   const source = String(payload?.source || "");
+  const action = String(payload?.action || "");
+  const message = String(payload?.message || "");
+
+  if (action === "navigate_only") {
+    await setExtensionWorkingBadge(false);
+
+    await safeShowToast(
+      sourceTabId,
+      "➡️ FanDuel moved to Player Points",
+      message || "No text was imported. Click the extension again from the Player Points page.",
+      {
+        loading: false,
+        pulse: true,
+        complete: true,
+      }
+    );
+
+    return;
+  }
 
   if (!finalText.trim() || !source.trim()) {
     await setExtensionWorkingBadge(false);
@@ -207,15 +595,24 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   const estimatedRows = estimateExtractedRows(finalText, source);
+  const isFanDuelCapture = /^fanduel$/i.test(source);
 
   await setExtensionWorkingBadge(false);
 
   await safeShowToast(
     sourceTabId,
-    `${source} import sent`,
-    `Rows extracted: ${estimatedRows.toLocaleString()}`,
+    isFanDuelCapture
+      ? "✅ COMPLETE — FanDuel captured"
+      : `✅ COMPLETE — ${source} import sent`,
+    isFanDuelCapture
+      ? `${finalText.length.toLocaleString()} characters queued. Load newest import, then parse in EV Lab.`
+      : estimatedRows > 0
+        ? `Estimated rows queued: ${estimatedRows.toLocaleString()}`
+        : `${finalText.length.toLocaleString()} characters queued. Load newest import, then parse in EV Lab.`,
     {
       characters: finalText.length,
+      estimatedRows,
+      complete: true,
       loading: false,
       pulse: true,
     }
@@ -274,11 +671,13 @@ function showImportToast(title, message, details = {}) {
     toast.style.top = "16px";
     toast.style.right = "16px";
     toast.style.zIndex = "2147483647";
-    toast.style.background = "#166534";
+    const isComplete = data?.details?.complete === true;
+
+    toast.style.background = isComplete ? "#1d4ed8" : "#166534";
     toast.style.color = "#f0fdf4";
-    toast.style.border = "1px solid #86efac";
-    toast.style.borderRadius = "10px";
-    toast.style.padding = "12px 14px";
+    toast.style.border = isComplete ? "2px solid #93c5fd" : "1px solid #86efac";
+    toast.style.borderRadius = "12px";
+    toast.style.padding = isComplete ? "16px 18px" : "12px 14px";
     toast.style.fontFamily =
       "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
     toast.style.fontSize = "13px";
@@ -297,7 +696,9 @@ function showImportToast(title, message, details = {}) {
     titleEl.style.display = "flex";
     titleEl.style.alignItems = "center";
     titleEl.style.gap = "8px";
-    titleEl.style.fontWeight = "800";
+    titleEl.style.fontWeight = "900";
+    titleEl.style.fontSize = data?.details?.complete === true ? "18px" : "13px";
+    titleEl.style.letterSpacing = data?.details?.complete === true ? "0.02em" : "normal";
 
     if (data?.details?.loading) {
       const spinner = document.createElement("span");
@@ -379,14 +780,24 @@ function showImportToast(title, message, details = {}) {
 
     if (data?.details?.pulse !== false) {
       try {
+        const completePulse = data?.details?.complete === true;
+
         toast.animate(
-          [
-            { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
-            { transform: "scale(1.035)", boxShadow: "0 0 0 5px rgba(134,239,172,0.55), 0 16px 38px rgba(0,0,0,0.28)" },
-            { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
-          ],
+          completePulse
+            ? [
+                { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
+                { transform: "scale(1.075)", boxShadow: "0 0 0 8px rgba(147,197,253,0.75), 0 18px 44px rgba(0,0,0,0.32)" },
+                { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
+                { transform: "scale(1.055)", boxShadow: "0 0 0 5px rgba(147,197,253,0.55), 0 16px 38px rgba(0,0,0,0.28)" },
+                { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
+              ]
+            : [
+                { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
+                { transform: "scale(1.035)", boxShadow: "0 0 0 5px rgba(134,239,172,0.55), 0 16px 38px rgba(0,0,0,0.28)" },
+                { transform: "scale(1)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" },
+              ],
           {
-            duration: 650,
+            duration: completePulse ? 1100 : 650,
             easing: "ease-out",
           }
         );
@@ -966,11 +1377,11 @@ async function extractOddsTextFromCurrentPage() {
     function getDraftKingsMarketContentPattern(label) {
       const normalized = normalizeDraftKingsLabel(label);
 
-      if (normalized === "points") return /\bPoints\b[\s\S]{0,900}\bPoints O\/U\b/i;
-      if (normalized === "threes") return /\bThrees\b[\s\S]{0,900}\bThrees O\/U\b/i;
-      if (normalized === "rebounds") return /\bRebounds\b[\s\S]{0,900}\bRebounds O\/U\b/i;
-      if (normalized === "assists") return /\bAssists\b[\s\S]{0,900}\bAssists O\/U\b/i;
-      if (normalized === "combos") return /\b(Pts \+ Reb \+ Ast|Double-Double|Triple-Double)\b/i;
+      if (normalized === "points") return /\b(Points|Points O\/U|PPG)\b/i;
+      if (normalized === "threes") return /\b(Threes|Threes O\/U|Made Threes|3\+ Made Threes)\b/i;
+      if (normalized === "rebounds") return /\b(Rebounds|Rebounds O\/U|RPG)\b/i;
+      if (normalized === "assists") return /\b(Assists|Assists O\/U|APG)\b/i;
+      if (normalized === "combos") return /\b(Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Double-Double|Triple-Double)\b/i;
 
       if (normalized === "goalscorer") return /\b(Goalscorer|Goal Scorer|Anytime Goalscorer)\b/i;
       if (normalized === "shots on goal") return /\bShots On Goal\b[\s\S]{0,900}\bShots On Goal O\/U\b/i;
@@ -1112,6 +1523,135 @@ async function extractOddsTextFromCurrentPage() {
 
         await sleep(350);
       }
+    }
+
+    function getDraftKingsWorkflowLabels() {
+      return [
+        "POINTS",
+        "THREES",
+        "REBOUNDS",
+        "ASSISTS",
+        "COMBOS",
+
+        // Combo subheaders after COMBOS is open.
+        "Pts + Reb + Ast",
+        "Pts + Reb",
+        "Pts + Ast",
+        "Reb + Ast",
+        "Double-Double",
+        "Double Double",
+        "To Record A Double-Double",
+        "To Record A Double Double",
+        "Triple-Double",
+        "Triple Double",
+        "To Record A Triple-Double",
+        "To Record A Triple Double",
+        "Pts + Reb + Ast O/U",
+        "Pts + Reb O/U",
+        "Pts + Ast O/U",
+        "Reb + Ast O/U",
+      ];
+    }
+
+    function getDraftKingsWorkflowProgressKey() {
+      const path = String(window.location.pathname || "");
+      return `EV_DK_WORKFLOW_PROGRESS::${path}`;
+    }
+
+    function getDraftKingsNextWorkflowLabel() {
+      const labels = getDraftKingsWorkflowLabels();
+      const key = getDraftKingsWorkflowProgressKey();
+      const stored = Number(sessionStorage.getItem(key));
+      const nextIndex = Number.isFinite(stored) ? stored : 0;
+
+      if (nextIndex >= labels.length) {
+        sessionStorage.removeItem(key);
+        return "";
+      }
+
+      const nextLabel = labels[nextIndex];
+      sessionStorage.setItem(key, String(nextIndex + 1));
+
+      return nextLabel;
+    }
+
+    function scheduleDraftKingsClickByLabel(label) {
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const wanted = clean(label);
+
+          let button = getDraftKingsClickableByExactText(wanted);
+
+          if (!button) {
+            button = findClickableByExactVisibleText(wanted, {
+              maxWidth: 520,
+              maxHeight: 140,
+            });
+          }
+
+          try {
+            sessionStorage.setItem(
+              "EV_DK_LAST_CLICK_DEBUG",
+              JSON.stringify({
+                label: wanted,
+                found: !!button,
+                text: button ? clean(button.innerText || button.textContent || "") : "",
+                className: button ? String(button.className || "") : "",
+                at: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            // ignore storage failures
+          }
+
+          if (!button) {
+            console.warn("EV Parlay DraftKings button not found:", wanted);
+            return;
+          }
+
+          button.scrollIntoView({ block: "center", inline: "nearest" });
+          button.click();
+        } catch (err) {
+          console.warn("EV Parlay DraftKings scheduled click failed:", err);
+        }
+      }, 500);
+
+      return true;
+    }
+
+    async function buildDraftKingsOneStepRawText() {
+      const captures = [];
+
+      let clickDebug = "";
+      try {
+        clickDebug = sessionStorage.getItem("EV_DK_LAST_CLICK_DEBUG") || "";
+      } catch (err) {
+        clickDebug = "";
+      }
+
+      // Only safe expansion. Do not broadly click DK shell controls.
+      await openDetailsDrawers();
+      await clickSafeExpandButtons();
+      await sleep(500);
+
+      const current = rawPageText();
+
+      if (current && current.trim()) {
+        captures.push(
+          `DRAFTKINGS_CURRENT_CAPTURE${clickDebug ? `\nDRAFTKINGS_LAST_CLICK_DEBUG: ${clickDebug}` : ""}\n${current}`
+        );
+      }
+
+      const nextLabel = getDraftKingsNextWorkflowLabel();
+
+      if (nextLabel) {
+        scheduleDraftKingsClickByLabel(nextLabel);
+        captures.push(`DRAFTKINGS_SCHEDULED_STEP: ${nextLabel}`);
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
     }
 
     async function buildDraftKingsCombinedRawText() {
@@ -1539,7 +2079,7 @@ async function extractOddsTextFromCurrentPage() {
       const clicked = new Set();
       let totalClicked = 0;
 
-      for (let pass = 0; pass < 2; pass += 1) {
+      for (let pass = 0; pass < 3; pass += 1) {
         const candidates = getFanDuelShowMoreCandidates();
         let clickedThisPass = 0;
 
@@ -1571,18 +2111,105 @@ async function extractOddsTextFromCurrentPage() {
       return totalClicked;
     }
 
-        function getFanDuelCurrentNbaTabFromText(text) {
+    function isFanDuelNbaGameLandingPage(text) {
+      const raw = String(text || "");
+      const compact = raw.replace(/\s+/g, " ");
+
+      const hasNbaGamePage =
+        /\bBasketball\s*\/\s*NBA Odds\s*\//i.test(compact) ||
+        /\bNBA Odds\s*\/.+?\s+@\s+.+?\s+Odds\b/i.test(compact) ||
+        /\bSame Game Parlay/i.test(compact);
+
+      const hasPlayerPropTabs =
+        /\bPlayer Points\b/i.test(compact) &&
+        /\bPlayer Threes\b/i.test(compact) &&
+        /\bPlayer Rebounds\b/i.test(compact) &&
+        /\bPlayer Assists\b/i.test(compact) &&
+        /\bPlayer Combos\b/i.test(compact);
+
+      const alreadyOnPlayerPropPage =
+        /\b(Player Points|Player Threes|Player Rebounds|Player Assists|Player Combos) Odds\b/i.test(compact);
+
+      return hasNbaGamePage && hasPlayerPropTabs && !alreadyOnPlayerPropPage;
+    }
+
+    function getFanDuelCurrentNbaTabFromText(text) {
       const lines = String(text || "")
         .split("\n")
         .map((line) => clean(line))
         .filter(Boolean);
 
+      const joined = lines.join(" ");
+      const path = String(window.location?.pathname || "").toLowerCase();
+      const href = String(window.location?.href || "").toLowerCase();
+
+      // Strongest signal: page title / odds heading.
       for (const line of lines) {
-        const match = line.match(
+        const titleMatch = line.match(
           / @ .+ (Player Points|Player Threes|Player Rebounds|Player Assists|Player Combos) Odds$/i
         );
 
-        if (match?.[1]) return match[1];
+        if (titleMatch?.[1]) return titleMatch[1];
+      }
+
+      // URL fallback. FanDuel sometimes updates route/path more reliably than visible text.
+      if (/player[-_/]?points/i.test(path) || /player[-_/]?points/i.test(href)) {
+        return "Player Points";
+      }
+
+      if (/player[-_/]?threes/i.test(path) || /player[-_/]?threes/i.test(href)) {
+        return "Player Threes";
+      }
+
+      if (/player[-_/]?rebounds/i.test(path) || /player[-_/]?rebounds/i.test(href)) {
+        return "Player Rebounds";
+      }
+
+      if (/player[-_/]?assists/i.test(path) || /player[-_/]?assists/i.test(href)) {
+        return "Player Assists";
+      }
+
+      if (/player[-_/]?combos/i.test(path) || /player[-_/]?combos/i.test(href)) {
+        return "Player Combos";
+      }
+
+      // Content fallback. These are section-specific markers.
+      if (
+        /\bTo Score \d+(?:\.\d+)?\+ Points\b/i.test(joined) ||
+        /\bPlayer Points\b[\s\S]{0,120}\bOVER\b[\s\S]{0,120}\bUNDER\b/i.test(joined)
+      ) {
+        return "Player Points";
+      }
+
+      if (
+        /\b\d+(?:\.\d+)?\+ Made Threes\b/i.test(joined) ||
+        /\bPlayer Made Threes\b/i.test(joined) ||
+        /\bPlayer Threes Odds\b/i.test(joined)
+      ) {
+        return "Player Threes";
+      }
+
+      if (
+        /\bTo Record \d+(?:\.\d+)?\+ Rebounds\b/i.test(joined) ||
+        /\bPlayer Rebounds\b[\s\S]{0,120}\bOVER\b[\s\S]{0,120}\bUNDER\b/i.test(joined)
+      ) {
+        return "Player Rebounds";
+      }
+
+      if (
+        /\bTo Record \d+(?:\.\d+)?\+ Assists\b/i.test(joined) ||
+        /\bPlayer Assists\b[\s\S]{0,120}\bOVER\b[\s\S]{0,120}\bUNDER\b/i.test(joined)
+      ) {
+        return "Player Assists";
+      }
+
+      if (
+        /\bTo Record A Double Double\b/i.test(joined) ||
+        /\bTo Record A Triple Double\b/i.test(joined) ||
+        /\bPlayer Pts \+ Reb \+ Ast\b/i.test(joined) ||
+        /\bPlayer Combos Odds\b/i.test(joined)
+      ) {
+        return "Player Combos";
       }
 
       return "";
@@ -1605,7 +2232,212 @@ async function extractOddsTextFromCurrentPage() {
       return order[currentIndex + 1] || "";
     }
 
-        async function buildFanDuelOneNextNbaTabRawText() {
+    function getFanDuelNbaInternalHeaderOrder(currentTab) {
+      const tab = String(currentTab || "").trim().toLowerCase();
+
+      // FAST MODE:
+      // For Points / Threes / Rebounds / Assists, do NOT walk every ladder.
+      // Capture the visible page, open the O/U drawer, then move to the next top tab.
+      if (
+        tab === "player points" ||
+        tab === "player threes" ||
+        tab === "player rebounds" ||
+        tab === "player assists"
+      ) {
+        return [];
+      }
+
+      // Combos still need explicit drawer/header opens because each combo market
+      // is usually a separate section.
+      if (tab === "player combos") {
+        return [
+          "To Record A Double Double",
+          "To Record A Triple Double",
+          "Player Pts + Reb + Ast",
+          "Player Pts + Reb",
+          "Player Pts + Ast",
+          "Player Reb + Ast",
+        ];
+      }
+
+      return [];
+    }
+
+    function getFanDuelInternalProgressKey(currentTab) {
+      const path = String(window.location.pathname || "");
+      const tab = normalizeFanDuelLabel(currentTab || "unknown");
+      return `EV_FD_INTERNAL_PROGRESS::${path}::${tab}`;
+    }
+
+    function getFanDuelInitialInternalIndex(currentTab, text) {
+      const order = getFanDuelNbaInternalHeaderOrder(currentTab);
+      if (!order.length) return 0;
+
+      const rawText = String(text || "");
+
+      // FanDuel usually opens the first ladder by default:
+      // Points = 5+, Threes = 1+, Rebounds = 4+, Assists = 2+,
+      // Combos = Double Double.
+      // So the next thing to click should usually be index 1.
+      if (rawText.toLowerCase().includes(order[0].toLowerCase())) {
+        return 1;
+      }
+
+      return 0;
+    }
+
+    function getFanDuelNextInternalHeader(currentTab, text) {
+      const order = getFanDuelNbaInternalHeaderOrder(currentTab);
+      if (!order.length) return "";
+
+      const key = getFanDuelInternalProgressKey(currentTab);
+      const stored = Number(sessionStorage.getItem(key));
+
+      let nextIndex = Number.isFinite(stored)
+        ? stored
+        : getFanDuelInitialInternalIndex(currentTab, text);
+
+      if (nextIndex >= order.length) {
+        sessionStorage.removeItem(key);
+        return "";
+      }
+
+      const nextHeader = order[nextIndex];
+
+      sessionStorage.setItem(key, String(nextIndex + 1));
+
+      return nextHeader;
+    }
+
+    function getFanDuelOuProgressKey(currentTab) {
+      const path = String(window.location.pathname || "");
+      const tab = normalizeFanDuelLabel(currentTab || "unknown");
+      return `EV_FD_OU_PROGRESS::${path}::${tab}`;
+    }
+
+    function getFanDuelOuHeaderForTab(currentTab) {
+      const tab = String(currentTab || "").trim().toLowerCase();
+
+      if (tab === "player points") return "Player Points";
+      if (tab === "player threes") return "Player Made Threes";
+      if (tab === "player rebounds") return "Player Rebounds";
+      if (tab === "player assists") return "Player Assists";
+
+      return "";
+    }
+
+    function hasFanDuelOuDrawerBeenScheduled(currentTab) {
+      try {
+        return sessionStorage.getItem(getFanDuelOuProgressKey(currentTab)) === "done";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function markFanDuelOuDrawerScheduled(currentTab) {
+      try {
+        sessionStorage.setItem(getFanDuelOuProgressKey(currentTab), "done");
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function resetFanDuelInternalProgress(currentTab) {
+      try {
+        sessionStorage.removeItem(getFanDuelInternalProgressKey(currentTab));
+        sessionStorage.removeItem(getFanDuelOuProgressKey(currentTab));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function scheduleFanDuelOuDrawerClick(currentTab) {
+      const label = getFanDuelOuHeaderForTab(currentTab);
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const wanted = normalizeFanDuelLabel(label);
+
+          const candidates = Array.from(document.querySelectorAll("body *"))
+            .filter((el) => {
+              if (!isElementVisible(el)) return false;
+
+              const text = normalizeFanDuelLabel(getElementText(el));
+              if (text !== wanted) return false;
+
+              const rect = el.getBoundingClientRect();
+
+              return (
+                rect.width > 8 &&
+                rect.height > 8 &&
+                rect.width < 620 &&
+                rect.height < 160
+              );
+            })
+            .map((el) => {
+              const clickable = findClickableAncestor(el);
+              if (!clickable || !isElementVisible(clickable)) return null;
+
+              const rect = clickable.getBoundingClientRect();
+              if (rect.width > 760 || rect.height > 220) return null;
+
+              return clickable;
+            })
+            .filter(Boolean)
+            .sort((a, b) => {
+              // Prefer lower matching label on the page.
+              // This avoids the top navigation tab when the O/U drawer uses the same text.
+              return b.getBoundingClientRect().top - a.getBoundingClientRect().top;
+            });
+
+          const button = candidates[0];
+
+          if (button) {
+            button.scrollIntoView({ block: "center", inline: "nearest" });
+            button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            button.click();
+          }
+        } catch (err) {
+          // ignore scheduled FanDuel O/U drawer click failures
+        }
+      }, 150);
+
+      return true;
+    }
+
+       function scheduleFanDuelClickByLabel(label) {
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const button = findClickableByExactVisibleText(label, {
+            maxWidth: 520,
+            maxHeight: 140,
+          });
+
+          if (button) {
+            button.scrollIntoView({ block: "center", inline: "nearest" });
+            button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+            button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            button.click();
+          }
+        } catch (err) {
+          // ignore scheduled FanDuel click failures
+        }
+      }, 150);
+
+      return true;
+    }
+
+    async function buildFanDuelOneNextNbaTabRawText() {
       const captures = [];
 
       const initial = rawPageText();
@@ -1620,39 +2452,44 @@ async function extractOddsTextFromCurrentPage() {
       await sleep(650);
 
       const currentText = rawPageText();
+
       if (currentText && currentText.trim()) {
         captures.push(
           `FANDUEL_CURRENT_CAPTURE: ${currentTab || "unknown"}; show more ${currentShowMoreClicked}\n${currentText}`
         );
       }
 
+      const nextInternalHeader = getFanDuelNextInternalHeader(currentTab, currentText);
+
+      if (nextInternalHeader) {
+        scheduleFanDuelClickByLabel(nextInternalHeader);
+
+        captures.push(
+          `FANDUEL_SCHEDULED_INTERNAL_HEADER: ${currentTab || "unknown"} -> ${nextInternalHeader}`
+        );
+
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      const ouHeader = getFanDuelOuHeaderForTab(currentTab);
+      const ouAlreadyScheduled = hasFanDuelOuDrawerBeenScheduled(currentTab);
+
+      if (ouHeader && !ouAlreadyScheduled) {
+        markFanDuelOuDrawerScheduled(currentTab);
+        scheduleFanDuelOuDrawerClick(currentTab);
+
+        captures.push(
+          `FANDUEL_SCHEDULED_OU_DRAWER: ${currentTab || "unknown"} -> ${ouHeader}`
+        );
+
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
       const nextTab = getFanDuelNextNbaTab(currentTab);
 
-      // Important:
-      // Do NOT wait after clicking the next tab inside this injected script.
-      // FanDuel can re-render/remove the frame, which causes executeScript to return null.
-      // Instead, return the current capture safely and schedule the next tab click after return.
       if (nextTab) {
-        window.setTimeout(() => {
-          try {
-            const button = findClickableByExactVisibleText(nextTab, {
-              maxWidth: 420,
-              maxHeight: 120,
-            });
-
-            if (button) {
-              button.scrollIntoView({ block: "center", inline: "nearest" });
-              button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
-              button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-              button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }));
-              button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-              button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-              button.click();
-            }
-          } catch (err) {
-            // ignore scheduled tab-click failures
-          }
-        }, 150);
+        resetFanDuelInternalProgress(currentTab);
+        scheduleFanDuelClickByLabel(nextTab);
 
         captures.push(`FANDUEL_SCHEDULED_NEXT_TAB: ${currentTab || "unknown"} -> ${nextTab}`);
       }
@@ -1762,7 +2599,7 @@ async function extractOddsTextFromCurrentPage() {
     }
 
 
-        function getBetMgmShowMoreCandidates() {
+    function getBetMgmShowMoreCandidates() {
       const directButtons = Array.from(
         document.querySelectorAll("button, a, [role='button']")
       );
@@ -1817,7 +2654,7 @@ async function extractOddsTextFromCurrentPage() {
       const clicked = new Set();
       let totalClicked = 0;
 
-      for (let pass = 0; pass < 2; pass += 1) {
+      for (let pass = 0; pass < 3; pass += 1) {
         const candidates = getBetMgmShowMoreCandidates();
         let clickedThisPass = 0;
 
@@ -1838,15 +2675,349 @@ async function extractOddsTextFromCurrentPage() {
             await sleep(500);
           }
 
-          if (totalClicked >= 20) break;
+          if (totalClicked >= 30) break;
         }
 
-        if (totalClicked >= 20 || clickedThisPass === 0) break;
+        if (totalClicked >= 30 || clickedThisPass === 0) break;
 
         await sleep(500);
       }
 
       return totalClicked;
+    }
+
+    function isBetMgmGameLandingPage(text) {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      const hasGameNav =
+        /\bSGP\b/i.test(compact) &&
+        /\bPlayer props\b/i.test(compact) &&
+        /\bSpreads\b/i.test(compact) &&
+        /\bTotals\b/i.test(compact);
+
+      const hasGameLines =
+        /\bGame lines\b/i.test(compact) ||
+        (
+          /\bFull game\b/i.test(compact) &&
+          /\bSpread\b/i.test(compact) &&
+          /\bTotal\b/i.test(compact) &&
+          /\bMoney\b/i.test(compact)
+        );
+
+      const hasPlayerPropsTopTabs =
+        /\bPoints\b\s+\bFirst FG\b\s+\bAssists\b\s+\bRebounds\b\s+\bThree-pointers\b\s+\bCombo stats\b/i.test(compact);
+
+      return hasGameNav && hasGameLines && !hasPlayerPropsTopTabs;
+    }
+
+    function isBetMgmPlayerPropsPage(text) {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      const hasPlayerPropsTopTabs =
+        /\bPoints\b\s+\bFirst FG\b\s+\bAssists\b\s+\bRebounds\b\s+\bThree-pointers\b\s+\bCombo stats\b/i.test(compact);
+
+      const hasCorePlayerPropPage =
+        /\bPlayer props\b/i.test(compact) && hasPlayerPropsTopTabs;
+
+      const hasComboSection =
+        /\bPlayer points \+ rebounds \+ assists\b/i.test(compact) ||
+        /\bPlayer points \+ assists\b/i.test(compact) ||
+        /\bPlayer points \+ rebounds\b/i.test(compact) ||
+        /\bPlayer rebounds \+ assists\b/i.test(compact) ||
+        /\bPlayer double-double\b/i.test(compact) ||
+        /\bPlayer triple-double\b/i.test(compact);
+
+      return hasCorePlayerPropPage || hasComboSection;
+    }
+
+    function getBetMgmWorkflowActions() {
+      return [
+        // Start by explicitly opening the Points top tab.
+        // The starting Player props page may show points ladders but not the points O/U drawer.
+        { type: "tab", label: "Points" },
+        { type: "drawer", label: "Player points O/U" },
+
+        { type: "tab", label: "Assists" },
+        { type: "drawer", label: "Player assists O/U" },
+
+        { type: "tab", label: "Rebounds" },
+        { type: "drawer", label: "Player rebounds O/U" },
+
+        { type: "tab", label: "Three-pointers" },
+        { type: "drawer", label: "Player three-pointers O/U" },
+
+        { type: "tab", label: "Combo stats" },
+
+        // Combo ladders/binaries.
+        { type: "drawer", label: "Player points + assists" },
+        { type: "drawer", label: "Player rebounds + assists" },
+        { type: "drawer", label: "Player double-double" },
+        { type: "drawer", label: "Player triple-double" },
+
+        // Combo O/U drawers.
+        { type: "drawer", label: "Player points + rebounds + assists O/U" },
+        { type: "drawer", label: "Player points + assists O/U" },
+        { type: "drawer", label: "Player points + rebounds O/U" },
+        { type: "drawer", label: "Player rebounds + assists O/U" },
+      ];
+    }
+
+    function getBetMgmWorkflowProgressKey() {
+      const path = String(window.location.pathname || "");
+      return `EV_BETMGM_WORKFLOW_PROGRESS::${path}`;
+    }
+
+    function getBetMgmNextWorkflowAction() {
+      const actions = getBetMgmWorkflowActions();
+      const key = getBetMgmWorkflowProgressKey();
+      const stored = Number(sessionStorage.getItem(key));
+
+      const nextIndex = Number.isFinite(stored) ? stored : 0;
+
+      if (nextIndex >= actions.length) {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+
+      const nextAction = actions[nextIndex];
+
+      sessionStorage.setItem(key, String(nextIndex + 1));
+
+      return nextAction;
+    }
+
+    function scheduleBetMgmNavClickByLabel(label) {
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const wanted = clean(label).toLowerCase();
+
+          const candidates = Array.from(
+            document.querySelectorAll("button, a, [role='button'], [role='tab'], body *")
+          )
+            .filter((el) => {
+              if (!isElementVisible(el)) return false;
+
+              const text = clean(getElementText(el)).toLowerCase();
+              if (text !== wanted) return false;
+
+              const rect = el.getBoundingClientRect();
+
+              return (
+                rect.width > 8 &&
+                rect.height > 8 &&
+                rect.width < 640 &&
+                rect.height < 160
+              );
+            })
+            .map((el) => findClickableAncestor(el) || el)
+            .filter((el) => el && isElementVisible(el))
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+
+              return ar.top - br.top;
+            });
+
+          const button = candidates[0];
+
+          try {
+            sessionStorage.setItem(
+              "EV_BETMGM_LAST_CLICK_DEBUG",
+              JSON.stringify({
+                mode: "nav",
+                label,
+                found: !!button,
+                text: button ? clean(button.innerText || button.textContent || "") : "",
+                className: button ? String(button.className || "") : "",
+                at: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            // ignore storage failures
+          }
+
+          if (!button) {
+            console.warn("EV Parlay BetMGM nav button not found:", label);
+            return;
+          }
+
+          button.scrollIntoView({ block: "center", inline: "nearest" });
+          button.click();
+        } catch (err) {
+          console.warn("EV Parlay BetMGM scheduled nav click failed:", err);
+        }
+      }, 500);
+
+      return true;
+    }
+
+    function scheduleBetMgmTopTabClickByLabel(label) {
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const wanted = clean(label);
+
+          if (/first fg|defense|quarter|1st|2nd|3rd|4th|half/i.test(wanted)) {
+            return;
+          }
+
+          const buttons = Array.from(
+            document.querySelectorAll("button.ds-pill, button[class*='ds-pill']")
+          );
+
+          const button = buttons.find((candidate) => {
+            const text = clean(candidate.innerText || candidate.textContent || "");
+            return text.toLowerCase() === wanted.toLowerCase();
+          });
+
+          try {
+            sessionStorage.setItem(
+              "EV_BETMGM_LAST_CLICK_DEBUG",
+              JSON.stringify({
+                mode: "top_tab",
+                label: wanted,
+                found: !!button,
+                text: button ? clean(button.innerText || button.textContent || "") : "",
+                className: button ? String(button.className || "") : "",
+                at: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            // ignore storage failures
+          }
+
+          if (!button) {
+            console.warn("EV Parlay BetMGM top tab not found:", wanted);
+            return;
+          }
+
+          button.scrollIntoView({ block: "center", inline: "nearest" });
+          button.click();
+        } catch (err) {
+          console.warn("EV Parlay BetMGM scheduled top-tab click failed:", err);
+        }
+      }, 500);
+
+      return true;
+    }
+
+    function scheduleBetMgmDrawerClickByLabel(label) {
+      if (!label) return false;
+
+      window.setTimeout(() => {
+        try {
+          const wanted = clean(label);
+
+          if (/quarter|1st|2nd|3rd|4th|half/i.test(wanted)) {
+            return;
+          }
+
+          const buttons = Array.from(
+            document.querySelectorAll("button.ds-accordion-header-clickable-area")
+          );
+
+          const button = buttons.find((candidate) => {
+            const text = clean(candidate.innerText || candidate.textContent || "");
+            return text.toLowerCase() === wanted.toLowerCase();
+          });
+
+          try {
+            sessionStorage.setItem(
+              "EV_BETMGM_LAST_CLICK_DEBUG",
+              JSON.stringify({
+                mode: "drawer",
+                label: wanted,
+                found: !!button,
+                text: button ? clean(button.innerText || button.textContent || "") : "",
+                ariaExpanded: button ? button.getAttribute("aria-expanded") : "",
+                className: button ? String(button.className || "") : "",
+                at: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            // ignore storage failures
+          }
+
+          if (!button) {
+            console.warn("EV Parlay BetMGM drawer button not found:", wanted);
+            return;
+          }
+
+          button.scrollIntoView({ block: "center", inline: "nearest" });
+          button.click();
+        } catch (err) {
+          console.warn("EV Parlay BetMGM scheduled drawer click failed:", err);
+        }
+      }, 500);
+
+      return true;
+    }
+
+    function scheduleBetMgmClickByLabel(label) {
+      // Backward-compatible wrapper. Use top-tab click by default.
+      return scheduleBetMgmTopTabClickByLabel(label);
+    }
+
+    async function buildBetMgmPlayerPropsMultiPassText() {
+      const captures = [];
+
+      let clickDebug = "";
+      try {
+        clickDebug = sessionStorage.getItem("EV_BETMGM_LAST_CLICK_DEBUG") || "";
+      } catch (err) {
+        clickDebug = "";
+      }
+
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(
+          `BETMGM_INITIAL_CAPTURE${clickDebug ? `\nBETMGM_LAST_CLICK_DEBUG: ${clickDebug}` : ""}\n${initial}`
+        );
+      }
+
+      if (isBetMgmGameLandingPage(initial)) {
+        scheduleBetMgmNavClickByLabel("Player props");
+
+        captures.push("BETMGM_SCHEDULED_PLAYER_PROPS: Player props");
+
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      const showMoreClicked = await clickBetMgmShowMoreOnly();
+      await sleep(650);
+
+      const currentText = rawPageText();
+      if (currentText && currentText.trim()) {
+        captures.push(`BETMGM_CURRENT_CAPTURE: show more ${showMoreClicked}\n${currentText}`);
+      }
+
+      if (!isBetMgmPlayerPropsPage(currentText)) {
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      const nextAction = getBetMgmNextWorkflowAction();
+
+      if (!nextAction) {
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      if (nextAction.type === "tab") {
+        scheduleBetMgmTopTabClickByLabel(nextAction.label);
+        captures.push(`BETMGM_SCHEDULED_TOP_TAB: ${nextAction.label}`);
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      if (nextAction.type === "drawer") {
+        scheduleBetMgmDrawerClickByLabel(nextAction.label);
+        captures.push(`BETMGM_SCHEDULED_DRAWER: ${nextAction.label}`);
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
     }
 
     async function buildBetMgmShowMoreRawText() {
@@ -1887,10 +3058,9 @@ async function extractOddsTextFromCurrentPage() {
 
   const detectedSource = detectBookSource();
 
-  // BetMGM keeps the small Show More helper because that has been stable.
   if (detectedSource === "BetMGM") {
     try {
-      const betMgmText = await buildBetMgmShowMoreRawText();
+      const betMgmText = await buildBetMgmPlayerPropsMultiPassText();
 
       return {
         source: detectedSource,
@@ -1904,11 +3074,21 @@ async function extractOddsTextFromCurrentPage() {
     }
   }
 
-  // FanDuel test version 1:
-  // Only click visible Show More buttons, then return raw text.
-  // This does NOT click section tabs or market headers.
-    if (detectedSource === "FanDuel") {
+  if (detectedSource === "FanDuel") {
     try {
+      const fanDuelRaw = rawPageText();
+
+      if (isFanDuelNbaGameLandingPage(fanDuelRaw)) {
+        scheduleFanDuelClickByLabel("Player Points");
+
+        return {
+          source: detectedSource,
+          text: "",
+          action: "navigate_only",
+          message: "FanDuel game landing page detected. Moved to Player Points. Click the extension again after the page loads.",
+        };
+      }
+
       const fanDuelText = await buildFanDuelOneNextNbaTabRawText();
 
       return {
@@ -1923,10 +3103,23 @@ async function extractOddsTextFromCurrentPage() {
     }
   }
 
-  if (
-    detectedSource === "Pinnacle" ||
-    detectedSource === "DraftKings"
-  ) {
+  if (detectedSource === "DraftKings") {
+    try {
+      const draftKingsText = await buildDraftKingsOneStepRawText();
+
+      return {
+        source: detectedSource,
+        text: String(draftKingsText || "").trim() || rawPageText(),
+      };
+    } catch (err) {
+      return {
+        source: detectedSource,
+        text: rawPageText(),
+      };
+    }
+  }
+
+  if (detectedSource === "Pinnacle") {
     return {
       source: detectedSource,
       text: rawPageText(),

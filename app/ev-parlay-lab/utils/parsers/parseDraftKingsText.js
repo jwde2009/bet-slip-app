@@ -490,82 +490,170 @@ function parseDraftKingsYesNoSections(block, event, context) {
   const rows = [];
 
   const sections = [
-    ["Double-Double", "double_double"],
-    ["Double Double", "double_double"],
-    ["Triple-Double", "triple_double"],
-    ["Triple Double", "triple_double"],
+    {
+      headers: [
+        "Double-Double",
+        "Double Double",
+        "To Record A Double-Double",
+        "To Record A Double Double",
+      ],
+      suffixes: [
+        "Double-Double",
+        "Double Double",
+        "To Record A Double-Double",
+        "To Record A Double Double",
+      ],
+      marketType: "double_double",
+    },
+    {
+      headers: [
+        "Triple-Double",
+        "Triple Double",
+        "To Record A Triple-Double",
+        "To Record A Triple Double",
+      ],
+      suffixes: [
+        "Triple-Double",
+        "Triple Double",
+        "To Record A Triple-Double",
+        "To Record A Triple Double",
+      ],
+      marketType: "triple_double",
+    },
   ];
 
-  for (const [header, marketType] of sections) {
-    const headerPattern = new RegExp(`^${escapeRegExp(header)}$`, "i");
-    const idx = block.findIndex((line) => headerPattern.test(normalizeLine(line)));
-    if (idx === -1) continue;
+  for (const section of sections) {
+    const sectionIndexes = [];
 
-    const end = findNextDraftKingsSectionEnd(block, idx + 1);
-    const suffixPattern = new RegExp(`\\s*${escapeRegExp(header)}$`, "i");
+    for (let i = 0; i < block.length; i += 1) {
+      const line = normalizeLine(block[i]);
 
-    for (let i = idx + 1; i < end - 1; i += 1) {
-      const playerLabel = normalizeLine(block[i]);
-
-      if (isSectionBreak(playerLabel) || isHardStopLine(playerLabel)) break;
-      if (!suffixPattern.test(playerLabel)) continue;
-
-      const player = playerLabel.replace(suffixPattern, "").trim();
-      if (!player) continue;
-
-      let yesIndex = -1;
-
-      for (let j = i + 1; j < Math.min(end, i + 10); j += 1) {
-        const token = normalizeLine(block[j]);
-
-        if (/^Yes$/i.test(token)) {
-          yesIndex = j;
-          break;
-        }
-
-        if (suffixPattern.test(token) || isSectionBreak(token) || isHardStopLine(token)) {
-          break;
-        }
+      if (
+        section.headers.some((header) =>
+          new RegExp(`^${escapeRegExp(header)}$`, "i").test(line)
+        )
+      ) {
+        sectionIndexes.push(i);
       }
+    }
 
-      if (yesIndex === -1) continue;
+    for (const idx of sectionIndexes) {
+      const end = findNextDraftKingsYesNoSectionEnd(block, idx + 1);
 
-      let yesOdds = null;
-      let consumedIndex = yesIndex;
+      for (let i = idx + 1; i < end - 2; i += 1) {
+        const playerLabel = normalizeLine(block[i]);
 
-      for (let j = yesIndex + 1; j < Math.min(end, yesIndex + 18); j += 1) {
-        const token = normalizeLine(block[j]);
+        if (!playerLabel) continue;
+        if (isSectionBreak(playerLabel) || isHardStopLine(playerLabel)) break;
 
-        if (suffixPattern.test(token) || isSectionBreak(token) || isHardStopLine(token)) {
-          break;
+        const matchedSuffix = section.suffixes.find((suffix) =>
+          new RegExp(`\\s*${escapeRegExp(suffix)}$`, "i").test(playerLabel)
+        );
+
+        if (!matchedSuffix) continue;
+
+        const player = playerLabel
+          .replace(new RegExp(`\\s*${escapeRegExp(matchedSuffix)}$`, "i"), "")
+          .trim();
+
+        if (!player || !looksLikePlayerName(player)) continue;
+
+        let yesIndex = -1;
+
+        for (let j = i + 1; j < Math.min(end, i + 12); j += 1) {
+          const token = normalizeLine(block[j]);
+
+          if (/^Yes$/i.test(token)) {
+            yesIndex = j;
+            break;
+          }
+
+          if (
+            j > i + 1 &&
+            section.suffixes.some((suffix) =>
+              new RegExp(`\\s*${escapeRegExp(suffix)}$`, "i").test(token)
+            )
+          ) {
+            break;
+          }
+
+          if (isSectionBreak(token) || isHardStopLine(token)) break;
         }
 
-        const odds = parseAmericanOdds(token);
-        if (odds !== null) {
-          yesOdds = odds;
-          consumedIndex = j;
-          break;
+        if (yesIndex === -1) continue;
+
+        let yesOdds = null;
+        let consumedIndex = yesIndex;
+
+        for (let j = yesIndex + 1; j < Math.min(end, yesIndex + 42); j += 1) {
+          const token = normalizeLine(block[j]);
+
+          if (
+            j > yesIndex + 1 &&
+            section.suffixes.some((suffix) =>
+              new RegExp(`\\s*${escapeRegExp(suffix)}$`, "i").test(token)
+            )
+          ) {
+            break;
+          }
+
+          if (isSectionBreak(token) || isHardStopLine(token)) break;
+
+          const odds = parseAmericanOdds(token);
+
+          if (odds !== null) {
+            yesOdds = odds;
+            consumedIndex = j;
+            break;
+          }
         }
+
+        if (yesOdds === null) continue;
+
+        rows.push(
+          makeRow({
+            event,
+            selection: `${player} Yes`,
+            marketType: section.marketType,
+            lineValue: null,
+            oddsAmerican: yesOdds,
+            context,
+          })
+        );
+
+        i = consumedIndex;
       }
-
-      if (yesOdds === null) continue;
-
-      rows.push(
-        makeRow({
-          event,
-          selection: `${player} | Yes`,
-          marketType: String(marketType),
-          lineValue: null,
-          oddsAmerican: yesOdds,
-          context,
-        })
-      );
-
-      i = Math.max(i, consumedIndex);
     }
   }
 
   return rows;
+}
+
+function findNextDraftKingsYesNoSectionEnd(block, startIndex) {
+  for (let i = startIndex; i < block.length; i += 1) {
+    const line = normalizeLine(block[i]);
+
+    if (isHardStopLine(line)) return i;
+
+    if (
+      /^Pts \+ Reb$/i.test(line) ||
+      /^Pts \+ Ast$/i.test(line) ||
+      /^Reb \+ Ast$/i.test(line) ||
+      /^Pts \+ Reb \+ Ast O\/U$/i.test(line) ||
+      /^Pts \+ Reb O\/U$/i.test(line) ||
+      /^Pts \+ Ast O\/U$/i.test(line) ||
+      /^Reb \+ Ast O\/U$/i.test(line) ||
+      /^Betting News$/i.test(line) ||
+      /^Alternate Spread$/i.test(line) ||
+      /^Points - 1st/i.test(line) ||
+      /^Rebounds - 1st/i.test(line) ||
+      /^Assists - 1st/i.test(line)
+    ) {
+      return i;
+    }
+  }
+
+  return block.length;
 }
 
 function findNextDraftKingsSectionEnd(block, startIndex) {

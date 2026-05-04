@@ -7,8 +7,8 @@ export function normalizeParsedRows(rows) {
     const sport = String(row.sport || "").toUpperCase();
     const { homeTeam, awayTeam } = inferTeamsFromEvent(row.eventLabelRaw || "");
 
-    const normalizedHome = normalizeTeamNameBySport(homeTeam, sport) || homeTeam;
-    const normalizedAway = normalizeTeamNameBySport(awayTeam, sport) || awayTeam;
+    const normalizedHome = cleanTeam(homeTeam, sport);
+    const normalizedAway = cleanTeam(awayTeam, sport);
 
     return {
       ...row,
@@ -42,6 +42,7 @@ function buildEventPlayerAliasMap(rows) {
     if (!isPlayerPropMarket(row.marketType)) continue;
 
     const eventKey = buildEventAliasKey(row);
+    const sportKey = buildSportAliasKey(row);
     const rawSelection = String(row.selectionRaw || row.selectionNormalized || "");
     const baseName = extractBasePlayerName(rawSelection);
 
@@ -51,9 +52,18 @@ function buildEventPlayerAliasMap(rows) {
       map.set(eventKey, []);
     }
 
-    const current = map.get(eventKey);
-    if (!current.includes(baseName)) {
-      current.push(baseName);
+    const eventNames = map.get(eventKey);
+    if (!eventNames.includes(baseName)) {
+      eventNames.push(baseName);
+    }
+
+    if (!map.has(sportKey)) {
+      map.set(sportKey, []);
+    }
+
+    const sportNames = map.get(sportKey);
+    if (!sportNames.includes(baseName)) {
+      sportNames.push(baseName);
     }
   }
 
@@ -62,18 +72,23 @@ function buildEventPlayerAliasMap(rows) {
 
 function buildEventAliasKey(row) {
   const sport = String(row.sport || "").toUpperCase();
-  const away = normalizeTeamNameBySport(row.awayTeam || row.awayTeamRaw || "", sport) || "";
-  const home = normalizeTeamNameBySport(row.homeTeam || row.homeTeamRaw || "", sport) || "";
+  const away = cleanTeam(row.awayTeam || row.awayTeamRaw || "", sport);
+  const home = cleanTeam(row.homeTeam || row.homeTeamRaw || "", sport);
 
   if (away && home) {
     return `${away} @ ${home}`;
   }
 
   const inferred = inferTeamsFromEvent(row.eventLabelRaw || "");
-  const inferredAway = normalizeTeamNameBySport(inferred.awayTeam || "", sport) || inferred.awayTeam || "";
-  const inferredHome = normalizeTeamNameBySport(inferred.homeTeam || "", sport) || inferred.homeTeam || "";
+  const inferredAway = cleanTeam(inferred.awayTeam || "", sport);
+  const inferredHome = cleanTeam(inferred.homeTeam || "", sport);
 
   return `${inferredAway} @ ${inferredHome}`;
+}
+
+function buildSportAliasKey(row) {
+  const sport = String(row.sport || "").trim().toUpperCase();
+  return `__sport__::${sport || "UNKNOWN"}`;
 }
 
 function normalizeSelectionWithinEvent(row, rawSelection, aliasMapByEvent) {
@@ -81,8 +96,8 @@ function normalizeSelectionWithinEvent(row, rawSelection, aliasMapByEvent) {
   const sport = String(row.sport || "").toUpperCase();
   const cleanedSelection = String(rawSelection || "").trim();
 
-  if (["moneyline_2way","moneyline_3way","spread"].includes(marketType)) {
-    return normalizeTeamNameBySport(cleanedSelection, sport) || cleanedSelection;
+  if (["moneyline_2way", "moneyline_3way", "spread"].includes(marketType)) {
+    return cleanTeam(cleanedSelection, sport);
   }
 
   if (/^total$/i.test(marketType)) {
@@ -112,7 +127,7 @@ function resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent) {
   if (!looksLikeAbbreviatedPlayerName(trimmed)) return trimmed;
 
   const eventKey = buildEventAliasKey(row);
-  const candidates = aliasMapByEvent.get(eventKey) || [];
+  const candidates = Array.from(new Set(aliasMapByEvent.get(eventKey) || []));
 
   const abbreviated = normalizeSimpleName(trimmed);
   const abbreviatedParts = abbreviated.split(" ").filter(Boolean);
@@ -129,17 +144,36 @@ function resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent) {
     const candidateFirst = candidateParts[0];
     const candidateLast = candidateParts[candidateParts.length - 1];
 
-    return (
-      candidateLast === abbreviatedLast &&
-      candidateFirst.startsWith(abbreviatedFirst)
-    );
+    if (candidateLast !== abbreviatedLast) return false;
+
+    return isFirstNameAbbreviationMatch(abbreviatedFirst, candidateFirst);
   });
 
   if (matches.length === 1) {
     return matches[0];
   }
 
+  // Safety rule:
+  // If J. Jones could be John Jones or James Jones in the same event,
+  // do not guess. Leave the abbreviated name unchanged.
   return trimmed;
+}
+
+function isFirstNameAbbreviationMatch(shortFirst, fullFirst) {
+  const short = normalizeSimpleName(shortFirst);
+  const full = normalizeSimpleName(fullFirst);
+
+  if (!short || !full) return false;
+  if (short === full) return true;
+
+  // A. Black -> Anthony Black
+  if (short.length === 1) {
+    return full.charAt(0) === short;
+  }
+
+  // Don. Mitchell -> Donovan Mitchell
+  // Ja. Walter -> Ja'Kobe Walter, if that shape appears
+  return full.startsWith(short);
 }
 
 function extractBasePlayerName(text) {
@@ -188,8 +222,17 @@ function looksLikeAbbreviatedPlayerName(text) {
   const parts = value.split(/\s+/);
   if (parts.length < 2) return false;
 
-  const first = parts[0].replace(/\./g, "");
-  return first.length <= 2;
+  const firstRaw = parts[0];
+  const first = firstRaw.replace(/\./g, "");
+
+  // A. Black / A Black
+  if (first.length <= 2) return true;
+
+  // Don. Mitchell / Don Mitchell-style short forms.
+  // The period is the safest signal that this is not a complete first name.
+  if (firstRaw.includes(".")) return true;
+
+  return false;
 }
 
 function normalizePlayerName(text) {
@@ -216,4 +259,84 @@ function inferTeamsFromEvent(eventLabelRaw = "") {
   }
 
   return { homeTeam: "", awayTeam: "" };
+}
+
+function cleanTeam(value = "", sport = "") {
+  const cleaned = cleanText(value);
+  const sportKey = String(sport || "").toUpperCase();
+
+  const direct = normalizeTeamNameBySport(cleaned, sportKey);
+  if (direct) return direct;
+
+  if (sportKey === "NBA") {
+    const nbaName = normalizeNbaTeamByContainedName(cleaned);
+    if (nbaName) return nbaName;
+  }
+
+  return cleaned;
+}
+
+function cleanText(value = "") {
+  return String(value || "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeNbaTeamByContainedName(value = "") {
+  const text = cleanText(value).toLowerCase();
+
+  if (!text) return "";
+
+  const teams = [
+    ["hawks", "atlanta", "atl", "Atlanta Hawks"],
+    ["celtics", "boston", "bos", "Boston Celtics"],
+    ["nets", "brooklyn", "bkn", "Brooklyn Nets"],
+    ["hornets", "charlotte", "cha", "Charlotte Hornets"],
+    ["bulls", "chicago", "chi", "Chicago Bulls"],
+    ["cavaliers", "cleveland", "cavs", "cle", "Cleveland Cavaliers"],
+    ["mavericks", "dallas", "mavs", "dal", "Dallas Mavericks"],
+    ["nuggets", "denver", "den", "Denver Nuggets"],
+    ["pistons", "detroit", "det", "Detroit Pistons"],
+    ["warriors", "golden state", "gsw", "Golden State Warriors"],
+    ["rockets", "houston", "hou", "Houston Rockets"],
+    ["pacers", "indiana", "ind", "Indiana Pacers"],
+    ["clippers", "la clippers", "lac", "Los Angeles Clippers"],
+    ["lakers", "la lakers", "lal", "Los Angeles Lakers"],
+    ["grizzlies", "memphis", "mem", "Memphis Grizzlies"],
+    ["heat", "miami", "mia", "Miami Heat"],
+    ["bucks", "milwaukee", "mil", "Milwaukee Bucks"],
+    ["timberwolves", "minnesota", "wolves", "min", "Minnesota Timberwolves"],
+    ["pelicans", "new orleans", "nop", "no pelicans", "New Orleans Pelicans"],
+    ["knicks", "new york", "ny knicks", "nyk", "New York Knicks"],
+    ["thunder", "oklahoma city", "okc", "Oklahoma City Thunder"],
+    ["magic", "orlando", "orl", "Orlando Magic"],
+    ["76ers", "sixers", "philadelphia", "phi", "Philadelphia 76ers"],
+    ["suns", "phoenix", "phx", "Phoenix Suns"],
+    ["trail blazers", "portland", "por", "Portland Trail Blazers"],
+    ["kings", "sacramento", "sac", "Sacramento Kings"],
+    ["spurs", "san antonio", "sa spurs", "sas", "San Antonio Spurs"],
+    ["raptors", "toronto", "tor", "Toronto Raptors"],
+    ["jazz", "utah", "uta", "Utah Jazz"],
+    ["wizards", "washington", "wsh", "was", "Washington Wizards"],
+  ];
+
+  for (const team of teams) {
+    const fullName = team[team.length - 1];
+    const aliases = team.slice(0, -1);
+
+    for (const alias of aliases) {
+      const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i");
+
+      if (pattern.test(text)) {
+        return fullName;
+      }
+    }
+  }
+
+  return "";
 }
