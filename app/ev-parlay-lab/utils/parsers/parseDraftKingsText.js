@@ -44,7 +44,7 @@ function parseDraftKingsDetailPage(lines, game, context) {
   // Main game lines block
   for (let i = 0; i < block.length - 18; i += 1) {
     if (
-      /^Game$/i.test(block[i]) &&
+      /^(Game|Game Lines)$/i.test(block[i]) &&
       /^(Spread|Puck Line)$/i.test(block[i + 1]) &&
       /^Total$/i.test(block[i + 2]) &&
       /^Moneyline$/i.test(block[i + 3]) &&
@@ -673,10 +673,27 @@ function parsePlusNumber(text) {
 function parseDraftKingsNhlGoalsSection(block, event, context) {
   const rows = [];
 
+  const stopBeforeNextGoalsSection = (text) =>
+    /^(Player Goal Milestones|Goalscorer - 1st Period|1st Goalscorer - Team|Power Play Goals|Shorthanded Goals|Shots on Goal|Points|Assists|Saves O\/U|Shutout|Betting News)$/i.test(
+      normalizeLine(text)
+    );
+
+  const stopAfterMilestones = (text) =>
+    /^(Goalscorer - 1st Period|1st Goalscorer - Team|Power Play Goals|Shorthanded Goals|Shots on Goal|Points|Assists|Saves O\/U|Shutout|Betting News)$/i.test(
+      normalizeLine(text)
+    );
+
   console.log("DK NHL GOALS BLOCK PREVIEW", block.slice(0, 120));
 
   for (let i = 0; i < block.length - 5; i += 1) {
-    // Anytime / First / Last Goalscorer
+    // DraftKings NHL visual table:
+    // Anytime Goalscorer / First Goalscorer / Last Goalscorer
+    // Player
+    // G:
+    // 0 1 2 3...
+    // anytime odds
+    // first odds
+    // last odds
     if (
       /^Anytime Goalscorer$/i.test(block[i]) &&
       /^First Goalscorer$/i.test(block[i + 1]) &&
@@ -689,20 +706,40 @@ function parseDraftKingsNhlGoalsSection(block, event, context) {
         header3: block[i + 2],
       });
 
-      for (let j = i + 3; j < block.length - 3; j += 4) {
-        const player = block[j];
-        const anytimeOdds = parseAmericanOdds(block[j + 1]);
-        const firstOdds = parseAmericanOdds(block[j + 2]);
-        const lastOdds = parseAmericanOdds(block[j + 3]);
+      for (let j = i + 3; j < block.length; j += 1) {
+        const player = normalizeLine(block[j]);
+
+        if (stopBeforeNextGoalsSection(player) || isHardStopLine(player)) break;
+        if (!looksLikePlayerName(player)) continue;
+
+        const odds = [];
+        let consumedIndex = j;
+
+        for (let k = j + 1; k < Math.min(block.length, j + 80); k += 1) {
+          const token = normalizeLine(block[k]);
+
+          if (stopBeforeNextGoalsSection(token) || isHardStopLine(token)) break;
+
+          // Once we have at least one price, the next player means this row is done.
+          if (k > j + 1 && odds.length > 0 && looksLikePlayerName(token)) break;
+
+          const parsedOdds = parseAmericanOdds(token);
+          if (parsedOdds !== null) {
+            odds.push(parsedOdds);
+            consumedIndex = k;
+
+            if (odds.length >= 3) break;
+          }
+        }
+
+        const anytimeOdds = odds[0] ?? null;
 
         console.log("DK GOALSCORER ROW CANDIDATE", {
           player,
+          odds,
           anytimeOdds,
-          firstOdds,
-          lastOdds,
         });
 
-        if (!looksLikePlayerName(player)) break;
         if (anytimeOdds === null) continue;
 
         rows.push(
@@ -715,17 +752,51 @@ function parseDraftKingsNhlGoalsSection(block, event, context) {
             context,
           })
         );
+
+        j = consumedIndex;
       }
     }
 
-    // Player Goal Milestones
+    // Player Goal Milestones:
+    // Player
+    // G:
+    // 0 1 2 3...
+    // 2+
+    // odds
+    // 3+
     if (/^Player Goal Milestones$/i.test(block[i])) {
       console.log("DK FOUND GOAL MILESTONES", { index: i });
 
-      for (let j = i + 1; j < block.length - 2; j += 3) {
-        const player = block[j];
-        const milestone = normalizeLine(block[j + 1]);
-        const odds = parseAmericanOdds(block[j + 2]);
+      for (let j = i + 1; j < block.length; j += 1) {
+        const player = normalizeLine(block[j]);
+
+        if (stopAfterMilestones(player) || isHardStopLine(player)) break;
+        if (!looksLikePlayerName(player)) continue;
+
+        let milestone = null;
+        let odds = null;
+        let consumedIndex = j;
+
+        for (let k = j + 1; k < Math.min(block.length, j + 80); k += 1) {
+          const token = normalizeLine(block[k]);
+
+          if (stopAfterMilestones(token) || isHardStopLine(token)) break;
+          if (k > j + 1 && milestone !== null && odds !== null && looksLikePlayerName(token)) break;
+
+          const plus = parsePlusNumber(token);
+          if (milestone === null && plus !== null) {
+            milestone = plus;
+            consumedIndex = k;
+            continue;
+          }
+
+          const parsedOdds = parseAmericanOdds(token);
+          if (milestone !== null && odds === null && parsedOdds !== null) {
+            odds = parsedOdds;
+            consumedIndex = k;
+            break;
+          }
+        }
 
         console.log("DK GOAL MILESTONE CANDIDATE", {
           player,
@@ -733,23 +804,21 @@ function parseDraftKingsNhlGoalsSection(block, event, context) {
           odds,
         });
 
-        if (!looksLikePlayerName(player)) break;
-        if (!/^\d+\+$/.test(milestone)) continue;
-        if (odds === null) continue;
-
-        const goalsNeeded = Number(milestone.replace("+", ""));
-        if (!Number.isFinite(goalsNeeded) || goalsNeeded < 1) continue;
+        if (milestone === null || odds === null) continue;
+        if (!Number.isFinite(milestone) || milestone < 1) continue;
 
         rows.push(
           makeRow({
             event,
             selection: `${player} | Over`,
             marketType: "player_goals",
-            lineValue: goalsNeeded - 0.5,
+            lineValue: milestone - 0.5,
             oddsAmerican: odds,
             context,
           })
         );
+
+        j = consumedIndex;
       }
     }
   }

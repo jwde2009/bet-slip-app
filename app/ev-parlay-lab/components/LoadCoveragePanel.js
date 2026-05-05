@@ -338,8 +338,7 @@ function buildCoverage(rows = []) {
   for (const row of rows || []) {
     const bookmaker = clean(row.sportsbook || row.bookmaker || "Unknown Book");
     const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
-    const rawEventName = clean(row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event");
-    const eventName = normalizeCoverageEventName(rawEventName);
+    const eventName = getCoverageEventName(row);
     const marketType = clean(row.marketType || row.betType || "unknown_market");
     const isSharp = isCoverageSharpRow(row);
     const isTarget = !isSharp;
@@ -532,9 +531,7 @@ function buildSharpMarketMap(rows = []) {
 
     const bookmaker = clean(row.sportsbook || row.bookmaker || "Sharp");
     const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
-    const eventName = normalizeCoverageEventName(
-      row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event"
-    );
+    const eventName = getCoverageEventName(row);
     const marketType = clean(row.marketType || row.betType || "unknown_market");
 
     if (!sport || !eventName || !marketType) continue;
@@ -578,6 +575,19 @@ function formatSharpBooksLabel(sharpBooks = []) {
   return `${unique.slice(0, -1).join(", ")} & ${unique[unique.length - 1]}`;
 }
 
+function getCoverageEventName(row = {}) {
+  const away = clean(row.awayTeam || row.awayTeamRaw || "");
+  const home = clean(row.homeTeam || row.homeTeamRaw || "");
+
+  if (away && home) {
+    return `${normalizeCoverageTeamName(away)} @ ${normalizeCoverageTeamName(home)}`;
+  }
+
+  return normalizeCoverageEventName(
+    row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event"
+  );
+}
+
 function normalizeCoverageEventName(value) {
   const text = clean(value).replace(/\s+/g, " ");
 
@@ -600,6 +610,7 @@ function normalizeCoverageTeamName(value) {
   const lower = text.toLowerCase();
 
   const aliases = new Map([
+    // NBA
     ["knicks", "New York Knicks"],
     ["ny knicks", "New York Knicks"],
     ["new york knicks", "New York Knicks"],
@@ -649,6 +660,131 @@ function normalizeCoverageTeamName(value) {
     ["rockets", "Houston Rockets"],
     ["hou rockets", "Houston Rockets"],
     ["houston rockets", "Houston Rockets"],
+
+    // NHL
+    ["wild", "Minnesota Wild"],
+    ["min wild", "Minnesota Wild"],
+    ["minnesota wild", "Minnesota Wild"],
+
+    ["avalanche", "Colorado Avalanche"],
+    ["col avalanche", "Colorado Avalanche"],
+    ["colorado avalanche", "Colorado Avalanche"],
+
+    ["hurricanes", "Carolina Hurricanes"],
+    ["car hurricanes", "Carolina Hurricanes"],
+    ["carolina hurricanes", "Carolina Hurricanes"],
+
+    ["flyers", "Philadelphia Flyers"],
+    ["phi flyers", "Philadelphia Flyers"],
+    ["philadelphia flyers", "Philadelphia Flyers"],
+
+    ["canadiens", "Montreal Canadiens"],
+    ["mtl canadiens", "Montreal Canadiens"],
+    ["mon canadiens", "Montreal Canadiens"],
+    ["montreal canadiens", "Montreal Canadiens"],
+
+    ["sabres", "Buffalo Sabres"],
+    ["buf sabres", "Buffalo Sabres"],
+    ["buffalo sabres", "Buffalo Sabres"],
+
+    ["bruins", "Boston Bruins"],
+    ["bos bruins", "Boston Bruins"],
+    ["boston bruins", "Boston Bruins"],
+
+    ["rangers", "New York Rangers"],
+    ["ny rangers", "New York Rangers"],
+    ["nyr", "New York Rangers"],
+    ["new york rangers", "New York Rangers"],
+
+    ["islanders", "New York Islanders"],
+    ["ny islanders", "New York Islanders"],
+    ["nyi islanders", "New York Islanders"],
+    ["new york islanders", "New York Islanders"],
+
+    ["stars", "Dallas Stars"],
+    ["dal stars", "Dallas Stars"],
+    ["dallas stars", "Dallas Stars"],
+
+    ["jets", "Winnipeg Jets"],
+    ["wpg jets", "Winnipeg Jets"],
+    ["winnipeg jets", "Winnipeg Jets"],
+
+    ["oilers", "Edmonton Oilers"],
+    ["edm oilers", "Edmonton Oilers"],
+    ["edmonton oilers", "Edmonton Oilers"],
+
+    ["ducks", "Anaheim Ducks"],
+    ["ana ducks", "Anaheim Ducks"],
+    ["anaheim ducks", "Anaheim Ducks"],
+
+    ["penguins", "Pittsburgh Penguins"],
+    ["pit penguins", "Pittsburgh Penguins"],
+    ["pittsburgh penguins", "Pittsburgh Penguins"],
+
+    ["lightning", "Tampa Bay Lightning"],
+    ["tb lightning", "Tampa Bay Lightning"],
+    ["tbl lightning", "Tampa Bay Lightning"],
+    ["tampa bay lightning", "Tampa Bay Lightning"],
+
+    ["panthers", "Florida Panthers"],
+    ["fla panthers", "Florida Panthers"],
+    ["florida panthers", "Florida Panthers"],
+
+    ["capitals", "Washington Capitals"],
+    ["wsh capitals", "Washington Capitals"],
+    ["washington capitals", "Washington Capitals"],
+
+    ["maple leafs", "Toronto Maple Leafs"],
+    ["leafs", "Toronto Maple Leafs"],
+    ["tor maple leafs", "Toronto Maple Leafs"],
+    ["toronto maple leafs", "Toronto Maple Leafs"],
+
+    ["devils", "New Jersey Devils"],
+    ["nj devils", "New Jersey Devils"],
+    ["njd devils", "New Jersey Devils"],
+    ["new jersey devils", "New Jersey Devils"],
+
+    ["kings", "Los Angeles Kings"],
+    ["la kings", "Los Angeles Kings"],
+    ["lak kings", "Los Angeles Kings"],
+    ["los angeles kings", "Los Angeles Kings"],
+
+    ["senators", "Ottawa Senators"],
+    ["ott senators", "Ottawa Senators"],
+    ["ottawa senators", "Ottawa Senators"],
+
+    ["kraken", "Seattle Kraken"],
+    ["sea kraken", "Seattle Kraken"],
+    ["seattle kraken", "Seattle Kraken"],
+
+    ["predators", "Nashville Predators"],
+    ["nsh predators", "Nashville Predators"],
+    ["nashville predators", "Nashville Predators"],
+
+    ["blue jackets", "Columbus Blue Jackets"],
+    ["cbj blue jackets", "Columbus Blue Jackets"],
+    ["columbus blue jackets", "Columbus Blue Jackets"],
+
+    ["red wings", "Detroit Red Wings"],
+    ["det red wings", "Detroit Red Wings"],
+    ["detroit red wings", "Detroit Red Wings"],
+
+    ["blackhawks", "Chicago Blackhawks"],
+    ["chi blackhawks", "Chicago Blackhawks"],
+    ["chicago blackhawks", "Chicago Blackhawks"],
+
+    ["sharks", "San Jose Sharks"],
+    ["sj sharks", "San Jose Sharks"],
+    ["san jose sharks", "San Jose Sharks"],
+
+    ["blues", "St. Louis Blues"],
+    ["st louis blues", "St. Louis Blues"],
+    ["st. louis blues", "St. Louis Blues"],
+
+    ["golden knights", "Vegas Golden Knights"],
+    ["knights", "Vegas Golden Knights"],
+    ["vegas", "Vegas Golden Knights"],
+    ["vegas golden knights", "Vegas Golden Knights"],
   ]);
 
   return aliases.get(lower) || text;

@@ -1361,22 +1361,38 @@ async function extractOddsTextFromCurrentPage() {
       return mergeRawTextBlocks(captures);
     }
 
-          function normalizeDraftKingsLabel(value) {
-      return clean(value)
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
-    }
+function normalizeDraftKingsLabel(value) {
+  const text = clean(value)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 
-    function isDraftKingsNoisyLabel(value) {
-      return /popular|quick hits|game lines|sgp|builder|stats|halves|quarters|team props|game props|specials|featured|same game parlay|all odds|my bets/i.test(
-        String(value || "")
-      );
-    }
+  if (/^goalie props?$/i.test(text)) return "goalie";
+  if (/^goalies?$/i.test(text)) return "goalie";
+  if (/^goalie \/ defense$/i.test(text)) return "goalie";
+  if (/^goalie\/defense$/i.test(text)) return "goalie";
+
+  if (/^goal scorer$/i.test(text)) return "goalscorer";
+  if (/^anytime goalscorer$/i.test(text)) return "goalscorer";
+  if (/^anytime goal scorer$/i.test(text)) return "goalscorer";
+
+  if (/^sog$/i.test(text)) return "shots on goal";
+  if (/^player shots$/i.test(text)) return "shots on goal";
+  if (/^total shots$/i.test(text)) return "shots on goal";
+
+  return text;
+}
+
+function isDraftKingsNoisyLabel(value) {
+  return /popular|quick hits|sgp|builder|stats|halves|quarters|team props|game props|specials|featured|same game parlay|all odds|my bets/i.test(
+    String(value || "")
+  );
+}
 
     function getDraftKingsMarketContentPattern(label) {
       const normalized = normalizeDraftKingsLabel(label);
 
+      if (normalized === "game lines") return /\b(Puck Line|Spread|Total|Moneyline)\b/i;
       if (normalized === "points") return /\b(Points|Points O\/U|PPG)\b/i;
       if (normalized === "threes") return /\b(Threes|Threes O\/U|Made Threes|3\+ Made Threes)\b/i;
       if (normalized === "rebounds") return /\b(Rebounds|Rebounds O\/U|RPG)\b/i;
@@ -1525,33 +1541,51 @@ async function extractOddsTextFromCurrentPage() {
       }
     }
 
-    function getDraftKingsWorkflowLabels() {
-      return [
-        "POINTS",
-        "THREES",
-        "REBOUNDS",
-        "ASSISTS",
-        "COMBOS",
+function getDraftKingsWorkflowLabels() {
+  const pageText = clean(document.body?.innerText || "").toLowerCase();
 
-        // Combo subheaders after COMBOS is open.
-        "Pts + Reb + Ast",
-        "Pts + Reb",
-        "Pts + Ast",
-        "Reb + Ast",
-        "Double-Double",
-        "Double Double",
-        "To Record A Double-Double",
-        "To Record A Double Double",
-        "Triple-Double",
-        "Triple Double",
-        "To Record A Triple-Double",
-        "To Record A Triple Double",
-        "Pts + Reb + Ast O/U",
-        "Pts + Reb O/U",
-        "Pts + Ast O/U",
-        "Reb + Ast O/U",
-      ];
-    }
+  const isLikelyNhl =
+    /\bnhl\b|hockey|puck line|shots on goal|goalie props|goalie|goalscorer|goal scorer|bruins|sabres|rangers|islanders|canucks|penguins|oilers|maple leafs|leafs|flames|devils|stars|jets|canadiens|senators|kraken|avalanche|hurricanes|panthers|flyers|lightning|capitals|wild|ducks|predators|blue jackets|red wings|blackhawks|sharks|blues|golden knights|knights|vegas|utah|mammoth/i.test(
+      pageText
+    );
+
+  if (isLikelyNhl) {
+    return [
+      "Game Lines",
+      "Goalscorer",
+      "Shots On Goal",
+      "Points",
+      "Assists",
+      "Goalie",
+    ];
+  }
+
+  return [
+    "POINTS",
+    "THREES",
+    "REBOUNDS",
+    "ASSISTS",
+    "COMBOS",
+
+    // Combo subheaders after COMBOS is open.
+    "Pts + Reb + Ast",
+    "Pts + Reb",
+    "Pts + Ast",
+    "Reb + Ast",
+    "Double-Double",
+    "Double Double",
+    "To Record A Double-Double",
+    "To Record A Double Double",
+    "Triple-Double",
+    "Triple Double",
+    "To Record A Triple-Double",
+    "To Record A Triple Double",
+    "Pts + Reb + Ast O/U",
+    "Pts + Reb O/U",
+    "Pts + Ast O/U",
+    "Reb + Ast O/U",
+  ];
+}
 
     function getDraftKingsWorkflowProgressKey() {
       const path = String(window.location.pathname || "");
