@@ -23,12 +23,26 @@ export default function ImportPanel({
   onClearParsedRows,
   hasRows,
   lastParsedAt,
+  pendingImports = [],
+  pendingUrlImport = null,
+  onLoadNewestImport,
+  onClearPendingImports,
+  onClearSavedSession,
+  importMode = "append",
+  setImportMode,
+  defaultCollapsed = true,
 }) {
   return (
-    <section style={sectionStyle}>
-      <h2 style={h2Style}>1. Import Odds</h2>
+    <details style={sectionStyle} open={!defaultCollapsed}>
+      <summary style={summaryStyle}>
+        <span>1. Import Odds</span>
+        <span style={summaryMetaStyle}>
+          {pendingImports.length ? `${pendingImports.length} pending import${pendingImports.length === 1 ? "" : "s"}` : "Collapsed by default"}
+        </span>
+      </summary>
+
       <p style={mutedStyle}>
-        Paste extracted odds text here and choose the source book.
+        Paste extracted odds text here and choose the source book. Extension imports can be loaded from the pending-import tools at the bottom of this box.
       </p>
 
       <div style={controlsRowStyle}>
@@ -81,7 +95,7 @@ export default function ImportPanel({
         Input chars: {(rawText || "").length}
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+      <div style={actionRowStyle}>
         <button type="button" onClick={onParse} style={primaryButtonStyle}>
           Parse Input
         </button>
@@ -106,7 +120,56 @@ export default function ImportPanel({
           {lastParsedAt ? `Last parsed: ${new Date(lastParsedAt).toLocaleString()}` : "Not parsed yet"}
         </span>
       </div>
-    </section>
+
+      {pendingUrlImport ? (
+        <div style={importNoticeStyle}>
+          Imported scraped text from URL. Review or click Parse.
+        </div>
+      ) : null}
+
+      <div style={pendingPanelStyle}>
+        <div style={pendingTitleStyle}>Pending scraped imports: {pendingImports.length}</div>
+
+        <div style={pendingActionRowStyle}>
+          <button
+            type="button"
+            onClick={() => onLoadNewestImport?.({ append: false })}
+            style={primaryButtonStyle}
+          >
+            Load newest import
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onLoadNewestImport?.({ append: true })}
+            style={secondaryButtonStyle}
+          >
+            Append newest import
+          </button>
+
+          <label style={inlineFieldStyle}>
+            Import Mode
+            <select
+              value={importMode}
+              onChange={(event) => setImportMode?.(event.target.value)}
+              style={inputStyle}
+            >
+              <option value="append">Append / dedupe</option>
+              <option value="replace_book">Replace this book</option>
+              <option value="replace_book_event">Replace this book + event</option>
+            </select>
+          </label>
+
+          <button type="button" onClick={onClearPendingImports} style={dangerButtonStyle}>
+            Clear pending imports
+          </button>
+
+          <button type="button" onClick={onClearSavedSession} style={warningButtonStyle}>
+            Clear saved session
+          </button>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -118,7 +181,26 @@ const sectionStyle = {
   marginBottom: 16,
 };
 
-const h2Style = { marginTop: 0, marginBottom: 8, color: "#14532d" };
+const summaryStyle = {
+  cursor: "pointer",
+  fontWeight: 900,
+  color: "#14532d",
+  fontSize: 20,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summaryMetaStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "4px 9px",
+};
 
 const mutedStyle = {
   color: "#166534",
@@ -146,6 +228,15 @@ const fieldLabelStyle = {
   textTransform: "uppercase",
 };
 
+const inlineFieldStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#166534",
+};
+
 const inputStyle = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -166,6 +257,14 @@ const textareaStyle = {
   resize: "vertical",
   background: "#fff",
   color: "#111",
+};
+
+const actionRowStyle = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+  marginTop: 12,
 };
 
 const baseButtonStyle = {
@@ -196,7 +295,45 @@ const dangerButtonStyle = {
   border: "1px solid #fecaca",
 };
 
+const warningButtonStyle = {
+  ...baseButtonStyle,
+  background: "#fff7ed",
+  color: "#7c2d12",
+  border: "1px solid #fdba74",
+};
+
 const disabledButtonStyle = {
   opacity: 0.45,
   cursor: "not-allowed",
+};
+
+const importNoticeStyle = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+  color: "#166534",
+  fontWeight: 700,
+};
+
+const pendingPanelStyle = {
+  marginTop: 14,
+  padding: 12,
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+};
+
+const pendingTitleStyle = {
+  fontWeight: 900,
+  color: "#166534",
+  marginBottom: 8,
+};
+
+const pendingActionRowStyle = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
 };

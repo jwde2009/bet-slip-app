@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { EXTRACTION_GUIDES } from "../data/extractionGuides";
 
-export default function ExtractionGuide({ sportsbook }) {
+export default function ExtractionGuide({ sportsbook, defaultCollapsed = true }) {
   const [copyNotice, setCopyNotice] = useState("");
   const [showCommand, setShowCommand] = useState(false);
   const guide = EXTRACTION_GUIDES[sportsbook] || EXTRACTION_GUIDES.Auto;
@@ -23,10 +23,11 @@ export default function ExtractionGuide({ sportsbook }) {
   }
 
   return (
-    <section style={sectionStyle}>
-      <div style={headerRowStyle}>
-        <h2 style={h2Style}>Book Extraction Guide</h2>
-      </div>
+    <details style={sectionStyle} open={!defaultCollapsed}>
+      <summary style={summaryStyle}>
+        <span>Boost / Book Extraction Guide</span>
+        <span style={summaryMetaStyle}>Fallback instructions</span>
+      </summary>
 
       <div style={gridStyle}>
         <GuideCard label="Best Method" value={guide.bestMethod} />
@@ -71,7 +72,7 @@ export default function ExtractionGuide({ sportsbook }) {
           ))}
         </ol>
       </div>
-    </section>
+    </details>
   );
 }
 
@@ -92,25 +93,32 @@ const sectionStyle = {
   marginBottom: 16,
 };
 
-const headerRowStyle = {
+const summaryStyle = {
+  cursor: "pointer",
+  fontWeight: 900,
+  color: "#14532d",
+  fontSize: 18,
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
   gap: 12,
   flexWrap: "wrap",
-  marginBottom: 10,
 };
 
-const h2Style = {
-  marginTop: 0,
-  marginBottom: 0,
-  color: "#14532d",
+const summaryMetaStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "4px 9px",
 };
 
 const gridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
+  marginTop: 12,
 };
 
 const cardStyle = {

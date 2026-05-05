@@ -138,8 +138,8 @@ export default function SavedPlacedParlaysLedgerPanel({
 
                       <div style={subtleStyle}>
                         Saved {formatSavedDateTime ? formatSavedDateTime(saved.savedAt) : saved.savedAt}
-                        {getSavedParlayBook(saved) ? ` • Book: ${getSavedParlayBook(saved)}` : ""}
-                        {saved.boostName ? ` • Boost: ${saved.boostName}` : ""}
+                        {getSavedParlayBook(saved) ? ` â€¢ Book: ${getSavedParlayBook(saved)}` : ""}
+                        {saved.boostName ? ` â€¢ Boost: ${saved.boostName}` : ""}
                       </div>
                     </div>
 
@@ -272,7 +272,7 @@ export default function SavedPlacedParlaysLedgerPanel({
                   <div style={legsWrapStyle}>
                     {(saved.legs || []).map((leg, idx) => (
                       <div key={`${saved.id}_${idx}`} style={legLineStyle}>
-                        • {leg.eventName} — {formatSavedLeg(leg)}
+                        â€¢ {leg.eventName} â€” {formatSavedLeg(leg)}
                       </div>
                     ))}
                   </div>
@@ -378,7 +378,7 @@ function formatMoney(value) {
 }
 
 function formatPct(value) {
-  if (!Number.isFinite(Number(value))) return "—";
+  if (!Number.isFinite(Number(value))) return "â€”";
   return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
@@ -609,14 +609,30 @@ const emptyStyle = {
 
 function cardStyle(status) {
   const key = String(status || "saved").toLowerCase();
-  const borderColor = key === "won" ? "#86efac" : key === "lost" ? "#fca5a5" : "#e5e7eb";
-  const background = key === "won" ? "#f7fee7" : key === "lost" ? "#fff7f7" : "#f9fafb";
+  const borderColor =
+    key === "won"
+      ? "#86efac"
+      : key === "lost"
+        ? "#fca5a5"
+        : key === "void"
+          ? "#9ca3af"
+          : "#e5e7eb";
+
+  const background =
+    key === "won"
+      ? "#f7fee7"
+      : key === "lost"
+        ? "#fff7f7"
+        : key === "void"
+          ? "repeating-linear-gradient(135deg, #f3f4f6 0px, #f3f4f6 8px, #e5e7eb 8px, #e5e7eb 16px)"
+          : "#f9fafb";
 
   return {
     border: `1px solid ${borderColor}`,
     borderRadius: 12,
     padding: 12,
     background,
+    opacity: key === "void" ? 0.82 : 1,
   };
 }
 
@@ -763,3 +779,4 @@ const legLineStyle = {
   fontSize: 12,
   fontWeight: 700,
 };
+

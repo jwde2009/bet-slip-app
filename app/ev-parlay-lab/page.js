@@ -29,6 +29,13 @@ const BOOST_WALLET_KEY = "EV_PARLAY_LAB_BOOST_WALLET";
 const BLOCKED_PARLAY_LEGS_KEY = "EV_PARLAY_LAB_BLOCKED_PARLAY_LEGS";
 const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+function withDefaultFilters(filters = {}) {
+  return {
+    devigMethod: "power",
+    ...(filters || {}),
+  };
+}
+
 function readImportQueue() {
   if (typeof window === "undefined") return [];
   try {
@@ -875,7 +882,7 @@ export default function EVParlayLabPage() {
   const [sportsbook, setSportsbook] = useState("DraftKings");
   const [batchRole, setBatchRole] = useState("target");
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useState(SAMPLE_FILTERS);
+  const [filters, setFilters] = useState(() => withDefaultFilters(SAMPLE_FILTERS));
   const [manualMatches, setManualMatches] = useState([]);
   const [lastParsedAt, setLastParsedAt] = useState(null);
   const [showParsedTable, setShowParsedTable] = useState(false);
@@ -1570,8 +1577,10 @@ const marketBundle = useMemo(() => {
 
   const fairOddsBundle = useMemo(() => {
     if (!marketBundle.markets.length) return [];
-    return calculateFairOddsForMarkets(marketBundle.markets, rowsForAnalysis);
-    }, [marketBundle.markets, rowsForAnalysis]);
+    return calculateFairOddsForMarkets(marketBundle.markets, {
+      method: filters?.devigMethod || "power",
+    });
+    }, [marketBundle.markets, filters?.devigMethod]);
 
   const topSingleEdgeBets = useMemo(() => {
     if (!marketBundle.markets.length || !fairOddsBundle.length) return [];
@@ -1687,7 +1696,7 @@ const marketBundle = useMemo(() => {
         setFanDuelSharpMode(saved.fanDuelSharpMode);
       }
       if (Array.isArray(saved.rows)) setRows(saved.rows);
-      if (saved.filters && typeof saved.filters === "object") setFilters(saved.filters);
+      if (saved.filters && typeof saved.filters === "object") setFilters(withDefaultFilters(saved.filters));
       if (Array.isArray(saved.manualMatches)) setManualMatches(saved.manualMatches);
       setSavedPlacedParlays(readSavedPlacedParlays());
       if (typeof saved.lastParsedAt === "string" || saved.lastParsedAt === null) {
@@ -1938,28 +1947,12 @@ const marketBundle = useMemo(() => {
       whiteSpace: "nowrap",
     }}
   >
-    ← Back to Bet Slip App
+    â† Back to Bet Slip App
   </Link>
 </div>
 </div>
 
-        <ImportPanel
-          rawText={rawText}
-          setRawText={setRawText}
-          sportsbook={sportsbook}
-          setSportsbook={setSportsbook}
-          batchRole={batchRole}
-          setBatchRole={setBatchRole}
-          onParse={handleParse}
-          onClearInput={handleClearInput}
-          onClearParsedRows={handleClearParsedRows}
-          hasRows={rows.length > 0}
-          lastParsedAt={lastParsedAt}
-        />
-
-        <ExtractionGuide sportsbook={sportsbook} />
-
-                <div
+        <div
           style={{
             marginBottom: 12,
             padding: 12,
@@ -1999,131 +1992,6 @@ const marketBundle = useMemo(() => {
           </div>
         </div>
 
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 10,
-            background: "#ecfdf5",
-            border: "1px solid #86efac",
-          }}
-        >
-          <div style={{ fontWeight: 800, color: "#166534", marginBottom: 8 }}>
-            Pending scraped imports: {pendingImports.length}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => handleLoadNewestImport({ append: false })}
-              style={{
-                background: "#166534",
-                color: "#f0fdf4",
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Load newest import
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleLoadNewestImport({ append: true })}
-              style={{
-                background: "#fff",
-                color: "#166534",
-                border: "1px solid #86efac",
-                borderRadius: 8,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Append newest import
-            </button>
-
-            <label
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                fontWeight: 900,
-                color: "#166534",
-              }}
-            >
-              Import Mode
-              <select
-                value={importMode}
-                onChange={(event) => setImportMode(event.target.value)}
-                style={{
-                  border: "1px solid #86efac",
-                  borderRadius: 8,
-                  padding: "7px 9px",
-                  fontWeight: 800,
-                  color: "#166534",
-                  background: "#fff",
-                }}
-              >
-                <option value="append">Append / dedupe</option>
-                <option value="replace_book">Replace this book</option>
-                <option value="replace_book_event">Replace this book + event</option>
-              </select>
-            </label>
-
-            <button
-              type="button"
-              onClick={handleClearPendingImports}
-              style={{
-                background: "#fff",
-                color: "#991b1b",
-                border: "1px solid #fca5a5",
-                borderRadius: 8,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Clear pending imports
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClearSavedSession}
-              style={{
-                background: "#fff",
-                color: "#7c2d12",
-                border: "1px solid #fdba74",
-                borderRadius: 8,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Clear saved session
-            </button>
-          </div>
-        </div>
-
-        {pendingUrlImport ? (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: 12,
-              borderRadius: 10,
-              background: "#ecfdf5",
-              border: "1px solid #86efac",
-              color: "#166534",
-              fontWeight: 700,
-            }}
-          >
-            Imported scraped text from URL. Review or click Parse.
-          </div>
-        ) : null}
-
         <SessionReadinessPanel
           rows={rowsForAnalysis}
           filters={filters}
@@ -2131,6 +1999,30 @@ const marketBundle = useMemo(() => {
           coverageWarnings={coverageWarnings}
           onDeleteStaleRows={handleDeleteStaleRows}
         />
+
+        <ImportPanel
+          rawText={rawText}
+          setRawText={setRawText}
+          sportsbook={sportsbook}
+          setSportsbook={setSportsbook}
+          batchRole={batchRole}
+          setBatchRole={setBatchRole}
+          onParse={handleParse}
+          onClearInput={handleClearInput}
+          onClearParsedRows={handleClearParsedRows}
+          hasRows={rows.length > 0}
+          lastParsedAt={lastParsedAt}
+          pendingImports={pendingImports}
+          pendingUrlImport={pendingUrlImport}
+          onLoadNewestImport={handleLoadNewestImport}
+          onClearPendingImports={handleClearPendingImports}
+          onClearSavedSession={handleClearSavedSession}
+          importMode={importMode}
+          setImportMode={setImportMode}
+          defaultCollapsed
+        />
+
+        <ExtractionGuide sportsbook={sportsbook} defaultCollapsed />
 
         <LoadCoveragePanel
           rows={rows}
@@ -2228,11 +2120,13 @@ const marketBundle = useMemo(() => {
           onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
           onUpdateSavedParlay={handleUpdateSavedPlacedParlay}
           onConfirmSavedParlayPlaced={handleConfirmSavedParlayPlaced}
-          onSetSavedParlayResult={handleSetSavedParlayResult}          formatSavedDateTime={formatSavedDateTime}
+          onSetSavedParlayResult={handleSetSavedParlayResult}
+          formatSavedDateTime={formatSavedDateTime}
           boostWallet={boostWallet}
           blockedParlayLegs={blockedParlayLegs}
           onBlockParlayLeg={handleBlockParlayLeg}
           onUnblockParlayLeg={handleUnblockParlayLeg}
+          selectedDevigMethod={filters?.devigMethod || "power"}
         />
       </div>
     </div>
@@ -2390,7 +2284,7 @@ function normalizeManualMatchEventKey(value) {
 function buildSelectionBaseKey(row) {
   const text = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/−/g, "-")
+    .replace(/âˆ’/g, "-")
     .replace(/\b(over|under)\b/g, " ")
     .replace(/\b\d+(\.\d+)?\+\b/g, " ")
     .replace(/[+-]?\d+(\.\d+)?/g, " ")
@@ -2421,7 +2315,7 @@ function buildSelectionFamilyKey(row) {
   const marketType = normalizeMarketType(row.marketType);
   const selection = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/âˆ’/g, "-");
+    .replace(/Ã¢Ë†â€™/g, "-");
 
   if (marketType === "player_points") return "points";
   if (marketType === "player_assists") return "assists";

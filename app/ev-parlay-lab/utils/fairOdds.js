@@ -4,8 +4,33 @@ import {
 } from "./odds";
 import { normalizeMarketType } from "./marketNormalization";
 
+export const DEVIG_METHOD_LABELS = {
+  power: "Power",
+  multiplicative: "Multiplicative / proportional",
+  additive: "Additive",
+  shin: "Shin-style",
+};
 
-export function calculateFairOddsForMarkets(markets) {
+export function normalizeDevigMethod(method) {
+  const value = String(method || "power").trim().toLowerCase();
+
+  if (value === "power") return "power";
+  if (value === "multiplicative" || value === "proportional") return "multiplicative";
+  if (value === "additive") return "additive";
+  if (value === "shin" || value === "shin-style" || value === "shin_style") return "shin";
+
+  return "power";
+}
+
+export function getDevigMethodLabel(method) {
+  return DEVIG_METHOD_LABELS[normalizeDevigMethod(method)] || DEVIG_METHOD_LABELS.power;
+}
+
+export function calculateFairOddsForMarkets(markets, options = {}) {
+  const selectedMethod = normalizeDevigMethod(
+    Array.isArray(options) ? "power" : options?.method || options?.devigMethod || "power"
+  );
+
   const results = [];
 
   for (const market of markets) {
@@ -54,14 +79,23 @@ export function calculateFairOddsForMarkets(markets) {
     if (!(impliedSum > 0)) continue;
 
     const holdPct = (impliedSum - 1) * 100;
+    const probabilitiesByMethod = buildProbabilitiesByMethod(implieds);
+    const selectedProbabilities = probabilitiesByMethod[selectedMethod] || probabilitiesByMethod.power;
 
     sharpSelections.forEach((selection, idx) => {
-      const fairProbability = implieds[idx] / impliedSum;
+      const fairProbability = selectedProbabilities[idx];
       const fairDecimal = fairProbability > 0 ? 1 / fairProbability : null;
       const fairAmerican =
         fairDecimal && Number.isFinite(fairDecimal)
           ? decimalToAmerican(fairDecimal)
           : null;
+
+      const fairProbabilitiesByMethod = Object.fromEntries(
+        Object.entries(probabilitiesByMethod).map(([method, probabilities]) => [
+          method,
+          probabilities[idx],
+        ])
+      );
 
       results.push({
         id: `${market.id}::${selection.selectionId}`,
@@ -72,6 +106,9 @@ export function calculateFairOddsForMarkets(markets) {
         fairProbability,
         fairDecimal,
         fairAmerican,
+        fairProbabilitiesByMethod,
+        devigMethod: selectedMethod,
+        devigMethodLabel: getDevigMethodLabel(selectedMethod),
         holdPct,
         sharpSportsbook: selection.sportsbook,
       });
@@ -81,6 +118,82 @@ export function calculateFairOddsForMarkets(markets) {
   return results;
 }
 
+function buildProbabilitiesByMethod(implieds = []) {
+  return {
+    power: normalizeProbabilities(devigPower(implieds)),
+    multiplicative: normalizeProbabilities(devigMultiplicative(implieds)),
+    additive: normalizeProbabilities(devigAdditive(implieds) || devigPower(implieds)),
+    shin: normalizeProbabilities(devigShinStyle(implieds)),
+  };
+}
+
+function devigMultiplicative(implieds = []) {
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (!(sum > 0)) return [];
+  return implieds.map((p) => p / sum);
+}
+
+function devigAdditive(implieds = []) {
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (!(sum > 0) || !implieds.length) return [];
+
+  const adjustment = (sum - 1) / implieds.length;
+  const probabilities = implieds.map((p) => p - adjustment);
+
+  if (probabilities.some((p) => !Number.isFinite(p) || p <= 0)) {
+    return null;
+  }
+
+  return probabilities;
+}
+
+function devigPower(implieds = []) {
+  if (!implieds.length) return [];
+
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (Math.abs(sum - 1) < 0.000001) return implieds;
+
+  let low = 0.01;
+  let high = 10;
+
+  for (let i = 0; i < 80; i += 1) {
+    const mid = (low + high) / 2;
+    const poweredSum = implieds.reduce((acc, p) => acc + Math.pow(p, mid), 0);
+
+    if (poweredSum > 1) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return implieds.map((p) => Math.pow(p, (low + high) / 2));
+}
+
+function devigShinStyle(implieds = []) {
+  // Lightweight Shin-style sensitivity method. It blends power devig with a
+  // stronger longshot discount, useful as an alternate view on asymmetric books.
+  if (!implieds.length) return [];
+  if (implieds.length <= 2) return devigPower(implieds);
+
+  const power = normalizeProbabilities(devigPower(implieds));
+  const longshotDiscount = normalizeProbabilities(implieds.map((p) => Math.pow(p, 1.15)));
+
+  return power.map((p, idx) => p * 0.65 + longshotDiscount[idx] * 0.35);
+}
+
+function normalizeProbabilities(probabilities = []) {
+  const safe = probabilities.map((p) => Number(p)).filter((p) => Number.isFinite(p) && p > 0);
+  const sum = safe.reduce((acc, n) => acc + n, 0);
+
+  if (!safe.length || !(sum > 0)) return probabilities;
+
+  return probabilities.map((p) => {
+    const n = Number(p);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return n / sum;
+  });
+}
 
 function getExpectedOutcomeCount(market) {
   const marketType = normalizeMarketType(market.marketType);
@@ -135,4 +248,3 @@ function getExpectedOutcomeCount(market) {
 
   return 2;
 }
-

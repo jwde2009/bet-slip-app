@@ -3,6 +3,28 @@ import { applyProfitBoostToAmerican, applyProfitBoostToDecimal } from "./boostMa
 const DEFAULT_MAX_PARLAY_CANDIDATE_LEGS = 80;
 const DEFAULT_MAX_PARLAY_CANDIDATE_LEGS_3_PLUS = 40;
 
+const DEVIG_METHOD_LABELS = {
+  power: "Power",
+  multiplicative: "Multiplicative / proportional",
+  additive: "Additive",
+  shin: "Shin-style",
+};
+
+function normalizeDevigMethod(method) {
+  const value = String(method || "power").trim().toLowerCase();
+
+  if (value === "power") return "power";
+  if (value === "multiplicative" || value === "proportional") return "multiplicative";
+  if (value === "additive") return "additive";
+  if (value === "shin" || value === "shin-style" || value === "shin_style") return "shin";
+
+  return "power";
+}
+
+function getDevigMethodLabel(method) {
+  return DEVIG_METHOD_LABELS[normalizeDevigMethod(method)] || DEVIG_METHOD_LABELS.power;
+}
+
 function normalizeLegKeyPart(value) {
   return String(value ?? "")
     .trim()
@@ -397,6 +419,9 @@ export function buildParlayCandidates({
         fairProbability: fair.fairProbability,
         fairDecimal: fair.fairDecimal,
         fairAmerican,
+        fairProbabilitiesByMethod: fair.fairProbabilitiesByMethod || {},
+        devigMethod: fair.devigMethod || normalizeDevigMethod(filters?.devigMethod),
+        devigMethodLabel: fair.devigMethodLabel || getDevigMethodLabel(filters?.devigMethod),
 
         legEvPct,
         savedLegKey,
@@ -553,6 +578,7 @@ export function buildParlayCandidates({
 }
 
 function buildSingleParlayCandidate({ legs, idx, filters }) {
+  const selectedDevigMethod = normalizeDevigMethod(filters?.devigMethod || legs?.[0]?.devigMethod || "power");
   const rawParlayDecimal = multiplyDecimals(legs.map((leg) => leg.oddsDecimal));
   const boostedParlayDecimal = applyProfitBoostToDecimal(rawParlayDecimal, filters.boostPct);
   const rawParlayAmerican = decimalToAmericanSafe(rawParlayDecimal);
@@ -642,6 +668,16 @@ function buildSingleParlayCandidate({ legs, idx, filters }) {
     distribution,
     correlationRisk,
     grade,
+    selectedDevigMethod,
+  });
+
+  const devigAdvice = buildDevigAdvice({
+    selectedDevigMethod,
+    legs,
+    fairHitProbability,
+    rawParlayDecimal,
+    boostedParlayDecimal,
+    filters,
   });
 
   return {
@@ -653,7 +689,7 @@ function buildSingleParlayCandidate({ legs, idx, filters }) {
                 ? `${leg.selectionLabel} ${leg.lineValue}`
                 : leg.selectionLabel;
 
-            return `${leg.eventName} — ${labelWithLine} (Target ${formatAmerican(
+            return `${leg.eventName} â€” ${labelWithLine} (Target ${formatAmerican(
               leg.oddsAmerican
             )} at ${leg.sportsbook}, Sharp ${formatAmerican(
               leg.fairAmerican
@@ -678,6 +714,12 @@ function buildSingleParlayCandidate({ legs, idx, filters }) {
     gradeTier: grade.tier,
     playLabel: grade.label,
     boostPctUsed: Number(filters.boostPct) || 0,
+    devigMethodUsed: selectedDevigMethod,
+    devigMethodLabel: getDevigMethodLabel(selectedDevigMethod),
+    devigWarning: devigAdvice.warning,
+    recommendedDevigMethod: devigAdvice.recommendedMethod,
+    recommendedDevigMethodLabel: devigAdvice.recommendedMethodLabel,
+    recommendedDevigSnapshot: devigAdvice.snapshot,
     notes,
   };
 }
@@ -801,6 +843,115 @@ function assessCorrelationRisk(legs) {
   return "low";
 }
 
+
+function buildDevigAdvice({
+  selectedDevigMethod,
+  legs,
+  rawParlayDecimal,
+  boostedParlayDecimal,
+  filters,
+}) {
+  const method = normalizeDevigMethod(selectedDevigMethod);
+  const hasLongshotLeg = (legs || []).some((leg) => {
+    const sharpAmerican = Number(leg.sharpOddsAmerican);
+    const fairProbability = Number(leg.fairProbability);
+    return (
+      (Number.isFinite(sharpAmerican) && sharpAmerican >= 250) ||
+      (Number.isFinite(fairProbability) && fairProbability <= 0.25)
+    );
+  });
+
+  const hasThreeWayMarket = (legs || []).some(
+    (leg) => String(leg.marketType || "").toLowerCase() === "moneyline_3way"
+  );
+
+  let warning = "";
+  let recommendedMethod = "";
+
+  if (method === "additive" && hasLongshotLeg) {
+    warning = "Additive devig can be unstable on longshot-heavy props or anytime markets.";
+    recommendedMethod = "power";
+  } else if (method === "multiplicative" && (hasLongshotLeg || hasThreeWayMarket)) {
+    warning = "Multiplicative devig is simple, but power is usually more stable for longshot-heavy or uneven markets.";
+    recommendedMethod = "power";
+  } else if (method === "shin" && !hasThreeWayMarket && !hasLongshotLeg) {
+    warning = "Shin-style devig is mainly a sensitivity check for asymmetric books; power is cleaner for balanced two-way markets.";
+    recommendedMethod = "power";
+  }
+
+  const snapshot = recommendedMethod
+    ? buildParlaySnapshotForDevigMethod({
+        legs,
+        method: recommendedMethod,
+        rawParlayDecimal,
+        boostedParlayDecimal,
+        filters,
+      })
+    : null;
+
+  return {
+    warning,
+    recommendedMethod,
+    recommendedMethodLabel: recommendedMethod ? getDevigMethodLabel(recommendedMethod) : "",
+    snapshot,
+  };
+}
+
+function buildParlaySnapshotForDevigMethod({
+  legs,
+  method,
+  rawParlayDecimal,
+  boostedParlayDecimal,
+  filters,
+}) {
+  const resolvedMethod = normalizeDevigMethod(method);
+  const fairProbabilities = (legs || []).map((leg) => {
+    const byMethod = leg.fairProbabilitiesByMethod || {};
+    return Number(byMethod[resolvedMethod]);
+  });
+
+  if (
+    !fairProbabilities.length ||
+    fairProbabilities.some((p) => !Number.isFinite(p) || p <= 0 || p >= 1)
+  ) {
+    return null;
+  }
+
+  const fairHitProbability = fairProbabilities.reduce((acc, p) => acc * p, 1);
+  if (!Number.isFinite(fairHitProbability) || fairHitProbability <= 0 || fairHitProbability >= 1) {
+    return null;
+  }
+
+  const rawExpectedValuePct =
+    fairHitProbability * (rawParlayDecimal - 1) - (1 - fairHitProbability);
+  const expectedValuePct =
+    fairHitProbability * (boostedParlayDecimal - 1) - (1 - fairHitProbability);
+
+  const rawSuggestedKellyStake = calculateSuggestedKellyStake({
+    bankroll: Number(filters.bankroll) || 0,
+    kellyFraction: Number(filters.kellyFraction) || 0,
+    winProbability: fairHitProbability,
+    decimalOdds: rawParlayDecimal,
+  });
+
+  const boostedSuggestedKellyStake = calculateSuggestedKellyStake({
+    bankroll: Number(filters.bankroll) || 0,
+    kellyFraction: Number(filters.kellyFraction) || 0,
+    winProbability: fairHitProbability,
+    decimalOdds: boostedParlayDecimal,
+  });
+
+  return {
+    method: resolvedMethod,
+    methodLabel: getDevigMethodLabel(resolvedMethod),
+    fairHitProbability,
+    expectedValuePct,
+    rawExpectedValuePct,
+    rawSuggestedKellyStake,
+    boostedSuggestedKellyStake,
+  };
+}
+
 function buildParlayNotes({
   legs,
   expectedValuePct,
@@ -817,10 +968,12 @@ function buildParlayNotes({
   distribution,
   correlationRisk,
   grade,
+  selectedDevigMethod,
 }) {
   const notes = [];
 
-  notes.push(`${grade.tier} grade — ${grade.label}`);
+  notes.push(`${grade.tier} grade â€” ${grade.label}`);
+  notes.push(`Devig: ${getDevigMethodLabel(selectedDevigMethod)}`);
 
   if (isBoostOnlyEdge) {
     notes.push("Value depends on profit boost");
@@ -882,13 +1035,13 @@ function buildParlayNotes({
 
   if (isBoostOnlyEdge) {
     notes.push(
-      `Boosted Kelly stake ≈ $${Number(boostedSuggestedKellyStake || 0).toFixed(2)}`
+      `Boosted Kelly stake â‰ˆ $${Number(boostedSuggestedKellyStake || 0).toFixed(2)}`
     );
     notes.push(
-      `Raw Kelly stake ≈ $${Number(rawSuggestedKellyStake || 0).toFixed(2)}`
+      `Raw Kelly stake â‰ˆ $${Number(rawSuggestedKellyStake || 0).toFixed(2)}`
     );
   } else if (Number.isFinite(boostedSuggestedKellyStake) && boostedSuggestedKellyStake > 0) {
-    notes.push(`Kelly-style stake ≈ $${boostedSuggestedKellyStake.toFixed(2)}`);
+    notes.push(`Kelly-style stake â‰ˆ $${boostedSuggestedKellyStake.toFixed(2)}`);
   }
 
   if (stake > 0 && Number.isFinite(suggestedKellyStake) && suggestedKellyStake > 0) {
@@ -970,12 +1123,12 @@ function average(nums) {
 }
 
 function formatPct(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
   return `${(value * 100).toFixed(2)}%`;
 }
 
 function formatAmerican(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (typeof value !== "number" || Number.isNaN(value)) return "â€”";
   return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
 }
 

@@ -14,16 +14,41 @@ const ODDS_SUGGESTIONS = [
   "+400",
 ];
 
+const DEVIG_METHODS = [
+  { value: "power", label: "Power" },
+  { value: "multiplicative", label: "Multiplicative / proportional" },
+  { value: "additive", label: "Additive" },
+  { value: "shin", label: "Shin-style" },
+];
+
+const SORT_EXPLANATIONS = [
+  ["Best Overall", "Balances grade, boosted EV, raw EV, hit probability, and variance. Best default for deciding what to actually bet."],
+  ["Boosted EV", "Ranks by modeled EV after the boost. Good when the promotion is the reason you are betting."],
+  ["Grade", "Ranks by the app’s overall quality score, which penalizes longshot-heavy and fragile profiles."],
+  ["Raw EV", "Prioritizes parlays that are strong even before the boost. Good for cleaner +EV plays."],
+  ["Hit Probability", "Prioritizes parlays more likely to cash, even if the EV is smaller."],
+  ["Boosted Kelly", "Ranks by Kelly-style stake size after boost using your bankroll and Kelly fraction."],
+];
+
+const DEVIG_EXPLANATIONS = [
+  ["Power", "Default. Solves a power transform so implied probabilities sum to 100%. Usually stable for two-way player props, main lines, and longshot-heavy prices."],
+  ["Multiplicative / proportional", "Divides each implied probability by the total overround. Simple and transparent, but can under-handle uneven favorite/longshot markets."],
+  ["Additive", "Subtracts the same margin amount from each outcome. Easy to understand, but can behave poorly with large favorites, longshots, or very asymmetric markets."],
+  ["Shin-style", "A sensitivity-check method for books that may allocate margin unevenly. Better as a comparison view than a default for ordinary two-way props."],
+];
+
 export default function ParlayFilters({ filters, setFilters }) {
-  const [draftFilters, setDraftFilters] = useState(filters || {});
+  const [draftFilters, setDraftFilters] = useState({ devigMethod: "power", ...(filters || {}) });
+  const [showSortGuide, setShowSortGuide] = useState(false);
+  const [showDevigGuide, setShowDevigGuide] = useState(false);
 
   useEffect(() => {
-    setDraftFilters(filters || {});
+    setDraftFilters({ devigMethod: "power", ...(filters || {}) });
   }, [filters]);
 
   const hasPendingChanges = useMemo(() => {
     try {
-      return JSON.stringify(draftFilters || {}) !== JSON.stringify(filters || {});
+      return JSON.stringify(draftFilters || {}) !== JSON.stringify({ devigMethod: "power", ...(filters || {}) });
     } catch (err) {
       return true;
     }
@@ -34,11 +59,11 @@ export default function ParlayFilters({ filters, setFilters }) {
   }
 
   function applyFilters() {
-    setFilters(draftFilters);
+    setFilters({ devigMethod: "power", ...(draftFilters || {}) });
   }
 
   function resetDraft() {
-    setDraftFilters(filters || {});
+    setDraftFilters({ devigMethod: "power", ...(filters || {}) });
   }
 
   const useMinLegEvFilter = draftFilters.useMinLegEvFilter !== false;
@@ -47,9 +72,10 @@ export default function ParlayFilters({ filters, setFilters }) {
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
         <div>
-            <h2 style={h2Style}>7. Parlay Filters</h2>
+          <h2 style={h2Style}>7. Parlay Filters</h2>
           <div style={helpTextStyle}>
-            Edit filters freely, then click Apply Filters. Loading a saved boost applies filters immediately.          </div>
+            Edit filters freely, then click Apply Filters. Loading a saved boost applies filters immediately.
+          </div>
         </div>
 
         <div style={buttonRowStyle}>
@@ -87,7 +113,7 @@ export default function ParlayFilters({ filters, setFilters }) {
         </div>
       ) : null}
 
-            <div style={gridStyle}>
+      <div style={gridStyle}>
         <label style={labelStyle}>
           Analyze Sport
           <select
@@ -299,7 +325,8 @@ export default function ParlayFilters({ filters, setFilters }) {
           />
         </label>
       </div>
-            <div style={checkboxGridStyle}>
+
+      <div style={checkboxGridStyle}>
         <label style={checkboxLabelStyle}>
           <input
             type="checkbox"
@@ -354,7 +381,6 @@ export default function ParlayFilters({ filters, setFilters }) {
           Allow previously used legs
         </label>
 
-
         <label style={checkboxLabelStyle}>
           <input
             type="checkbox"
@@ -364,7 +390,8 @@ export default function ParlayFilters({ filters, setFilters }) {
           Use minimum individual-leg EV filter
         </label>
       </div>
-      <div style={{ marginTop: 12 }}>
+
+      <div style={lowerGridStyle}>
         <label style={{ ...labelStyle, maxWidth: 260 }}>
           Minimum Leg EV %
           <input
@@ -387,11 +414,60 @@ export default function ParlayFilters({ filters, setFilters }) {
           />
         </label>
 
-        <div style={helpTextStyle}>
-          Default -3 allows slightly negative legs. Safety filters above can keep mixed-sport and live rows out of recommendations.
-        </div>
+        <label style={{ ...labelStyle, maxWidth: 300 }}>
+          Devig Method
+          <select
+            value={draftFilters.devigMethod || "power"}
+            onChange={(e) => updateField("devigMethod", e.target.value)}
+            style={inputStyle}
+          >
+            {DEVIG_METHODS.map((method) => (
+              <option key={method.value} value={method.value}>
+                {method.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      <div style={helpTextStyle}>
+        Default -3 allows slightly negative legs. Power devig is the default because it is generally more stable than additive on player props and longshot-heavy prices.
+      </div>
+
+      <div style={guideButtonRowStyle}>
+        <button type="button" onClick={() => setShowSortGuide((prev) => !prev)} style={guideButtonStyle}>
+          {showSortGuide ? "Hide Sort Results Guide" : "Show Sort Results Guide"}
+        </button>
+
+        <button type="button" onClick={() => setShowDevigGuide((prev) => !prev)} style={guideButtonStyle}>
+          {showDevigGuide ? "Hide Devig Method Guide" : "Show Devig Method Guide"}
+        </button>
+      </div>
+
+      {showSortGuide ? (
+        <ExplanationBox title="Sort Results Options" rows={SORT_EXPLANATIONS} />
+      ) : null}
+
+      {showDevigGuide ? (
+        <ExplanationBox title="Devig Method Guide" rows={DEVIG_EXPLANATIONS} />
+      ) : null}
     </section>
+  );
+}
+
+function ExplanationBox({ title, rows }) {
+  return (
+    <div style={explanationBoxStyle}>
+      <div style={explanationTitleStyle}>{title}</div>
+      <div style={explanationGridStyle}>
+        {rows.map(([label, description]) => (
+          <div key={label} style={explanationRowStyle}>
+            <strong>{label}</strong>
+            <span>{description}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -418,6 +494,14 @@ const gridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
   gap: 12,
+};
+
+const lowerGridStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
+  marginTop: 12,
+  alignItems: "flex-start",
 };
 
 const checkboxGridStyle = {
@@ -492,4 +576,48 @@ const helpTextStyle = {
   color: "#666",
   fontSize: 12,
   marginTop: 4,
+};
+
+const guideButtonRowStyle = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 12,
+};
+
+const guideButtonStyle = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1d4ed8",
+  borderRadius: 999,
+  padding: "7px 11px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const explanationBoxStyle = {
+  marginTop: 12,
+  border: "1px solid #dbeafe",
+  background: "#eff6ff",
+  borderRadius: 12,
+  padding: 12,
+};
+
+const explanationTitleStyle = {
+  fontWeight: 900,
+  color: "#1d4ed8",
+  marginBottom: 8,
+};
+
+const explanationGridStyle = {
+  display: "grid",
+  gap: 8,
+};
+
+const explanationRowStyle = {
+  display: "grid",
+  gap: 2,
+  color: "#1e3a8a",
+  fontSize: 13,
+  lineHeight: 1.35,
 };
