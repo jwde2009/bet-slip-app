@@ -1365,8 +1365,23 @@ function normalizeDraftKingsLabel(value) {
   const text = clean(value)
     .toLowerCase()
     .replace(/\s+/g, " ")
+    .replace(/\s*\(\s*o\s*\/\s*u\s*\)\s*/gi, " o/u")
+    .replace(/\s+o\s*\/\s*u\b/gi, " o/u")
     .trim();
 
+  // Keep NBA combo O/U labels stable even if DK uses parentheses.
+  if (/^pts \+ reb \+ ast o\/u$/i.test(text)) return "pts + reb + ast o/u";
+  if (/^pts \+ reb o\/u$/i.test(text)) return "pts + reb o/u";
+  if (/^pts \+ ast o\/u$/i.test(text)) return "pts + ast o/u";
+  if (/^reb \+ ast o\/u$/i.test(text)) return "reb + ast o/u";
+
+  // Normalize common NBA combo spelling variants.
+  if (/^double[\s-]double$/i.test(text)) return "double-double";
+  if (/^triple[\s-]double$/i.test(text)) return "triple-double";
+  if (/^to record a double[\s-]double$/i.test(text)) return "double-double";
+  if (/^to record a triple[\s-]double$/i.test(text)) return "triple-double";
+
+  // NHL aliases added without changing NBA labels.
   if (/^goalie props?$/i.test(text)) return "goalie";
   if (/^goalies?$/i.test(text)) return "goalie";
   if (/^goalie \/ defense$/i.test(text)) return "goalie";
@@ -1502,20 +1517,26 @@ function isDraftKingsNoisyLabel(value) {
       return false;
     }
 
-    function getDraftKingsComboSubheaderLabels() {
-      return [
-        "Pts + Reb + Ast",
-        "Double-Double",
-        "Triple-Double",
-        "Pts + Reb",
-        "Pts + Ast",
-        "Reb + Ast",
-        "Reb + Ast O/U",
-        "Pts + Reb + Ast O/U",
-        "Pts + Reb O/U",
-        "Pts + Ast O/U",
-      ];
-    }
+function getDraftKingsComboSubheaderLabels() {
+  return [
+    "Pts + Reb + Ast",
+    "Double-Double",
+    "Triple-Double",
+    "Pts + Reb",
+    "Pts + Ast",
+    "Reb + Ast",
+
+    // DK may display these with or without parentheses depending on page/state.
+    "Reb + Ast O/U",
+    "Reb + Ast (O/U)",
+    "Pts + Reb + Ast O/U",
+    "Pts + Reb + Ast (O/U)",
+    "Pts + Reb O/U",
+    "Pts + Reb (O/U)",
+    "Pts + Ast O/U",
+    "Pts + Ast (O/U)",
+  ];
+}
 
     async function clickDraftKingsComboSubheaders(captures) {
       for (const label of getDraftKingsComboSubheaderLabels()) {
@@ -1542,12 +1563,18 @@ function isDraftKingsNoisyLabel(value) {
     }
 
 function getDraftKingsWorkflowLabels() {
-  const pageText = clean(document.body?.innerText || "").toLowerCase();
+  const pageText = clean(document.body?.innerText || "");
+  const lowerPath = String(window.location.pathname || "").toLowerCase();
+
+  const breadcrumbMatch = pageText.match(
+    /Sportsbook\s*\/\s*[^/]{0,80}Odds\s*\/\s*[^/]{0,80}Odds/i
+  );
+
+  const breadcrumbText = clean(breadcrumbMatch?.[0] || "").toLowerCase();
 
   const isLikelyNhl =
-    /\bnhl\b|hockey|puck line|shots on goal|goalie props|goalie|goalscorer|goal scorer|bruins|sabres|rangers|islanders|canucks|penguins|oilers|maple leafs|leafs|flames|devils|stars|jets|canadiens|senators|kraken|avalanche|hurricanes|panthers|flyers|lightning|capitals|wild|ducks|predators|blue jackets|red wings|blackhawks|sharks|blues|golden knights|knights|vegas|utah|mammoth/i.test(
-      pageText
-    );
+    /\/nhl\b|nhl-odds|hockey-odds/i.test(lowerPath) ||
+    /\bhockey odds\b|\bnhl odds\b/i.test(breadcrumbText);
 
   if (isLikelyNhl) {
     return [
@@ -1912,12 +1939,21 @@ function getDraftKingsWorkflowLabels() {
       return mergeRawTextBlocks(captures) || rawPageText();
     }
 
-        function normalizeFanDuelLabel(value) {
-      return clean(value)
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
-    }
+function normalizeFanDuelLabel(value) {
+  const text = clean(value)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[–—]/g, "-")
+    .trim();
+
+  if (/^to record a double[-\s]double$/i.test(text)) return "to record a double double";
+  if (/^double[-\s]double$/i.test(text)) return "to record a double double";
+
+  if (/^to record a triple[-\s]double$/i.test(text)) return "to record a triple double";
+  if (/^triple[-\s]double$/i.test(text)) return "to record a triple double";
+
+  return text;
+}
 
       function isSafeFanDuelExpandableText(value) {
       const text = clean(value);
@@ -1952,7 +1988,12 @@ function getDraftKingsWorkflowLabels() {
         "60 Min Player to Record 1+ Shots on Goal",
       ]);
 
-      if (exact.has(text)) return true;
+      const normalizedText = normalizeFanDuelLabel(text);
+      const normalizedExact = new Set(
+        Array.from(exact).map((label) => normalizeFanDuelLabel(label))
+      );
+
+      if (exact.has(text) || normalizedExact.has(normalizedText)) return true;
 
       return (
         // NHL full-game O/U style drawers

@@ -421,71 +421,86 @@ function parseYesOnlyPlayerProps(lines, startIndex, event, sport) {
   const rows = [];
 
   const sections = [
-    ["To Record A Double Double", "double_double"],
-    ["To Record A Triple Double", "triple_double"],
+    {
+      headers: [
+        "To Record A Double Double",
+        "To Record a Double Double",
+        "To Record A Double-Double",
+        "To Record a Double-Double",
+        "Double Double",
+        "Double-Double",
+      ],
+      marketType: "double_double",
+    },
+    {
+      headers: [
+        "To Record A Triple Double",
+        "To Record a Triple Double",
+        "To Record A Triple-Double",
+        "To Record a Triple-Double",
+        "Triple Double",
+        "Triple-Double",
+      ],
+      marketType: "triple_double",
+    },
   ];
 
-  for (const [header, marketType] of sections) {
-    const idx = findLineIndexAfter(
-      lines,
-      startIndex,
-      new RegExp(`^${escapeRegExp(header)}$`, "i")
-    );
-    if (idx === -1) continue;
+  const stopLinePattern =
+    /^(Show more|Show less|1st |2nd |3rd |4th |Player |Game Lines|First Basket|First Team Basket Scorer|Alternate |Win Margin|Winning Margin|Total Points Odd \/ Even|First Half Winner \/ Full Time Winner Parlay|Los Angeles Lakers @|Oklahoma City Thunder @|Bet on |Verifying location|ABOUT|Register|All Sports|Promotions|Support|FOLLOW FANDUEL|Back to top|Betslip)$/i;
 
-    let i = idx + 1;
+  for (const section of sections) {
+    const { headers, marketType } = section;
+    const headerPattern = new RegExp(`^(${headers.map(escapeRegExp).join("|")})$`, "i");
 
-    while (i < lines.length - 1) {
-      const text = normalizeLine(lines[i]);
+    for (let idx = Math.max(0, startIndex); idx < lines.length - 1; idx += 1) {
+      if (!headerPattern.test(lines[idx])) continue;
 
-      if (
-        /^Show more$/i.test(text) ||
-        /^1st /i.test(text) ||
-        /^2nd /i.test(text) ||
-        /^3rd /i.test(text) ||
-        /^4th /i.test(text) ||
-        /^Player /i.test(text) ||
-        /^Game Lines$/i.test(text) ||
-        /^First Basket$/i.test(text) ||
-        /^First Team Basket Scorer$/i.test(text) ||
-        /^Alternate /i.test(text) ||
-        /^Win Margin$/i.test(text) ||
-        /^Winning Margin/i.test(text) ||
-        /^Total Points Odd \/ Even$/i.test(text) ||
-        /^First Half Winner \/ Full Time Winner Parlay$/i.test(text)
-      ) {
-        break;
-      }
+      let i = idx + 1;
 
-      const player = lines[i];
+      while (i < lines.length - 1) {
+        const text = normalizeLine(lines[i]);
 
-      if (
-        !looksLikePlayerName(player) ||
-        /\b(tie|over|under)\b/i.test(player)
-      ) {
+        // Stop when the next market starts. This lets us skip empty collapsed sections
+        // and continue scanning for a later expanded section with actual player rows.
+        if (stopLinePattern.test(text)) {
+          break;
+        }
+
+        // If we hit another yes-only header, let the outer loop handle it.
+        if (headerPattern.test(text)) {
+          break;
+        }
+
+        const player = lines[i];
+
+        if (
+          !looksLikePlayerName(player) ||
+          /\b(tie|over|under)\b/i.test(player)
+        ) {
+          i += 1;
+          continue;
+        }
+
+        const yesOdds = parseAmericanOdds(lines[i + 1]);
+
+        if (yesOdds !== null) {
+          rows.push(
+            buildRow({
+              sport,
+              event,
+              marketType,
+              selection: `${player} Yes`,
+              lineValue: null,
+              oddsAmerican: yesOdds,
+            })
+          );
+
+          i += 2;
+          continue;
+        }
+
         i += 1;
-        continue;
       }
-
-      const yesOdds = parseAmericanOdds(lines[i + 1]);
-
-      if (yesOdds !== null) {
-        rows.push(
-          buildRow({
-            sport,
-            event,
-            marketType,
-            selection: `${player} Yes`,
-            lineValue: null,
-            oddsAmerican: yesOdds,
-          })
-        );
-
-        i += 2;
-        continue;
-      }
-
-      i += 1;
     }
   }
 
