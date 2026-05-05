@@ -2290,6 +2290,90 @@ function normalizeFanDuelLabel(value) {
       return "";
     }
 
+    function isFanDuelNhlGamePage(text) {
+      const compact = String(text || "").replace(/\s+/g, " ");
+      const path = String(window.location?.pathname || "").toLowerCase();
+
+      return (
+        /\/nhl\b|nhl-odds|hockey-odds/i.test(path) ||
+        /\bHockey\s*\/\s*NHL Odds\s*\//i.test(compact) ||
+        (
+          /\bNHL Odds\b/i.test(compact) &&
+          /\bGoals\b/i.test(compact) &&
+          /\bShots\b/i.test(compact) &&
+          /\bPoints\/Assists\b/i.test(compact) &&
+          /\bGoalies\b/i.test(compact)
+        )
+      );
+    }
+
+    function getFanDuelNhlWorkflowProgressKey() {
+      const path = String(window.location.pathname || "");
+      return `EV_FD_NHL_WORKFLOW_PROGRESS::${path}`;
+    }
+
+    function getFanDuelNextNhlWorkflowLabel() {
+      const labels = [
+        "Goals",
+        "Shots",
+        "Points/Assists",
+        "Goalies",
+      ];
+
+      const key = getFanDuelNhlWorkflowProgressKey();
+      const stored = Number(sessionStorage.getItem(key));
+      const nextIndex = Number.isFinite(stored) ? stored : 0;
+
+      if (nextIndex >= labels.length) {
+        sessionStorage.removeItem(key);
+        return "";
+      }
+
+      const nextLabel = labels[nextIndex];
+      sessionStorage.setItem(key, String(nextIndex + 1));
+
+      return nextLabel;
+    }
+
+    async function buildFanDuelOneNextNhlTabRawText() {
+      const captures = [];
+
+      const initial = rawPageText();
+
+      if (initial && initial.trim()) {
+        captures.push(`FANDUEL_NHL_INITIAL_CAPTURE\n${initial}`);
+      }
+
+      const showMoreClicked = await clickFanDuelShowMoreOnly(8);
+      await sleep(650);
+
+      const expandedClicked = await clickFanDuelExpandableSections({
+        maxPasses: 1,
+        maxClicks: 12,
+      });
+
+      await sleep(650);
+      await clickFanDuelShowMoreOnly(8);
+
+      const currentText = rawPageText();
+
+      if (currentText && currentText.trim()) {
+        captures.push(
+          `FANDUEL_NHL_CURRENT_CAPTURE: show more ${showMoreClicked}; headers ${expandedClicked}\n${currentText}`
+        );
+      }
+
+      const nextLabel = getFanDuelNextNhlWorkflowLabel();
+
+      if (nextLabel) {
+        scheduleFanDuelClickByLabel(nextLabel);
+
+        captures.push(`FANDUEL_SCHEDULED_NEXT_TAB: NHL -> ${nextLabel}`);
+      }
+
+      return mergeRawTextBlocks(captures) || rawPageText();
+    }
+
     function getFanDuelNextNbaTab(currentTab) {
       const order = [
         "Player Points",
@@ -3152,6 +3236,15 @@ function normalizeFanDuelLabel(value) {
   if (detectedSource === "FanDuel") {
     try {
       const fanDuelRaw = rawPageText();
+
+      if (isFanDuelNhlGamePage(fanDuelRaw)) {
+        const fanDuelText = await buildFanDuelOneNextNhlTabRawText();
+
+        return {
+          source: detectedSource,
+          text: String(fanDuelText || "").trim() || fanDuelRaw,
+        };
+      }
 
       if (isFanDuelNbaGameLandingPage(fanDuelRaw)) {
         scheduleFanDuelClickByLabel("Player Points");
