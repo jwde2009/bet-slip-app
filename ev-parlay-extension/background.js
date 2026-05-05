@@ -3263,6 +3263,7 @@ function normalizeFanDuelLabel(value) {
       ["Houston Rockets", ["houston rockets", "hou rockets", "rockets"]],
       ["Charlotte Hornets", ["charlotte hornets", "cha hornets", "hornets"]],
       ["Orlando Magic", ["orlando magic", "orl magic", "magic"]],
+      ["Vegas Golden Knights", ["vegas golden knights", "vgs golden knights", "vgk golden knights", "golden knights", "vegas", "vgs", "vgk"]],
     ];
 
     function normalizeCandidate(value) {
@@ -3493,6 +3494,7 @@ function normalizeFanDuelLabel(value) {
       ["Boston Bruins", ["boston bruins", "bos bruins", "bruins"]],
       ["Buffalo Sabres", ["buffalo sabres", "buf sabres", "sabres"]],
       ["Carolina Hurricanes", ["carolina hurricanes", "car hurricanes", "hurricanes"]],
+      ["Anaheim Ducks", ["anaheim ducks", "ana ducks", "ducks"]],
       ["Colorado Avalanche", ["colorado avalanche", "col avalanche", "avalanche"]],
       ["Dallas Stars", ["dallas stars", "dal stars", "stars"]],
       ["Edmonton Oilers", ["edmonton oilers", "edm oilers", "oilers"]],
@@ -3506,6 +3508,7 @@ function normalizeFanDuelLabel(value) {
       ["Pittsburgh Penguins", ["pittsburgh penguins", "pit penguins", "penguins"]],
       ["Tampa Bay Lightning", ["tampa bay lightning", "tb lightning", "tbl lightning", "lightning"]],
       ["Toronto Maple Leafs", ["toronto maple leafs", "tor maple leafs", "maple leafs", "leafs"]],
+      ["Vegas Golden Knights", ["vegas golden knights", "vgs golden knights", "vgk golden knights", "golden knights", "vegas", "vgs", "vgk"]],
       ["Washington Capitals", ["washington capitals", "wsh capitals", "capitals"]],
       ["Winnipeg Jets", ["winnipeg jets", "wpg jets", "jets"]]
     ];
@@ -3644,6 +3647,91 @@ function normalizeFanDuelLabel(value) {
       suffixRegex: /\s+(?:To Record A Triple Double|Triple-Double|Triple Double)$/i,
     });
 
+    let wroteMainLines = false;
+
+    function appendVisibleMainLinesFromContainer(container) {
+      if (wroteMainLines || !container) return false;
+
+      const fallbackParts = String(event || "").split(" @ ");
+      const fallbackAway = cleanTeamName(fallbackParts[0] || "");
+      const fallbackHome = cleanTeamName(fallbackParts[1] || "");
+
+      const teamButtons = Array.from(container.querySelectorAll('button[data-testid="team-name"]'));
+      const awayRaw = clean(teamButtons[0]?.innerText || fallbackAway);
+      const homeRaw = clean(teamButtons[1]?.innerText || fallbackHome);
+
+      const away = cleanTeamName(awayRaw || fallbackAway);
+      const home = cleanTeamName(homeRaw || fallbackHome);
+
+      const selectionButtons = Array.from(container.querySelectorAll("button[data-type]")).filter((btn) => {
+        const type = String(btn.getAttribute("data-type") || "");
+        return [
+          "AWAY_SPREAD",
+          "HOME_SPREAD",
+          "OVER",
+          "UNDER",
+          "AWAY_MONEYLINE",
+          "HOME_MONEYLINE",
+        ].includes(type);
+      });
+
+      if (!away || !home || selectionButtons.length < 6) return false;
+
+      let awaySpread = null;
+      let homeSpread = null;
+      let overTotal = null;
+      let underTotal = null;
+      let awayMoney = null;
+      let homeMoney = null;
+
+      selectionButtons.forEach((btn) => {
+        const type = String(btn.getAttribute("data-type") || "");
+        const spans = Array.from(btn.querySelectorAll("span"))
+          .map((el) => clean(el.innerText))
+          .filter(Boolean);
+
+        const line =
+          spans.find((s) => /^[OU]\s*\d+(\.\d+)?$/i.test(s) || /^[+-]\d+(\.\d+)?$/.test(s)) || "";
+        const odds = toOdds(spans.find((s) => /^[-+]\d+$|^EVEN$/i.test(s)) || "");
+        const entry = { line, odds };
+
+        if (type === "AWAY_SPREAD") awaySpread = entry;
+        if (type === "HOME_SPREAD") homeSpread = entry;
+        if (type === "OVER") overTotal = entry;
+        if (type === "UNDER") underTotal = entry;
+        if (type === "AWAY_MONEYLINE") awayMoney = entry;
+        if (type === "HOME_MONEYLINE") homeMoney = entry;
+      });
+
+      if (awaySpread && homeSpread) {
+        out.push("");
+        out.push("Market: Spread");
+        out.push(`${away} | ${awaySpread.line} | ${awaySpread.odds}`);
+        out.push(`${home} | ${homeSpread.line} | ${homeSpread.odds}`);
+      }
+
+      if (overTotal && underTotal) {
+        out.push("");
+        out.push("Market: Total");
+        out.push(`Over | ${overTotal.line.replace(/^O\s*/i, "")} | ${overTotal.odds}`);
+        out.push(`Under | ${underTotal.line.replace(/^U\s*/i, "")} | ${underTotal.odds}`);
+      }
+
+      if (awayMoney && homeMoney) {
+        out.push("");
+        out.push("Market: Moneyline");
+        out.push(`${away} | ${awayMoney.odds}`);
+        out.push(`${home} | ${homeMoney.odds}`);
+      }
+
+      wroteMainLines = true;
+      return true;
+    }
+
+    // TheScore Popular tab can show main lines at page level instead of inside
+    // a details drawer titled "Main Lines".
+    appendVisibleMainLinesFromContainer(document.querySelector("main") || document.body);
+
     document.querySelectorAll("details[data-testid]").forEach((drawer) => {
       const titleEl = drawer.querySelector("summary h2");
 
@@ -3699,31 +3787,17 @@ function normalizeFanDuelLabel(value) {
               if (type === "HOME_MONEYLINE") homeMoney = entry;
             });
 
-            if (awaySpread && homeSpread) {
-              out.push("");
-              out.push("Market: Spread");
-              out.push(`${away} | ${awaySpread.line} | ${awaySpread.odds}`);
-              out.push(`${home} | ${homeSpread.line} | ${homeSpread.odds}`);
-            }
-
-            if (overTotal && underTotal) {
-              out.push("");
-              out.push("Market: Total");
-              out.push(`Over | ${overTotal.line.replace(/^O\s*/i, "")} | ${overTotal.odds}`);
-              out.push(`Under | ${underTotal.line.replace(/^U\s*/i, "")} | ${underTotal.odds}`);
-            }
-
-            if (awayMoney && homeMoney) {
-              out.push("");
-              out.push("Market: Moneyline");
-              out.push(`${away} | ${awayMoney.odds}`);
-              out.push(`${home} | ${homeMoney.odds}`);
-            }
+            appendVisibleMainLinesFromContainer(drawer);
 
             return;
           }
         }
       }
+
+      // If this was a Main Lines drawer but the standard button parser failed,
+      // do not fall through to the generic ladder/table parser. That creates
+      // malformed rows like: ANA Ducks | Total | -180.
+      if (/^Main Lines$/i.test(drawerMarket)) return;
 
       const ladderTable = drawer.querySelector("table");
       if (ladderTable) {
@@ -3961,29 +4035,47 @@ function normalizeFanDuelLabel(value) {
   }
 
 
+  function normalizeTheScoreMarketTabLabel(value) {
+    return clean(value)
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/\s*\/\s*/g, "/")
+      .replace(/^player\s+/i, "")
+      .trim();
+  }
+
   function isTheScoreMarketTabText(value) {
-    const text = clean(value).toLowerCase();
+    const text = normalizeTheScoreMarketTabLabel(value);
 
     const allowed = new Set([
-      "player points",
+      // NBA
       "points",
-      "player rebounds",
       "rebounds",
-      "player assists",
       "assists",
-      "player threes",
+      "threes",
       "3-pointers made",
-      "player combos",
+      "combos",
       "pts + reb + ast",
-      "player defense",
+      "defense",
+
+      // Main lines / default tab
+      "popular",
+
+      // NHL
       "goals",
       "goal scorer",
+      "goalscorer",
       "shots on goal",
       "sog",
-      "points",
-      "assists",
       "saves",
+      "goalie saves",
+      "player saves",
+      "power play points",
+      "blocked shots",
+      "blocks",
       "hits",
+
+      // MLB
       "total bases",
       "home runs",
       "rbis",
@@ -4000,18 +4092,83 @@ function normalizeFanDuelLabel(value) {
     if (allowed.has(text)) return true;
 
     return (
-      /^(player )?(points|rebounds|assists|threes)$/i.test(text) ||
-      /^(hits|total bases|home runs|rbis|runs)$/i.test(text) ||
-      /^(pitcher strikeouts|strikeouts|hits allowed|earned runs|outs recorded|walks allowed)$/i.test(text) ||
-      /^(goals|shots on goal|saves|power play points|blocked shots)$/i.test(text)
+      /^(points|rebounds|assists|threes|combos|defense)$/i.test(text) ||
+      /^(popular|goals|goal scorer|goalscorer|shots on goal|sog|points\/assists|saves|goalie saves|player saves|goalie\/defense|power play points|blocked shots|blocks|hits)$/i.test(text) ||
+      /^(total bases|home runs|rbis|rbi|runs)$/i.test(text) ||
+      /^(pitcher strikeouts|strikeouts|hits allowed|earned runs|outs recorded|walks allowed)$/i.test(text)
     );
   }
 
   function getTheScoreMarketTabButtons() {
-    return Array.from(document.querySelectorAll("button, a, [role='button']"))
+    const priority = [
+      // Main lines / default tab first.
+      "popular",
+
+      // NHL priority next so saves/assists do not get cut off by noisy page buttons.
+      "goals",
+      "goal scorer",
+      "goalscorer",
+      "shots on goal",
+      "points",
+      "assists",
+      "points/assists",
+      "saves",
+      "goalie saves",
+      "player saves",
+      "goalie/defense",
+      "power play points",
+      "blocked shots",
+      "blocks",
+      "hits",
+
+      // NBA
+      "rebounds",
+      "threes",
+      "3-pointers made",
+      "combos",
+      "pts + reb + ast",
+      "defense",
+
+      // MLB
+      "total bases",
+      "home runs",
+      "rbis",
+      "rbi",
+      "runs",
+      "pitcher strikeouts",
+      "strikeouts",
+      "hits allowed",
+      "earned runs",
+      "outs recorded",
+      "walks allowed"
+    ];
+
+    const scored = Array.from(document.querySelectorAll("button, a, [role='button']"))
       .filter(isElementVisible)
-      .filter((el) => isTheScoreMarketTabText(el.innerText || el.textContent || ""))
-      .slice(0, 35);
+      .map((el) => {
+        const label = normalizeTheScoreMarketTabLabel(el.innerText || el.textContent || "");
+        return {
+          el,
+          label,
+          priorityIndex: priority.indexOf(label),
+        };
+      })
+      .filter(({ label }) => isTheScoreMarketTabText(label));
+
+    const seenLabels = new Set();
+    const unique = [];
+
+    for (const item of scored.sort((a, b) => {
+      const aRank = a.priorityIndex === -1 ? 999 : a.priorityIndex;
+      const bRank = b.priorityIndex === -1 ? 999 : b.priorityIndex;
+      return aRank - bRank;
+    })) {
+      if (!item.label || seenLabels.has(item.label)) continue;
+      seenLabels.add(item.label);
+      unique.push(item.el);
+    }
+
+    return unique.slice(0, 80);
   }
 
   function normalizeStructuredExportForDedupe(text) {
@@ -4043,33 +4200,97 @@ function normalizeFanDuelLabel(value) {
       const hasGameDrawersNow = document.querySelectorAll("details[data-testid]").length > 0;
       const hasLandingCardsNow = document.querySelectorAll('button[data-testid="team-name"]').length >= 2;
 
+      if (hasGameDrawersNow && hasLandingCardsNow) {
+        return mergeStructuredExports([
+          buildLandingPageExport(),
+          buildGamePageExport(),
+        ]);
+      }
+
       if (hasGameDrawersNow) return buildGamePageExport();
       if (hasLandingCardsNow) return buildLandingPageExport();
       return "";
     }
 
-    await preparePageForExtraction();
-    exports.push(captureCurrentPage());
+    async function captureAfterTheScoreClick(label, button) {
+      if (!button) return false;
 
-    const buttons = getTheScoreMarketTabButtons();
-
-    for (const button of buttons) {
       const before = clean(document.body.innerText).slice(0, 5000);
 
       try {
-        button.click();
-        await sleep(650);
+        await clickElementReliably(button);
+        await sleep(900);
         await preparePageForExtraction();
 
         const after = clean(document.body.innerText).slice(0, 5000);
         const captured = captureCurrentPage();
 
-        if (after !== before || captured) {
-          exports.push(captured);
+        if (captured && captured.trim()) {
+          exports.push(`THESCORE_MARKET_CAPTURE: ${label}\n${captured}`);
         }
+
+        return after !== before || !!captured;
       } catch (err) {
-        // ignore market-tab click failures
+        return false;
       }
+    }
+
+    function findTheScoreButtonByLabel(label) {
+      const wanted = normalizeTheScoreMarketTabLabel(label);
+
+      const candidates = Array.from(
+        document.querySelectorAll("button, a, [role='button'], [role='tab']")
+      )
+        .filter(isElementVisible)
+        .map((el) => ({
+          el,
+          label: normalizeTheScoreMarketTabLabel(el.innerText || el.textContent || ""),
+        }))
+        .filter(({ label }) => label === wanted);
+
+      if (candidates[0]?.el) return candidates[0].el;
+
+      return findClickableByExactVisibleText(label, {
+        maxWidth: 520,
+        maxHeight: 140,
+      });
+    }
+
+    await preparePageForExtraction();
+    exports.push(`THESCORE_INITIAL_CAPTURE\n${captureCurrentPage()}`);
+
+    // First: generic market-tab pass.
+    const buttons = getTheScoreMarketTabButtons();
+
+    for (const button of buttons) {
+      const label = normalizeTheScoreMarketTabLabel(button.innerText || button.textContent || "");
+      await captureAfterTheScoreClick(label || "market", button);
+      await sleep(250);
+    }
+
+    // Second: explicit NHL fallback pass. This catches tabs that were missed by
+    // the generic button collector or hidden beyond the first visible group.
+    const targetedNhlLabels = [
+      "Popular",
+      "Points/Assists",
+      "Goalie/Defense",
+      "Assists",
+      "Player Assists",
+      "Saves",
+      "Goalie Saves",
+      "Player Saves",
+      "Shots on Goal",
+      "Points",
+      "Goals",
+      "Goal Scorer",
+    ];
+
+    for (const label of targetedNhlLabels) {
+      const button = findTheScoreButtonByLabel(label);
+      if (!button) continue;
+
+      await captureAfterTheScoreClick(label, button);
+      await sleep(300);
     }
 
     return mergeStructuredExports(exports);
