@@ -127,7 +127,10 @@ function resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent) {
   if (!looksLikeAbbreviatedPlayerName(trimmed)) return trimmed;
 
   const eventKey = buildEventAliasKey(row);
-  const candidates = Array.from(new Set(aliasMapByEvent.get(eventKey) || []));
+  const sportKey = buildSportAliasKey(row);
+
+  const eventCandidates = Array.from(new Set(aliasMapByEvent.get(eventKey) || []));
+  const sportCandidates = Array.from(new Set(aliasMapByEvent.get(sportKey) || []));
 
   const abbreviated = normalizeSimpleName(trimmed);
   const abbreviatedParts = abbreviated.split(" ").filter(Boolean);
@@ -136,28 +139,37 @@ function resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent) {
   const abbreviatedFirst = abbreviatedParts[0];
   const abbreviatedLast = abbreviatedParts[abbreviatedParts.length - 1];
 
-  const matches = candidates.filter((candidate) => {
-    const normalizedCandidate = normalizeSimpleName(candidate);
-    const candidateParts = normalizedCandidate.split(" ").filter(Boolean);
-    if (candidateParts.length < 2) return false;
+  function findUniqueMatch(candidates = []) {
+    const matches = candidates.filter((candidate) => {
+      const normalizedCandidate = normalizeSimpleName(candidate);
+      const candidateParts = normalizedCandidate.split(" ").filter(Boolean);
+      if (candidateParts.length < 2) return false;
 
-    const candidateFirst = candidateParts[0];
-    const candidateLast = candidateParts[candidateParts.length - 1];
+      const candidateFirst = candidateParts[0];
+      const candidateLast = candidateParts[candidateParts.length - 1];
 
-    if (candidateLast !== abbreviatedLast) return false;
+      if (candidateLast !== abbreviatedLast) return false;
 
-    return isFirstNameAbbreviationMatch(abbreviatedFirst, candidateFirst);
-  });
+      return isFirstNameAbbreviationMatch(abbreviatedFirst, candidateFirst);
+    });
 
-  if (matches.length === 1) {
-    return matches[0];
+    return matches.length === 1 ? matches[0] : "";
   }
 
+  // Safest: same event first.
+  const eventMatch = findUniqueMatch(eventCandidates);
+  if (eventMatch) return eventMatch;
+
+  // Fallback: same sport. This helps when one book uses abbreviated names and
+  // another book has full names, but event normalization is slightly off.
+  const sportMatch = findUniqueMatch(sportCandidates);
+  if (sportMatch) return sportMatch;
+
   // Safety rule:
-  // If J. Jones could be John Jones or James Jones in the same event,
-  // do not guess. Leave the abbreviated name unchanged.
+  // If J. Jones could be John Jones or James Jones, do not guess.
   return trimmed;
 }
+
 
 function isFirstNameAbbreviationMatch(shortFirst, fullFirst) {
   const short = normalizeSimpleName(shortFirst);
@@ -211,7 +223,17 @@ function looksLikeFullPlayerName(text) {
   const parts = value.split(/\s+/);
   if (parts.length < 2) return false;
 
-  const first = parts[0].replace(/\./g, "");
+  const firstRaw = parts[0] || "";
+  const first = firstRaw.replace(/\./g, "");
+
+  // Do NOT seed the alias map with abbreviated names.
+  // Examples that must NOT be treated as full names:
+  // Don. Mitchell
+  // Aus. Thompson
+  // C. Cunningham
+  if (firstRaw.includes(".")) return false;
+
+  // A full first name should be more than a one-letter/initial token.
   return first.length > 1;
 }
 

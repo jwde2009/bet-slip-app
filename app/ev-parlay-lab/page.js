@@ -21,6 +21,7 @@ import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
 import { buildParlayCandidates } from "./utils/parlayEngine";
 import { normalizeMarketType } from "./utils/marketNormalization";
+import { americanToDecimal } from "./utils/odds";
 
 const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
 const SAVED_SESSION_KEY = "EV_PARLAY_LAB_SESSION";
@@ -493,7 +494,7 @@ function makePlacedParlayRecord(parlay, options = {}) {
     savedAt,
     placedAt: "",
     settledAt: "",
-    placedDate: "",
+    placedDate: savedAt.slice(0, 10),
 
     placedStake: Number.isFinite(placedStake) ? placedStake : Number(parlay?.stake ?? 0),
     placedOddsAmerican,
@@ -544,6 +545,196 @@ function makePlacedParlayRecord(parlay, options = {}) {
       };
     }),
   };
+}
+
+function parseManualAmericanOdds(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const cleaned = text.replace(/[^\d+-]/g, "");
+  const parsed = Number(cleaned);
+
+  if (!Number.isFinite(parsed) || parsed === 0) return null;
+
+  return parsed;
+}
+
+function parseManualLineValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const parsed = Number(text.replace(/[^\d.+-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeManualMarketType(value = "") {
+  const text = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+  const aliases = {
+    points: "player_points",
+    "player points": "player_points",
+    assists: "player_assists",
+    "player assists": "player_assists",
+    rebounds: "player_rebounds",
+    "player rebounds": "player_rebounds",
+    threes: "player_threes",
+    "3 pointers": "player_threes",
+    "3-pointers": "player_threes",
+    "three pointers": "player_threes",
+    "player threes": "player_threes",
+    "player three-pointers": "player_threes",
+    pra: "player_pra",
+    "points rebounds assists": "player_pra",
+    "points + rebounds + assists": "player_pra",
+    "pts + reb + ast": "player_pra",
+    "points + rebounds": "player_points_rebounds",
+    "pts + reb": "player_points_rebounds",
+    "points + assists": "player_points_assists",
+    "pts + ast": "player_points_assists",
+    "rebounds + assists": "player_rebounds_assists",
+    "reb + ast": "player_rebounds_assists",
+    "double double": "double_double",
+    "double-double": "double_double",
+    "triple double": "triple_double",
+    "triple-double": "triple_double",
+    moneyline: "moneyline_2way",
+    spread: "spread",
+    total: "total",
+    goals: "player_goals",
+    "player goals": "player_goals",
+    shots: "player_shots_on_goal",
+    "shots on goal": "player_shots_on_goal",
+    "player shots": "player_shots_on_goal",
+    saves: "player_saves",
+    "goalie saves": "player_saves",
+    "player saves": "player_saves",
+  };
+
+  return aliases[text] || normalizeMarketType(value || "manual");
+}
+
+function normalizeManualSelectionLabel(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  if (/^o(ver)?$/i.test(text)) return "Over";
+  if (/^u(nder)?$/i.test(text)) return "Under";
+  if (/^y(es)?$/i.test(text)) return "Yes";
+  if (/^n(o)?$/i.test(text)) return "No";
+
+  return text;
+}
+
+function parseManualLegLines(legsText = "", defaults = {}) {
+  return String(legsText || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parts = line.split("|").map((part) => part.trim());
+
+      const eventName = parts[0] || defaults.eventName || "";
+      const marketType = normalizeManualMarketType(parts[1] || defaults.marketType || "manual");
+      const subjectName = parts[2] || "";
+      const selectionLabel = normalizeManualSelectionLabel(parts[3] || "");
+      const lineValue = parseManualLineValue(parts[4]);
+      const oddsAmerican = parseManualAmericanOdds(parts[5]);
+
+      const leg = {
+        eventName,
+        eventDate: defaults.placedDate || "",
+        sport: String(defaults.sport || "").trim().toUpperCase(),
+        marketType,
+        subjectName,
+        selectionLabel,
+        lineValue,
+        sportsbook: defaults.bookmaker || "",
+        oddsAmerican,
+      };
+
+      const savedLegKey = buildSavedLegKeyFromLeg(leg);
+      const savedLegFamilyKey = buildSavedLegFamilyKeyFromLeg(leg);
+      const savedLegRepeatKey = buildSavedLegRepeatKeyFromLeg(leg);
+      const savedLegDisplayKey = buildSavedLegDisplayKeyFromLeg(leg);
+      const savedLegDisplayRepeatKey = buildSavedLegDisplayRepeatKeyFromLeg(leg);
+
+      return {
+        ...leg,
+        savedLegKey,
+        savedLegFamilyKey,
+        savedLegRepeatKey,
+        savedLegDisplayKey,
+        savedLegDisplayRepeatKey,
+        displayLabel: formatBlockedLegDisplay(leg) || `Manual leg ${index + 1}`,
+      };
+    });
+}
+
+function makeManualPlacedParlayRecord(draft = {}) {
+  const savedAt = new Date().toISOString();
+  const placedDate = String(draft.placedDate || savedAt.slice(0, 10)).trim();
+  const bookmaker = String(draft.bookmaker || "Manual").trim();
+  const sport = String(draft.sport || "NBA").trim().toUpperCase();
+  const placedStake = Number(draft.placedStake || 0);
+  const placedOddsAmerican = parseManualAmericanOdds(draft.placedOddsAmerican);
+
+  const legs = parseManualLegLines(draft.legsText, {
+    bookmaker,
+    sport,
+    placedDate,
+  });
+
+  return {
+    id: `manual_parlay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    manualEntry: true,
+    bookmaker,
+    targetSportsbook: bookmaker,
+
+    status: "placed",
+    confirmedPlaced: true,
+
+    savedAt,
+    placedAt: savedAt,
+    settledAt: "",
+    placedDate,
+
+    placedStake: Number.isFinite(placedStake) ? placedStake : 0,
+    placedOddsAmerican,
+    result: "",
+    profitLoss: 0,
+
+    boostId: "",
+    boostName: String(draft.boostName || "").trim(),
+    boostSportsbook: "",
+    boostSportsbookLabel: "",
+    boostExpiresAt: "",
+    boostPct: Number.isFinite(Number(draft.boostPct)) ? Number(draft.boostPct) : 0,
+
+    rawParlayAmerican: placedOddsAmerican,
+    boostedParlayAmerican: placedOddsAmerican,
+    expectedValuePct: null,
+    fairHitProbability: null,
+    gradeTier: "Manual",
+    playLabel: String(draft.name || "Manual Placed Parlay").trim() || "Manual Placed Parlay",
+    notes: String(draft.notes || "").trim() ? [String(draft.notes || "").trim()] : [],
+
+    legs,
+  };
+}
+
+function parseEditedAmericanOdds(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const cleaned = text.replace(/[^\d+-]/g, "");
+  const parsed = Number(cleaned);
+
+  if (!Number.isFinite(parsed) || parsed === 0) return null;
+
+  return parsed;
 }
 
 function calculateAmericanOddsProfit(stake, americanOdds) {
@@ -1142,7 +1333,7 @@ function handleSavePlacedParlay(parlay, options = {}) {
     }
 
     const selectedBoost = options.boostId
-      ? boostWallet.find((boost) => boost.id === options.boostId)
+      ? pruneExpiredBoosts(boostWallet).find((boost) => boost.id === options.boostId)
       : null;
 
     const record = makePlacedParlayRecord(parlay, {
@@ -1357,30 +1548,122 @@ function handleSavePlacedParlay(parlay, options = {}) {
     });
   }
 
-  function handleClearSavedPlacedParlays() {
-    const ok = window.confirm(
-      "Clear all saved placed parlays? This only clears the EV Lab saved-parlay ledger."
-    );
+  function handleAddManualPlacedParlay(draft = {}) {
+    const record = makeManualPlacedParlayRecord(draft);
 
-    if (!ok) return;
+    if (!record.legs.length) {
+      alert("Add at least one manual leg. Use one line per leg.");
+      return;
+    }
 
-    setSavedPlacedParlays([]);
-    writeSavedPlacedParlays([]);
-  }
+    if (!Number.isFinite(Number(record.placedStake)) || Number(record.placedStake) <= 0) {
+      alert("Enter a valid stake before adding the manual parlay.");
+      return;
+    }
 
-  function handleDeleteSavedPlacedParlay(parlayId) {
+    if (!Number.isFinite(Number(record.placedOddsAmerican)) || Number(record.placedOddsAmerican) === 0) {
+      alert("Enter valid American odds for the manual parlay.");
+      return;
+    }
+
     setSavedPlacedParlays((prev) => {
-      const next = (prev || []).filter((parlay) => parlay.id !== parlayId);
+      const next = [record, ...(prev || [])].slice(0, 1000);
       writeSavedPlacedParlays(next);
       return next;
     });
   }
 
+
+  function handleClearSavedPlacedParlays() {
+    const answer = window.prompt(
+      "Archive all saved/placed parlays? This hides them by default but does not permanently delete them. Type ARCHIVE to confirm."
+    );
+
+    if (answer !== "ARCHIVE") return;
+
+    const archivedAt = new Date().toISOString();
+
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).map((parlay) => {
+        if (parlay.archivedAt || String(parlay.status || "").toLowerCase() === "archived") {
+          return parlay;
+        }
+
+        return {
+          ...parlay,
+          statusBeforeArchive: parlay.status || "saved",
+          status: "archived",
+          archivedAt,
+        };
+      });
+
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+  }
+
+  function handleDeleteSavedPlacedParlay(parlayId) {
+    const ok = window.confirm("Archive this saved/placed parlay? It will be hidden by default but not deleted.");
+    if (!ok) return;
+
+    const archivedAt = new Date().toISOString();
+
+    setSavedPlacedParlays((prev) => {
+      const next = (prev || []).map((parlay) => {
+        if (parlay.id !== parlayId) return parlay;
+
+        return {
+          ...parlay,
+          statusBeforeArchive: parlay.status || "saved",
+          status: "archived",
+          archivedAt,
+        };
+      });
+
+      writeSavedPlacedParlays(next);
+      return next;
+    });
+  }
   function handleUpdateRow(rowId, patch) {
     setRows((prev) =>
-      prev.map((row) => (row.id === rowId ? { ...row, ...patch, userEdited: true } : row))
+      prev.map((row) => {
+        if (row.id !== rowId) return row;
+
+        const next = { ...row, ...patch, userEdited: true };
+
+        if (Object.prototype.hasOwnProperty.call(patch || {}, "oddsAmerican")) {
+          const decimal = americanToDecimal(patch.oddsAmerican);
+
+          next.oddsDecimal = Number.isFinite(decimal) ? decimal : null;
+          next.editedAt = new Date().toISOString();
+          next.isStale = false;
+          next.stale = false;
+          next.parseWarnings = Array.isArray(next.parseWarnings)
+            ? next.parseWarnings.filter((warning) => !/stale|odds/i.test(String(warning || "")))
+            : next.parseWarnings;
+        }
+
+        return next;
+      })
     );
   }
+
+  function handleUpdateParsedRowOdds(rowId, oddsValue) {
+    const parsedOdds = parseEditedAmericanOdds(oddsValue);
+
+    if (!rowId) {
+      alert("I cannot find the parsed row for this leg. Try editing it in Parsed Odds Review.");
+      return;
+    }
+
+    if (!Number.isFinite(parsedOdds) || parsedOdds === 0) {
+      alert("Enter valid American odds like -110 or +145.");
+      return;
+    }
+
+    handleUpdateRow(rowId, { oddsAmerican: parsedOdds });
+  }
+
 
   function handleDeleteRow(rowId) {
     setRows((prev) => prev.filter((row) => row.id !== rowId));
@@ -1562,9 +1845,14 @@ const savedLegUsageMap = useMemo(
   [savedPlacedParlays, blockedParlayLegs]
 );
 
+const visibleBoostWallet = useMemo(
+  () => pruneExpiredBoosts(boostWallet),
+  [boostWallet]
+);
+
 const activeBoost = useMemo(
-  () => (boostWallet || []).find((boost) => boost.id === activeBoostId) || null,
-  [boostWallet, activeBoostId]
+  () => (visibleBoostWallet || []).find((boost) => boost.id === activeBoostId) || null,
+  [visibleBoostWallet, activeBoostId]
 );
 
 const marketBundle = useMemo(() => {
@@ -1947,7 +2235,7 @@ const marketBundle = useMemo(() => {
       whiteSpace: "nowrap",
     }}
   >
-    â† Back to Bet Slip App
+        {"<-"} Back to Bet Slip App
   </Link>
 </div>
 </div>
@@ -2100,7 +2388,7 @@ const marketBundle = useMemo(() => {
         <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 
         <BoostWalletPanel
-          boosts={boostWallet}
+          boosts={visibleBoostWallet}
           filters={filters}
           onAddBoost={handleAddBoost}
           onUpdateBoost={handleUpdateBoost}
@@ -2116,13 +2404,15 @@ const marketBundle = useMemo(() => {
           savedPlacedParlays={savedPlacedParlays}
           savedLegUsageMap={savedLegUsageMap}
           onSavePlacedParlay={handleSavePlacedParlay}
+          onAddManualPlacedParlay={handleAddManualPlacedParlay}
           onClearSavedParlays={handleClearSavedPlacedParlays}
           onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
           onUpdateSavedParlay={handleUpdateSavedPlacedParlay}
           onConfirmSavedParlayPlaced={handleConfirmSavedParlayPlaced}
           onSetSavedParlayResult={handleSetSavedParlayResult}
+          onUpdateParsedRowOdds={handleUpdateParsedRowOdds}
           formatSavedDateTime={formatSavedDateTime}
-          boostWallet={boostWallet}
+          boostWallet={visibleBoostWallet}
           blockedParlayLegs={blockedParlayLegs}
           onBlockParlayLeg={handleBlockParlayLeg}
           onUnblockParlayLeg={handleUnblockParlayLeg}
@@ -2284,7 +2574,7 @@ function normalizeManualMatchEventKey(value) {
 function buildSelectionBaseKey(row) {
   const text = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/âˆ’/g, "-")
+    .replace(/Ã¢Ë†â€™/g, "-")
     .replace(/\b(over|under)\b/g, " ")
     .replace(/\b\d+(\.\d+)?\+\b/g, " ")
     .replace(/[+-]?\d+(\.\d+)?/g, " ")
@@ -2315,7 +2605,7 @@ function buildSelectionFamilyKey(row) {
   const marketType = normalizeMarketType(row.marketType);
   const selection = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/Ã¢Ë†â€™/g, "-");
+    .replace(/ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢/g, "-");
 
   if (marketType === "player_points") return "points";
   if (marketType === "player_assists") return "assists";
@@ -2449,3 +2739,4 @@ function isLikelyLiveRow(row) {
     /\bo:\d\b/.test(text)
   );
 }
+

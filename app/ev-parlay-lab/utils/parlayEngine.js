@@ -407,7 +407,8 @@ export function buildParlayCandidates({
         sportsbook: bestTargetQuote.sportsbook,
         oddsAmerican: bestTargetQuote.oddsAmerican,
         oddsDecimal: bestTargetQuote.oddsDecimal,
-
+        targetParsedRowId: bestTargetQuote.parsedRowId || "",
+        parsedRowId: bestTargetQuote.parsedRowId || "",
         sharpSportsbook: bestSharpQuote?.sportsbook || "",
         sharpOddsAmerican: Number.isFinite(bestSharpQuote?.oddsAmerican)
           ? bestSharpQuote.oddsAmerican
@@ -737,8 +738,11 @@ function gradeParlay({
 }) {
   let score = 0;
 
-  const boostOnly = rawExpectedValuePct <= 0 || hasNegativeLegEv || averageLegEvPct < 0;
+  const hasMeaningfulRawEdge = Number(rawExpectedValuePct) >= 0.025;
 
+  const boostOnly =
+    rawExpectedValuePct <= 0 ||
+    (!hasMeaningfulRawEdge && (hasNegativeLegEv || averageLegEvPct < 0));
   // Boosted EV matters, but should not dominate the grade alone.
   score += clamp(expectedValuePct / 0.12, -1, 2) * 35;
 
@@ -768,6 +772,17 @@ function gradeParlay({
   // Slight penalty for very extreme odds structures.
   if (boostedParlayAmerican >= 1500) score -= 10;
   else if (boostedParlayAmerican >= 800) score -= 5;
+
+    // If source-odds editing creates an obviously huge edge, label it clearly.
+  // These should still be manually checked because giant edges often mean stale odds,
+  // parser error, or a real-but-fast-moving line.
+  if (rawExpectedValuePct >= 1 || expectedValuePct >= 1.5) {
+    return { tier: "A+", label: "Monster Edge - Verify Line", score };
+  }
+
+  if (rawExpectedValuePct >= 0.25 || expectedValuePct >= 0.4) {
+    return { tier: "A+", label: "Premium Edge - Verify Line", score };
+  }
 
   if (boostOnly) {
     if (score >= 44 && expectedValuePct >= 0.06 && fairHitProbability >= 0.15) {

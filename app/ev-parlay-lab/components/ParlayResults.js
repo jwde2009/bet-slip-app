@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import SavedPlacedParlaysLedgerPanel from "./SavedPlacedParlaysLedgerPanel";
-import { useState } from "react";
-
+import { useEffect, useState } from "react";
 export default function ParlayResults({
   parlays,
   counts,
   savedPlacedParlays = [],
   savedLegUsageMap,
   onSavePlacedParlay,
+  onAddManualPlacedParlay,
   onClearSavedParlays,
   onDeleteSavedParlay,
   onUpdateSavedParlay,
   onConfirmSavedParlayPlaced,
   onSetSavedParlayResult,
+  onUpdateParsedRowOdds,
   formatSavedDateTime,
   boostWallet = [],
   blockedParlayLegs = [],
@@ -28,9 +29,31 @@ export default function ParlayResults({
   const [collapsedMap, setCollapsedMap] = useState({});
   const [selectedBoostByParlayId, setSelectedBoostByParlayId] = useState({});
   const [stakeByParlayId, setStakeByParlayId] = useState({});
+  const [oddsByParlayId, setOddsByParlayId] = useState({});
   const [showRecommendedDevigByParlayId, setShowRecommendedDevigByParlayId] = useState({});
-
+  const [legOddsDraftByKey, setLegOddsDraftByKey] = useState({});
   const safeParlays = Array.isArray(parlays) ? parlays : [];
+  const resultSessionKey = safeParlays
+    .map((parlay) =>
+      [
+        parlay.id,
+        parlay.rawParlayAmerican,
+        parlay.boostedParlayAmerican,
+        parlay.expectedValuePct,
+        parlay.fairHitProbability,
+        parlay.gradeTier,
+        parlay.playLabel,
+      ].join(":")
+    )
+    .join("|");
+
+  useEffect(() => {
+    setSelectedBoostByParlayId({});
+    setStakeByParlayId({});
+    setOddsByParlayId({});
+    setShowRecommendedDevigByParlayId({});
+    setLegOddsDraftByKey({});
+  }, [resultSessionKey]);
 
   function toggleParlay(id) {
     setCollapsedMap((prev) => ({
@@ -45,6 +68,47 @@ export default function ParlayResults({
       [id]: !prev[id],
     }));
   }
+
+  function getLegEditKey(parlayId, leg, legIdx) {
+    return [
+      parlayId,
+      leg?.targetParsedRowId || leg?.parsedRowId || "",
+      leg?.eventName || "",
+      leg?.marketType || "",
+      leg?.subjectName || "",
+      leg?.selectionLabel || "",
+      leg?.lineValue ?? "",
+      legIdx,
+    ].join("::");
+  }
+
+  function getLegDraftOdds(parlayId, leg, legIdx) {
+    const key = getLegEditKey(parlayId, leg, legIdx);
+
+    if (Object.prototype.hasOwnProperty.call(legOddsDraftByKey, key)) {
+      return legOddsDraftByKey[key];
+    }
+
+    return leg?.oddsAmerican ?? "";
+  }
+
+  function updateLegDraftOdds(parlayId, leg, legIdx, value) {
+    const key = getLegEditKey(parlayId, leg, legIdx);
+
+    setLegOddsDraftByKey((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }
+
+  function saveLegDraftOdds(parlayId, leg, legIdx) {
+    const key = getLegEditKey(parlayId, leg, legIdx);
+    const value = legOddsDraftByKey[key] ?? leg?.oddsAmerican ?? "";
+    const rowId = leg?.targetParsedRowId || leg?.parsedRowId || "";
+
+    onUpdateParsedRowOdds?.(rowId, value);
+  }
+
 
   function handleBoostSelect(parlay, boostId) {
     setSelectedBoostByParlayId((prev) => ({
@@ -159,7 +223,7 @@ export default function ParlayResults({
                     <>American: {formatAmerican(converterResult.american)}</>
                   )
                 ) : (
-                  "—"
+                  "-"
                 )}
               </div>
             </div>
@@ -174,18 +238,20 @@ export default function ParlayResults({
                 const showRecommended = !!showRecommendedDevigByParlayId[parlay.id];
                 const selectedBoostId = selectedBoostByParlayId[parlay.id] || "";
                 const stakeValue = stakeByParlayId[parlay.id] ?? "";
-
+                const oddsValue = oddsByParlayId[parlay.id] ?? "";
+                const overrideView = buildParlayOverrideView(parlay, oddsValue, stakeValue);
+                const viewParlay = overrideView || parlay;
                 return (
                   <div key={parlay.id} style={cardStyle}>
                     <div style={cardHeaderStyle}>
                       <div>
-                        <div style={{ fontWeight: 800 }}>
-                          Candidate #{idx + 1} — {parlay.gradeTier} / {parlay.playLabel}
+                           <div style={{ fontWeight: 800 }}>
+                          Candidate #{idx + 1} - {viewParlay.gradeTier} / {viewParlay.playLabel}
+                          {overrideView ? <span style={overrideBadgeStyle}>manual odds override</span> : null}
                         </div>
                         <div style={subtleStyle}>
-                          EV {formatPct(parlay.expectedValuePct)} • Boosted {formatAmerican(parlay.boostedParlayAmerican)} • Devig {parlay.devigMethodLabel || formatDevigMethodLabel(selectedDevigMethod)}
-                        </div>
-                      </div>
+                          EV {formatPct(viewParlay.expectedValuePct)}  -  Odds {formatAmerican(viewParlay.boostedParlayAmerican)}  -  Devig {parlay.devigMethodLabel || formatDevigMethodLabel(selectedDevigMethod)}
+                        </div>                      </div>
 
                       <div style={saveControlWrapStyle}>
                         <label style={miniLabelStyle}>
@@ -200,7 +266,7 @@ export default function ParlayResults({
                               .filter((boost) => boost.status !== "used" && boost.status !== "expired")
                               .map((boost) => (
                                 <option key={boost.id} value={boost.id}>
-                                  {boost.sportsbook} — {boost.name} ({boost.boostPct}%)
+                                  {boost.sportsbook} - {boost.name} ({boost.boostPct}%)
                                 </option>
                               ))}
                           </select>
@@ -222,12 +288,29 @@ export default function ParlayResults({
                           />
                         </label>
 
+                        <label style={miniLabelStyle}>
+                          Override / Save Odds
+                          <input
+                            type="number"
+                            value={oddsValue}
+                            placeholder={String(parlay.boostedParlayAmerican ?? parlay.rawParlayAmerican ?? "Odds")}
+                            onChange={(event) =>
+                              setOddsByParlayId((prev) => ({
+                                ...prev,
+                                [parlay.id]: event.target.value,
+                              }))
+                            }
+                            style={stakeInputStyle}
+                          />
+                        </label>
+
                         <button
                           type="button"
                           onClick={() =>
                             onSavePlacedParlay?.(parlay, {
                               boostId: selectedBoostId,
                               placedStake: stakeValue,
+                              placedOddsAmerican: oddsValue,
                             })
                           }
                           style={savePlacedButtonStyle}
@@ -246,10 +329,17 @@ export default function ParlayResults({
                     {!isCollapsed && (
                       <>
                         <div style={parlayActionRowStyle}>
-                          <Link href={buildToolsLink(parlay)} style={toolsLinkStyle}>
+                          <Link href={buildToolsLink(viewParlay)} style={toolsLinkStyle}>
                             Open in Tools
                           </Link>
                         </div>
+
+                        {overrideView ? (
+                          <div style={overrideNoticeStyle}>
+                            Regraded using manual odds {formatAmerican(overrideView.boostedParlayAmerican)}.
+                            This affects this card's displayed EV/Kelly/grade and the saved odds if you click Save Candidate.
+                          </div>
+                        ) : null}
 
                         {parlay.devigWarning ? (
                           <div style={devigWarningStyle}>
@@ -289,7 +379,7 @@ export default function ParlayResults({
                             <div key={`${parlay.id}_${legIdx}`} style={legBreakdownRowStyle}>
                               <div style={legTitleRowStyle}>
                                 <span>
-                                  • {leg.eventName} — {formatLegSelection(leg)}
+                                   -  {leg.eventName} - {formatLegSelection(leg)}
                                   {getSavedLegUsage(leg, savedLegUsageMap)?.count ? (
                                     <span style={usedLegBadgeStyle}>
                                       Used {getSavedLegUsage(leg, savedLegUsageMap).count}x
@@ -305,29 +395,63 @@ export default function ParlayResults({
                                   Block Leg
                                 </button>
                               </div>
+
                               <div style={legBreakdownMetaStyle}>
                                 Target {formatAmerican(leg.oddsAmerican)} at {leg.sportsbook}
-                                {" "}• Sharp {formatAmerican(leg.sharpOddsAmerican)} at {leg.sharpSportsbook || "sharp source"}
-                                {" "}• Fair {formatAmerican(leg.fairAmerican)}
-                                {" "}• Leg EV{" "}
+                                {" "} -  Sharp {formatAmerican(leg.sharpOddsAmerican)} at {leg.sharpSportsbook || "sharp source"}
+                                {" "} -  Fair {formatAmerican(leg.fairAmerican)}
+                                {" "} -  Leg EV{" "}
                                 <span style={Number(leg.legEvPct) >= 0 ? legBreakdownEvStyle : legBreakdownEvNegativeStyle}>
                                   {formatPct(leg.legEvPct)}
                                 </span>
+                              </div>
+
+                              <div style={legOddsEditRowStyle}>
+                                <label style={legOddsEditLabelStyle}>
+                                  Edit source leg odds
+                                  <input
+                                    type="text"
+                                    value={getLegDraftOdds(parlay.id, leg, legIdx)}
+                                    onChange={(event) =>
+                                      updateLegDraftOdds(parlay.id, leg, legIdx, event.target.value)
+                                    }
+                                    style={legOddsInputStyle}
+                                    placeholder="-110 or +145"
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => saveLegDraftOdds(parlay.id, leg, legIdx)}
+                                  disabled={!(leg.targetParsedRowId || leg.parsedRowId)}
+                                  style={{
+                                    ...saveLegOddsButtonStyle,
+                                    opacity: leg.targetParsedRowId || leg.parsedRowId ? 1 : 0.55,
+                                    cursor: leg.targetParsedRowId || leg.parsedRowId ? "pointer" : "not-allowed",
+                                  }}
+                                  title={
+                                    leg.targetParsedRowId || leg.parsedRowId
+                                      ? "Save this odds edit back to Parsed Odds Review and recalculate."
+                                      : "No parsed row id found for this leg."
+                                  }
+                                >
+                                  Save Source Odds
+                                </button>
                               </div>
                             </div>
                           )) || null}
                         </div>
 
                         <div style={metricsGridStyle}>
-                          <MetricRow label="Raw Odds" value={formatAmerican(parlay.rawParlayAmerican)} />
-                          <MetricRow label="Boosted Odds" value={formatAmerican(parlay.boostedParlayAmerican)} />
+                          <MetricRow label={overrideView ? "Original Raw Odds" : "Raw Odds"} value={formatAmerican(parlay.rawParlayAmerican)} />
+                          <MetricRow label={overrideView ? "Override Odds" : "Boosted Odds"} value={formatAmerican(viewParlay.boostedParlayAmerican)} />
                           <MetricRow label="Fair Hit %" value={formatPct(parlay.fairHitProbability)} />
-                          <MetricRow label="Boosted EV %" value={formatPct(parlay.expectedValuePct)} />
+                          <MetricRow label={overrideView ? "Override EV %" : "Boosted EV %"} value={formatPct(viewParlay.expectedValuePct)} />
                           <MetricRow label="Raw EV %" value={formatPct(parlay.rawExpectedValuePct)} />
                           <MetricRow label="Avg Leg EV %" value={formatPct(parlay.averageLegEvPct)} />
-                          <MetricRow label="Expected $" value={`$${(parlay.expectedProfitAtStake ?? 0).toFixed(2)}`} />
-                          <MetricRow label="Grade" value={`${parlay.gradeTier} / ${parlay.playLabel}`} />
-                          <MetricRow label="Boosted Kelly" value={`$${Number(parlay.boostedSuggestedKellyStake ?? parlay.suggestedKellyStake ?? 0).toFixed(2)}`} />
+                          <MetricRow label="Expected $" value={`$${Number(viewParlay.expectedProfitAtStake ?? 0).toFixed(2)}`} />
+                          <MetricRow label="Grade" value={`${viewParlay.gradeTier} / ${viewParlay.playLabel}`} />
+                          <MetricRow label={overrideView ? "Override Kelly" : "Boosted Kelly"} value={`$${Number(viewParlay.boostedSuggestedKellyStake ?? viewParlay.suggestedKellyStake ?? 0).toFixed(2)}`} />
                           <MetricRow label="Raw Kelly" value={`$${Number(parlay.rawSuggestedKellyStake ?? 0).toFixed(2)}`} />
                         </div>
 
@@ -353,6 +477,7 @@ export default function ParlayResults({
       <SavedPlacedParlaysLedgerPanel
         savedPlacedParlays={savedPlacedParlays}
         savedLegUsageMap={savedLegUsageMap}
+        onAddManualPlacedParlay={onAddManualPlacedParlay}
         onClearSavedParlays={onClearSavedParlays}
         onDeleteSavedParlay={onDeleteSavedParlay}
         onUpdateSavedParlay={onUpdateSavedParlay}
@@ -460,6 +585,116 @@ function MetricRow({ label, value }) {
   );
 }
 
+function parseAmericanOddsInput(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const cleaned = text.replace(/[^\d+-]/g, "");
+  const parsed = Number(cleaned);
+
+  if (!Number.isFinite(parsed) || parsed === 0) return null;
+  return parsed;
+}
+
+function americanToDecimalLocal(americanOdds) {
+  const odds = Number(americanOdds);
+
+  if (!Number.isFinite(odds) || odds === 0) return null;
+
+  if (odds > 0) return 1 + odds / 100;
+  return 1 + 100 / Math.abs(odds);
+}
+
+function calculateOverrideKellyStake({ bankroll, kellyFraction, fairProbability, decimalOdds }) {
+  const resolvedBankroll = Number(bankroll) || 0;
+  const resolvedKellyFraction = Number(kellyFraction) || 0;
+  const p = Number(fairProbability);
+  const odds = Number(decimalOdds);
+
+  if (!(resolvedBankroll > 0) || !(resolvedKellyFraction > 0) || !(p > 0) || !(p < 1) || !(odds > 1)) {
+    return 0;
+  }
+
+  const b = odds - 1;
+  const q = 1 - p;
+  const fullKellyFraction = (b * p - q) / b;
+
+  if (!(fullKellyFraction > 0)) return 0;
+
+  return resolvedBankroll * resolvedKellyFraction * fullKellyFraction;
+}
+
+function gradeOverrideParlay({ expectedValuePct, fairHitProbability, americanOdds }) {
+  const ev = Number(expectedValuePct);
+  const hit = Number(fairHitProbability);
+  const odds = Number(americanOdds);
+
+  if (!(ev > 0)) {
+    return { tier: "D", label: "Not +EV At Override" };
+  }
+
+  if (ev >= 0.08 && hit >= 0.18 && odds < 800) {
+    return { tier: "A", label: "Strong Override Edge" };
+  }
+
+  if (ev >= 0.04 && hit >= 0.12) {
+    return { tier: "B", label: "Override Edge" };
+  }
+
+  if (ev >= 0.015) {
+    return { tier: "C", label: "Thin Override Edge" };
+  }
+
+  return { tier: "D", label: "Tiny Override Edge" };
+}
+
+function buildParlayOverrideView(parlay = {}, oddsValue, stakeValue) {
+  const overrideAmerican = parseAmericanOddsInput(oddsValue);
+  if (overrideAmerican === null) return null;
+
+  const overrideDecimal = americanToDecimalLocal(overrideAmerican);
+  const fairHitProbability = Number(parlay.fairHitProbability);
+
+  if (!Number.isFinite(overrideDecimal) || !(overrideDecimal > 1)) return null;
+  if (!Number.isFinite(fairHitProbability) || !(fairHitProbability > 0) || !(fairHitProbability < 1)) return null;
+
+  const expectedValuePct =
+    fairHitProbability * (overrideDecimal - 1) - (1 - fairHitProbability);
+
+  const stake = Number.isFinite(Number(stakeValue)) && Number(stakeValue) > 0
+    ? Number(stakeValue)
+    : Number(parlay.stake || 0);
+
+  const expectedProfitAtStake = stake * expectedValuePct;
+
+  const suggestedKellyStake = calculateOverrideKellyStake({
+    bankroll: parlay.bankroll || 6000,
+    kellyFraction: parlay.kellyFraction || 0.25,
+    fairProbability: fairHitProbability,
+    decimalOdds: overrideDecimal,
+  });
+
+  const grade = gradeOverrideParlay({
+    expectedValuePct,
+    fairHitProbability,
+    americanOdds: overrideAmerican,
+  });
+
+  return {
+    ...parlay,
+    overrideOddsAmerican: overrideAmerican,
+    boostedParlayAmerican: overrideAmerican,
+    boostedParlayDecimal: overrideDecimal,
+    expectedValuePct,
+    expectedProfitAtStake,
+    boostedSuggestedKellyStake: suggestedKellyStake,
+    suggestedKellyStake,
+    gradeTier: grade.tier,
+    playLabel: grade.label,
+  };
+}
+
+
 function convertOdds(value) {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -482,12 +717,12 @@ function convertOdds(value) {
 }
 
 function formatAmerican(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
 }
 
 function formatPct(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return `${(value * 100).toFixed(2)}%`;
 }
 
@@ -547,3 +782,58 @@ const devigWarningStyle = { marginTop: 10, border: "1px solid #f59e0b", backgrou
 const devigButtonRowStyle = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 };
 const devigCalcButtonStyle = { border: "1px solid #f59e0b", background: "#fff", color: "#92400e", borderRadius: 8, padding: "6px 9px", fontWeight: 900, cursor: "pointer" };
 const recommendedBoxStyle = { marginTop: 10, border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: 10, padding: 10, color: "#1e3a8a" };
+const overrideBadgeStyle = {
+  marginLeft: 8,
+  padding: "2px 7px",
+  borderRadius: 999,
+  background: "#dbeafe",
+  color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 900,
+  verticalAlign: "middle",
+};
+
+const overrideNoticeStyle = {
+  marginTop: 6,
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #93c5fd",
+  background: "#eff6ff",
+  color: "#1e3a8a",
+  fontSize: 12,
+  fontWeight: 700,
+};
+const legOddsEditRowStyle = {
+  marginTop: 6,
+  display: "flex",
+  gap: 8,
+  alignItems: "end",
+  flexWrap: "wrap",
+};
+
+const legOddsEditLabelStyle = {
+  display: "grid",
+  gap: 3,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#334155",
+};
+
+const legOddsInputStyle = {
+  border: "1px solid #bfdbfe",
+  borderRadius: 8,
+  padding: "6px 8px",
+  fontSize: 12,
+  minWidth: 115,
+  background: "#fff",
+};
+
+const saveLegOddsButtonStyle = {
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontSize: 11,
+  fontWeight: 900,
+  background: "#dcfce7",
+  color: "#166534",
+};

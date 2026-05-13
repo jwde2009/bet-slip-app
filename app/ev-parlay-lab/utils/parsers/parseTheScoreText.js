@@ -15,6 +15,20 @@ export function parseTheScoreText(rawText = "", context = {}) {
     .filter(Boolean);
 
   const sport = inferSport(lines, context);
+  const hasStructuredExport = lines.some((line) =>
+    /^THESCORE_STRUCTURED_EXPORT$/i.test(normalizeLine(line))
+  );
+
+  // Fast path:
+  // Extension exports are already structured. Do not run the slower detail/landing-page
+  // scanners first, because they can scan the same huge text repeatedly.
+  if (hasStructuredExport) {
+    const structuredRows = parseStructuredExport(lines, context);
+    return dedupeRows(
+      keepTheScoreMatchableRows(structuredRows.filter(isSafeTheScoreRow))
+    );
+  }
+
   const rows = [];
 
   const detailEvent = findDetailEvent(lines);
@@ -23,20 +37,228 @@ export function parseTheScoreText(rawText = "", context = {}) {
 
     rows.push(...parseDetailMainLines(lines, detailEvent.startIndex, event, detailEvent.away, detailEvent.home, sport));
     rows.push(...parseDetailOuProps(lines, detailEvent.startIndex, event, sport));
-    rows.push(...parseDetailPlusLadders(lines, detailEvent.startIndex, event, sport));
-    rows.push(...parseDetailYesNoProps(lines, detailEvent.startIndex, event, sport));
+
+    // Keep non-O/U ladder/binary parsing out of normal EV matching for now.
+    // These create lots of no-sharp rows and slow the review page.
+    // rows.push(...parseDetailPlusLadders(lines, detailEvent.startIndex, event, sport));
+    // rows.push(...parseDetailYesNoProps(lines, detailEvent.startIndex, event, sport));
   }
 
   if (rows.length === 0) {
     rows.push(...parseLandingGames(lines, sport));
   }
 
-  if (rows.length === 0) {
-    rows.push(...parseStructuredExport(lines, context));
+  return dedupeRows(
+    keepTheScoreMatchableRows(rows.filter(isSafeTheScoreRow))
+  );
+}
+
+
+function isTheScoreFakeEventSide(value = "") {
+  const text = normalizeLine(value);
+
+  return (
+    /\bto record a double double\b/i.test(text) ||
+    /\bto record a triple double\b/i.test(text) ||
+    /\brace to \d+\s+points\b/i.test(text) ||
+    /\bmethod of (first|1st) basket\b/i.test(text) ||
+    /\bfirst field goal scorer\b/i.test(text) ||
+    /\bfirst player to\b/i.test(text)
+  );
+}
+
+function isTheScoreFakeEvent(away = "", home = "") {
+  if (!away || !home) return false;
+
+  return isTheScoreFakeEventSide(away) || isTheScoreFakeEventSide(home);
+}
+
+function isSafeTheScoreRow(row = {}) {
+  if (!row) return false;
+
+  if (isFakeTheScoreEvent(row.eventLabelRaw)) return false;
+  if (isFakeTheScoreMainLineRow(row)) return false;
+
+  return true;
+}
+
+function isFakeTheScoreEvent(event = "") {
+  const text = normalizeLine(event);
+
+  if (!text) return true;
+
+  // Bad structured exports seen in review:
+  // Race To 20 Points @ Race To 30 Points
+  if (/\bRace To \d+ Points\b/i.test(text)) return true;
+
+  const parts = text
+    .split(/\s*@\s*/i)
+    .map((part) => normalizeLine(part))
+    .filter(Boolean);
+
+  if (parts.length === 2) {
+    const bothDoubleOrTripleDoublePlayers = parts.every((part) =>
+      /\bTo Record A (Double|Triple) Double\b/i.test(part)
+    );
+
+    if (bothDoubleOrTripleDoublePlayers) return true;
+
+    const bothFirstBasketProps = parts.every((part) =>
+      /\bMethod of (First|1st) Basket\b/i.test(part) ||
+      /^First (Field Goal|Player|Team)/i.test(part)
+    );
+
+    if (bothFirstBasketProps) return true;
   }
 
-  return dedupeRows(rows);
+  return false;
 }
+
+function isFakeTheScoreMainLineRow(row = {}) {
+  const marketType = String(row.marketType || "").toLowerCase();
+  const event = normalizeLine(row.eventLabelRaw || "");
+  const selection = normalizeLine(row.selectionNormalized || row.selectionRaw || "");
+
+  const isMainLine =
+    marketType === "moneyline_2way" ||
+    marketType === "moneyline_3way" ||
+    marketType === "moneyline" ||
+    marketType === "spread" ||
+    marketType === "total";
+
+  if (!isMainLine) return false;
+
+  if (/\bTo Record A (Double|Triple) Double\b/i.test(selection)) return true;
+  if (/\bRace To \d+ Points\b/i.test(selection)) return true;
+  if (/\bMethod of (First|1st) Basket\b/i.test(selection)) return true;
+  if (/\bTotal Goals$/i.test(selection)) return true;
+
+  // Fake H2H-player card rows inside a real team event:
+  // Market: Moneyline
+  // Shai Gilgeous-Alexander | +1500
+  // Austin Reaves | -5000
+  //
+  // These are not team moneylines and should not be in mainline matching.
+  if (event.includes("@")) {
+    const eventParts = event
+      .split(/\s*@\s*/i)
+      .map((part) => normalizeLine(part).toLowerCase())
+      .filter(Boolean);
+
+    const normalizedSelection = selection.toLowerCase();
+
+    if (/^(over|under)$/i.test(selection)) return false;
+
+    const isEventTeam = eventParts.some((team) => {
+      if (!team) return false;
+      return team === normalizedSelection || team.includes(normalizedSelection) || normalizedSelection.includes(team);
+    });
+
+    const looksLikePlayerName =
+      /^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3}$/.test(selection) ||
+      /^[A-Z][a-z]{1,4}\.\s+[A-Z][A-Za-z.'-]+$/.test(selection);
+
+    if (!isEventTeam && looksLikePlayerName) return true;
+  }
+
+  return false;
+}
+
+function keepTheScoreMatchableRows(rows = []) {
+  const safeRows = (rows || []).filter(Boolean);
+
+  const pairCounts = new Map();
+
+  function playerPropPairKey(row = {}) {
+    return [
+      normalizeLine(row.sportsbook || "TheScore"),
+      normalizeLine(row.sport || ""),
+      normalizeLine(row.eventLabelRaw || ""),
+      normalizeLine(row.marketType || ""),
+      normalizeLine(extractTheScorePlayerSubject(row)),
+      normalizeLine(row.lineValue ?? ""),
+    ].join("||").toLowerCase();
+  }
+
+  function sideForRow(row = {}) {
+    const selection = normalizeLine(row.selectionNormalized || row.selectionRaw || "");
+    if (/\bover\b/i.test(selection) || /^yes$/i.test(selection)) return "over";
+    if (/\bunder\b/i.test(selection) || /^no$/i.test(selection)) return "under";
+    return "";
+  }
+
+  for (const row of safeRows) {
+    if (!isTheScorePlayerPropRow(row)) continue;
+
+    const side = sideForRow(row);
+    if (!side) continue;
+
+    const key = playerPropPairKey(row);
+
+    if (!pairCounts.has(key)) {
+      pairCounts.set(key, new Set());
+    }
+
+    pairCounts.get(key).add(side);
+  }
+
+  return safeRows.filter((row) => {
+    const marketType = String(row.marketType || "").toLowerCase();
+
+    // Keep true team/game main lines.
+    if (
+      marketType === "moneyline_2way" ||
+      marketType === "moneyline_3way" ||
+      marketType === "spread" ||
+      marketType === "total"
+    ) {
+      return true;
+    }
+
+    // Keep real Double-Double / Triple-Double rows from the true team event.
+    // Fake DD/TD-vs-DD/TD "events" are already blocked by isFakeTheScoreEvent().
+    if (marketType === "double_double" || marketType === "triple_double") return true;
+
+    if (!isTheScorePlayerPropRow(row)) return false;
+
+    const key = playerPropPairKey(row);
+    const sides = pairCounts.get(key);
+
+    // Keep only two-sided O/U-style markets.
+    // This drops one-sided ladders like 25+, 30+, 35+ that create huge row counts.
+    return sides?.has("over") && sides?.has("under");
+  });
+}
+
+function isTheScorePlayerPropRow(row = {}) {
+  const marketType = String(row.marketType || "").toLowerCase();
+
+  return (
+    marketType.startsWith("player_") ||
+    marketType === "player_points" ||
+    marketType === "player_assists" ||
+    marketType === "player_rebounds" ||
+    marketType === "player_threes" ||
+    marketType === "player_pra" ||
+    marketType === "player_points_rebounds" ||
+    marketType === "player_points_assists" ||
+    marketType === "player_rebounds_assists" ||
+    marketType === "double_double" ||
+    marketType === "triple_double"
+  );
+}
+
+function extractTheScorePlayerSubject(row = {}) {
+  const selection = normalizeLine(row.selectionNormalized || row.selectionRaw || "");
+
+  return selection
+    .replace(/\bOver\b/i, "")
+    .replace(/\bUnder\b/i, "")
+    .replace(/\bYES\b/i, "")
+    .replace(/\bNO\b/i, "")
+    .trim();
+}
+
 
 function parseLandingGames(lines, sport) {
   const rows = [];
@@ -84,6 +306,8 @@ function parseLandingGames(lines, sport) {
         parsed.totalUnderOdds !== null &&
         parsed.moneylineB !== null
       ) {
+        if (isTheScoreFakeEvent(away, nbaHome)) continue;
+
         const event = `${away} @ ${nbaHome}`;
         rows.push(...buildMainRows(event, away, nbaHome, sport, {
           spreadA: parsed.spreadA,
@@ -130,6 +354,8 @@ function parseLandingGames(lines, sport) {
         parsed.totalUnderOdds !== null &&
         parsed.moneylineB !== null
       ) {
+        if (isTheScoreFakeEvent(away, nhlHome)) continue;
+
         const event = `${away} @ ${nhlHome}`;
         rows.push(...buildMainRows(event, away, nhlHome, sport, {
           spreadA: parsed.spreadA,
@@ -407,7 +633,9 @@ function parseDetailPlusLadders(lines, startIndex, event, sport) {
     }
   }
 
-  return dedupeRows(rows);
+  return dedupeRows(
+    keepTheScoreMatchableRows(rows.filter(isSafeTheScoreRow))
+  );
 }
 
 function parseDetailYesNoProps(lines, startIndex, event, sport) {
@@ -468,9 +696,16 @@ function parseStructuredExport(lines, context = {}) {
   let currentSport = String(context?.sport || "").toUpperCase() || "UNKNOWN";
   let currentEvent = String(context?.eventName || "").trim() || "Unknown Event";
   let currentMarket = "";
+  let currentCaptureLabel = "";
 
   for (const line of lines) {
     if (/^THESCORE_STRUCTURED_EXPORT$/i.test(line)) continue;
+
+    const captureMatch = line.match(/^THESCORE_MARKET_CAPTURE:\s*(.+)$/i);
+    if (captureMatch) {
+      currentCaptureLabel = normalizeLine(captureMatch[1]).toLowerCase();
+      continue;
+    }
 
     const sportMatch = line.match(/^Sport:\s*(.+)$/i);
     if (sportMatch) {
@@ -517,25 +752,17 @@ function parseStructuredExport(lines, context = {}) {
 
     const ladderMatch = line.match(/^(.+?)\s*\|\s*(\d+(?:\.\d+)?\+)\s*\|\s*((?:[+-]\d+)|EVEN)$/i);
     if (ladderMatch) {
-      const player = normalizeLine(ladderMatch[1]);
-      const threshold = Number(String(ladderMatch[2]).replace(/\+$/, ""));
-      const oddsAmerican = /^EVEN$/i.test(ladderMatch[3]) ? 100 : Number(ladderMatch[3]);
-
-      const marketType = inferStructuredMarketType(currentMarket, "ladder");
-
-      if (!player || !Number.isFinite(threshold) || !Number.isFinite(oddsAmerican) || !marketType) {
-        continue;
-      }
-
-      rows.push(buildRow({
-        sport: currentSport,
-        event: currentEvent,
-        marketType,
-        selection: `${player} Over`,
-        lineValue: threshold - 0.5,
-        oddsAmerican,
-      }));
-
+      // SAFETY LOCK:
+      // TheScore structured exports include ladder markets like:
+      // E. Mobley | 15+ | -800
+      //
+      // Converting that to Over 14.5 creates fake O/U rows and can collide with
+      // true O/U rows like:
+      // E. Mobley | OVER | 14.5 | -125
+      // E. Mobley | UNDER | 14.5 | -105
+      //
+      // For the EV/parlay workflow, keep true two-sided O/U rows only.
+      // Do not convert one-sided ladders into standard O/U rows.
       continue;
     }
 
@@ -595,6 +822,16 @@ function parseStructuredExport(lines, context = {}) {
         continue;
       }
 
+      // TheScore prop tabs often export "Market: Total" for prop/H2H widgets.
+      // Examples:
+      // NHL goals page: Total 0.5 / 1.5
+      // NHL goalie page: Total 25.5
+      // NBA prop pages: Total 2.5 / 3.5 / 6.5 / 53.5
+      // Those are not game totals and should not pollute fair-odds matching.
+      if (!isLikelyTheScoreGameTotal(currentSport, lineValue, currentCaptureLabel)) {
+        continue;
+      }
+
       rows.push(buildRow({
         sport: currentSport,
         event: currentEvent,
@@ -632,17 +869,96 @@ function parseStructuredExport(lines, context = {}) {
   return rows;
 }
 
+function isLikelyTheScoreGameTotal(sport = "", lineValue, captureLabel = "") {
+  const league = String(sport || "").toUpperCase();
+  const line = Number(lineValue);
+  const label = normalizeLine(captureLabel || "").toLowerCase();
+
+  if (!Number.isFinite(line)) return false;
+
+  // Do not keep totals that come from clearly prop-specific captures unless they
+  // are within plausible full-game ranges.
+  const isPropCapture =
+    /points|assists|rebounds|threes|combos|goals|shots|saves|goalie|defense|power play/i.test(label);
+
+  if (league === "NBA") {
+    // NBA full-game totals are normally much larger than 100.
+    // This intentionally drops prop/H2H totals like 2.5, 3.5, 6.5, 53.5.
+    return line >= 100 && line <= 280;
+  }
+
+  if (league === "NHL") {
+    // NHL full-game totals normally live around 4.5 to 8.5.
+    // This drops goalscorer totals like 0.5/1.5 and goalie-save totals like 25.5.
+    return line >= 4 && line <= 9;
+  }
+
+  if (league === "MLB") {
+    return line >= 5 && line <= 15;
+  }
+
+  if (isPropCapture) return false;
+
+  return true;
+}
+
+
 function inferStructuredMarketType(header, mode = "") {
   const text = normalizeLine(header).toLowerCase();
 
-  if (text === "points (o/u)" || text === "points") return "player_points";
-  if (text === "rebounds (o/u)" || text === "rebounds") return "player_rebounds";
-  if (text === "assists (o/u)" || text === "assists") return "player_assists";
-  if (text === "3-pointers made (o/u)" || text === "3-pointers made") return "player_threes";
-  if (text === "pts + reb + ast (o/u)" || text === "pts + reb + ast") return "player_pra";
-  if (text === "pts + reb") return "player_points_rebounds";
-  if (text === "pts + ast") return "player_points_assists";
-  if (text === "reb + ast (o/u)" || text === "reb + ast") return "player_rebounds_assists";
+  if (text === "points (o/u)" || text === "points" || text === "player points") return "player_points";
+  if (text === "rebounds (o/u)" || text === "rebounds" || text === "player rebounds") return "player_rebounds";
+  if (text === "assists (o/u)" || text === "assists" || text === "player assists") return "player_assists";
+
+  if (
+    text === "3-pointers made (o/u)" ||
+    text === "3-pointers made" ||
+    text === "three-pointers made" ||
+    text === "player threes" ||
+    text === "player three-pointers"
+  ) {
+    return "player_threes";
+  }
+
+  if (
+    text === "pts + reb + ast (o/u)" ||
+    text === "pts + reb + ast" ||
+    text === "points + rebounds + assists" ||
+    text === "points + rebounds + assists (o/u)" ||
+    text === "pra" ||
+    text === "pra (o/u)"
+  ) {
+    return "player_pra";
+  }
+
+  if (
+    text === "pts + reb" ||
+    text === "pts + reb (o/u)" ||
+    text === "points + rebounds" ||
+    text === "points + rebounds (o/u)"
+  ) {
+    return "player_points_rebounds";
+  }
+
+  if (
+    text === "pts + ast" ||
+    text === "pts + ast (o/u)" ||
+    text === "points + assists" ||
+    text === "points + assists (o/u)" ||
+    text === "points/assists"
+  ) {
+    return "player_points_assists";
+  }
+
+  if (
+    text === "reb + ast (o/u)" ||
+    text === "reb + ast" ||
+    text === "rebounds + assists" ||
+    text === "rebounds + assists (o/u)"
+  ) {
+    return "player_rebounds_assists";
+  }
+
   if (text === "double double") return "double_double";
   if (text === "triple double") return "triple_double";
 

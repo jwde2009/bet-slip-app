@@ -54,7 +54,7 @@ async function safeShowToast(tabId, title, message, details = {}) {
 
 async function setExtensionWorkingBadge(isWorking) {
   try {
-    await chrome.action.setBadgeText({ text: isWorking ? "…" : "" });
+    await chrome.action.setBadgeText({ text: isWorking ? "..." : "" });
 
     if (isWorking) {
       await chrome.action.setBadgeBackgroundColor({ color: "#16a34a" });
@@ -147,6 +147,18 @@ function isDraftKingsTabUrl(url = "") {
 
 function sleepBackground(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resetBetMgmWorkflowStorageInPage() {
+  try {
+    Object.keys(sessionStorage || {}).forEach((key) => {
+      if (/^EV_BETMGM_/i.test(String(key || ""))) {
+        sessionStorage.removeItem(key);
+      }
+    });
+  } catch (err) {
+    // ignore storage failures
+  }
 }
 
 function normalizeExtractionBlock(text = "") {
@@ -284,11 +296,38 @@ async function extractBetMgmMultiPassPayload(tabId) {
   let source = "BetMGM";
 
   const maxPasses = 24;
+  let waitingForHydration = false;
+  let hydrationRetries = 0;
+
+  function looksLikeBetMgmHydrationShell(text = "") {
+    const cleaned = String(text || "").trim();
+
+    if (!cleaned) return true;
+
+    const hasRealOdds =
+      /[-+]\d{2,5}/.test(cleaned) &&
+      (
+        /\b(Player points|Player assists|Player rebounds|Player three-pointers|Player shots|Goalie saves|Game lines|Spread|Total|Money)\b/i.test(cleaned) ||
+        /\b(Thunder|Lakers|Pistons|Cavaliers|Nuggets|Timberwolves|Celtics|76ers|Penguins|Flyers|Sabres|Bruins)\b/i.test(cleaned)
+      );
+
+    const isTinyShell =
+      cleaned.length < 1200 &&
+      /Sports\s+Rewards\s+Help/i.test(cleaned) &&
+      !hasRealOdds;
+
+    const isToastOnlyShell =
+      /Extracting BetMGM/i.test(cleaned) &&
+      !hasRealOdds &&
+      cleaned.length < 2000;
+
+    return isTinyShell || isToastOnlyShell;
+  }
 
   await safeShowToast(
     tabId,
     "Extracting BetMGM…",
-    "Starting BetMGM player-props capture. Keep this tab open.",
+    "Starting BetMGM capture. Keep this tab open.",
     {
       loading: true,
       pulse: true,
@@ -300,8 +339,8 @@ async function extractBetMgmMultiPassPayload(tabId) {
       tabId,
       "Extracting BetMGM…",
       pass === 0
-        ? `Pass ${pass + 1} of ${maxPasses}: capturing starting section.`
-        : `Pass ${pass + 1} of ${maxPasses}: capturing newly opened section.`,
+        ? `Pass ${pass + 1}: capturing current BetMGM page.`
+        : `Pass ${pass + 1}: waiting for BetMGM content, then capturing.`,
       {
         loading: true,
         pulse: pass === 0,
@@ -317,43 +356,79 @@ async function extractBetMgmMultiPassPayload(tabId) {
     }
 
     if (!text.trim()) {
-      break;
+      await sleepBackground(2500);
+      continue;
     }
+
+    if (waitingForHydration && looksLikeBetMgmHydrationShell(text)) {
+      hydrationRetries += 1;
+
+      await safeShowToast(
+        tabId,
+        "Extracting BetMGM…",
+        `BetMGM is still loading Player Props. Waiting again (${hydrationRetries}/4).`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
+
+      if (hydrationRetries <= 4) {
+        await sleepBackground(3000);
+        continue;
+      }
+    }
+
+    waitingForHydration = false;
+    hydrationRetries = 0;
 
     captures.push(`BETMGM_AUTOPASS_${pass + 1}\n${text}`);
 
     const scheduledPlayerPropsMatch = text.match(/BETMGM_SCHEDULED_PLAYER_PROPS:\s*(.+)/i);
     const scheduledTopTabMatch = text.match(/BETMGM_SCHEDULED_TOP_TAB:\s*(.+)/i);
     const scheduledDrawerMatch = text.match(/BETMGM_SCHEDULED_DRAWER:\s*(.+)/i);
-    const scheduledHeaderMatch =
+    const scheduledHeaderMatch = text.match(/BETMGM_SCHEDULED_PLAYER_HEADER:\s*(.+)/i);
+
+    const scheduled =
       scheduledPlayerPropsMatch ||
       scheduledTopTabMatch ||
       scheduledDrawerMatch ||
-      text.match(/BETMGM_SCHEDULED_PLAYER_HEADER:\s*(.+)/i);
+      scheduledHeaderMatch;
 
-    if (!scheduledHeaderMatch?.[1]) {
+    if (!scheduled?.[1]) {
+      await safeShowToast(
+        tabId,
+        "BetMGM capture finishing…",
+        `No next BetMGM step found after pass ${pass + 1}.`,
+        {
+          loading: true,
+          pulse: false,
+        }
+      );
       break;
     }
+
+    const label = String(scheduled[1] || "").trim();
 
     await safeShowToast(
       tabId,
       "Extracting BetMGM…",
-      scheduledPlayerPropsMatch?.[1]
-        ? "Opening top section: Player props."
-        : scheduledTopTabMatch?.[1]
-          ? `Opening top tab: ${String(scheduledTopTabMatch[1]).trim()}.`
-          : scheduledDrawerMatch?.[1]
-            ? `Opening drawer: ${String(scheduledDrawerMatch[1]).trim()}.`
-            : `Opening BetMGM section: ${String(scheduledHeaderMatch[1]).trim()}.`,
+      scheduledPlayerPropsMatch
+        ? "Opened Player Props. Waiting for the page to hydrate before next capture."
+        : scheduledTopTabMatch
+          ? `Opened top tab: ${label}. Waiting before next capture.`
+          : scheduledDrawerMatch
+            ? `Opened drawer: ${label}. Waiting before next capture.`
+            : `Opened player-prop header: ${label}. Waiting before next capture.`,
       {
         loading: true,
-        pulse: !!scheduledTopTabMatch?.[1] || !!scheduledPlayerPropsMatch?.[1],
+        pulse: true,
       }
     );
 
-    await sleepBackground(
-      scheduledTopTabMatch?.[1] || scheduledPlayerPropsMatch?.[1] ? 3000 : 2300
-    );
+    waitingForHydration = true;
+
+    await sleepBackground(scheduledPlayerPropsMatch || scheduledTopTabMatch ? 5000 : 3000);
   }
 
   return {
@@ -517,6 +592,13 @@ chrome.action.onClicked.addListener(async (tab) => {
     }
   );
 
+  if (isBetMgmTabUrl(tab.url)) {
+    await safeExecuteScript({
+      tabId: sourceTabId,
+      func: resetBetMgmWorkflowStorageInPage,
+    });
+  }
+
   const payload = isFanDuelTabUrl(tab.url)
     ? await extractFanDuelMultiPassPayload(sourceTabId)
     : isBetMgmTabUrl(tab.url)
@@ -524,6 +606,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       : isDraftKingsTabUrl(tab.url)
         ? await extractDraftKingsMultiPassPayload(sourceTabId)
         : await extractSinglePayloadFromTab(sourceTabId);
+
 
   const finalText = String(payload?.text || "");
   const source = String(payload?.source || "");
@@ -535,7 +618,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     await safeShowToast(
       sourceTabId,
-      "➡️ FanDuel moved to Player Points",
+      "FanDuel moved to Player Points",
       message || "No text was imported. Click the extension again from the Player Points page.",
       {
         loading: false,
@@ -602,8 +685,8 @@ chrome.action.onClicked.addListener(async (tab) => {
   await safeShowToast(
     sourceTabId,
     isFanDuelCapture
-      ? "✅ COMPLETE — FanDuel captured"
-      : `✅ COMPLETE — ${source} import sent`,
+      ? "COMPLETE - FanDuel captured"
+      : `COMPLETE - ${source} import sent`,
     isFanDuelCapture
       ? `${finalText.length.toLocaleString()} characters queued. Load newest import, then parse in EV Lab.`
       : estimatedRows > 0
@@ -733,7 +816,7 @@ function showImportToast(title, message, details = {}) {
 
     const closeButton = document.createElement("button");
     closeButton.type = "button";
-    closeButton.textContent = "×";
+    closeButton.textContent = "X";
     closeButton.style.background = "transparent";
     closeButton.style.border = "none";
     closeButton.style.color = "#f0fdf4";
@@ -1006,6 +1089,93 @@ async function extractOddsTextFromCurrentPage() {
         }
       }
     }
+
+    async function clickElementAtCenterReliably(el) {
+      if (!el) return false;
+
+      try {
+        el.scrollIntoView({ block: "center", inline: "center" });
+        await sleep(180);
+
+        const rect = el.getBoundingClientRect();
+        const x = Math.max(1, Math.floor(rect.left + rect.width / 2));
+        const y = Math.max(1, Math.floor(rect.top + rect.height / 2));
+        const hit = document.elementFromPoint(x, y) || el;
+
+        const eventOptions = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y,
+          button: 0,
+          buttons: 1,
+        };
+
+        const pointerOptions = {
+          ...eventOptions,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          pressure: 0.5,
+        };
+
+        const targets = Array.from(
+          new Set([
+            hit,
+            el,
+            el.closest?.("li"),
+            el.closest?.("button"),
+            el.closest?.("[role='button']"),
+            el.closest?.("[role='tab']"),
+            el.parentElement,
+          ].filter(Boolean))
+        );
+
+        for (const target of targets) {
+          try {
+            target.dispatchEvent(new PointerEvent("pointerover", pointerOptions));
+            target.dispatchEvent(new PointerEvent("pointerenter", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mouseover", eventOptions));
+            target.dispatchEvent(new MouseEvent("mouseenter", eventOptions));
+            target.dispatchEvent(new PointerEvent("pointerdown", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mousedown", eventOptions));
+            target.dispatchEvent(new PointerEvent("pointerup", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mouseup", eventOptions));
+            target.dispatchEvent(new MouseEvent("click", eventOptions));
+          } catch (err) {
+            // continue trying other targets
+          }
+        }
+
+        try {
+          hit.click?.();
+        } catch (err) {
+          // ignore
+        }
+
+        try {
+          el.click?.();
+        } catch (err) {
+          // ignore
+        }
+
+        await sleep(250);
+
+        return true;
+      } catch (err) {
+        try {
+          el.click();
+          return true;
+        } catch (innerErr) {
+          return false;
+        }
+      }
+    }
+
 
     async function clickSafeExpandButtons() {
       let totalClicked = 0;
@@ -2845,54 +3015,220 @@ function normalizeFanDuelLabel(value) {
       return totalClicked;
     }
 
+    function getBetMgmSportKind(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+      const path = String(window.location.pathname || "").toLowerCase();
+
+      if (/\bNBA\s*\(/i.test(compact) || /\bbasketball\b/i.test(path)) return "NBA";
+      if (/\bNHL\s*\(/i.test(compact) || /\bhockey\b/i.test(path) || /\bnhl\b/i.test(path)) return "NHL";
+
+      if (
+        /\bKnicks\b|\b76ers\b|\bCeltics\b|\bLakers\b|\bNuggets\b|\bTimberwolves\b|\bPistons\b|\bMagic\b|\bCavaliers\b|\bRaptors\b|\bHawks\b/i.test(compact)
+      ) {
+        return "NBA";
+      }
+
+      if (
+        /\bCanadiens\b|\bLightning\b|\bPenguins\b|\bFlyers\b|\bBruins\b|\bSabres\b|\bOilers\b|\bDucks\b|\bStars\b|\bWild\b/i.test(compact)
+      ) {
+        return "NHL";
+      }
+
+      return "";
+    }
+
+    function hasBetMgmRealNbaPlayerPropsTopTabs(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      return (
+        /\bPlayer props\b/i.test(compact) &&
+        /\bPoints\b/i.test(compact) &&
+        /\bFirst FG\b/i.test(compact) &&
+        /\bAssists\b/i.test(compact) &&
+        /\bRebounds\b/i.test(compact) &&
+        /\bThree-pointers\b/i.test(compact) &&
+        /\bCombo stats\b/i.test(compact)
+      );
+    }
+
+    function isBetMgmGameLinesShell(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      return (
+        /\bPlayer props\b/i.test(compact) &&
+        /\bGame lines\b/i.test(compact) &&
+        /\bFull game\b/i.test(compact) &&
+        /\bSpread\b/i.test(compact) &&
+        /\bTotal\b/i.test(compact) &&
+        /\bMoney\b/i.test(compact) &&
+        !hasBetMgmRealNbaPlayerPropsTopTabs(compact)
+      );
+    }
+
+    function getBetMgmPlayerPropsAttemptKey() {
+      const path = String(window.location.pathname || "");
+      return `EV_BETMGM_PLAYER_PROPS_ATTEMPTS::${path}`;
+    }
+
+    function getBetMgmPlayerPropsAttempts() {
+      try {
+        return Number(sessionStorage.getItem(getBetMgmPlayerPropsAttemptKey()) || "0") || 0;
+      } catch (err) {
+        return 0;
+      }
+    }
+
+    function markBetMgmPlayerPropsAttempt() {
+      try {
+        sessionStorage.setItem(
+          getBetMgmPlayerPropsAttemptKey(),
+          String(getBetMgmPlayerPropsAttempts() + 1)
+        );
+      } catch (err) {
+        // ignore storage failures
+      }
+    }
+
+
+    function shouldOpenBetMgmPlayerProps(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      // If the page exposes a Player props nav item, clicking it is safe.
+      // If we are already on Player props, this is usually harmless and only happens
+      // once per extension run because hasBetMgmEnteredPlayerProps() is marked.
+      const hasPlayerPropsNav = /\bPlayer props\b/i.test(compact);
+
+      // Require at least some game shell signal so random footer/legal text does not trigger it.
+      const hasGameShell =
+        /\bSGP\b/i.test(compact) ||
+        /\bGame lines\b/i.test(compact) ||
+        /\bSpreads?\b/i.test(compact) ||
+        /\bTotals?\b/i.test(compact) ||
+        /\bMoneyline?\b/i.test(compact) ||
+        /\bMoney\b/i.test(compact);
+
+      return hasPlayerPropsNav && hasGameShell;
+    }
+
+    function hasBetMgmForcedPlayerPropsClick() {
+      try {
+        return sessionStorage.getItem("EV_BETMGM_FORCED_PLAYER_PROPS_CLICKED") === "1";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function markBetMgmForcedPlayerPropsClick() {
+      try {
+        sessionStorage.setItem("EV_BETMGM_FORCED_PLAYER_PROPS_CLICKED", "1");
+      } catch (err) {
+        // ignore storage failures
+      }
+    }
+
+    function shouldForceBetMgmPlayerPropsFirst(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      if (hasBetMgmForcedPlayerPropsClick()) return false;
+
+      // BetMGM NBA and NHL game pages both expose Player props as the top section.
+      // We force this first because NBA landing pages can contain prop-preview text
+      // that tricks isBetMgmPlayerPropsPage().
+      return /\bPlayer props\b/i.test(compact);
+    }
+
+
     function isBetMgmGameLandingPage(text) {
       const compact = String(text || "").replace(/\s+/g, " ");
 
-      const hasGameNav =
-        /\bSGP\b/i.test(compact) &&
+      return (
         /\bPlayer props\b/i.test(compact) &&
-        /\bSpreads\b/i.test(compact) &&
-        /\bTotals\b/i.test(compact);
-
-      const hasGameLines =
-        /\bGame lines\b/i.test(compact) ||
         (
-          /\bFull game\b/i.test(compact) &&
-          /\bSpread\b/i.test(compact) &&
-          /\bTotal\b/i.test(compact) &&
+          /\bSGP\b/i.test(compact) ||
+          /\bGame lines\b/i.test(compact) ||
+          /\bSpreads?\b/i.test(compact) ||
+          /\bTotals?\b/i.test(compact) ||
+          /\bMoneyline?\b/i.test(compact) ||
           /\bMoney\b/i.test(compact)
-        );
-
-      const hasPlayerPropsTopTabs =
-        /\bPoints\b\s+\bFirst FG\b\s+\bAssists\b\s+\bRebounds\b\s+\bThree-pointers\b\s+\bCombo stats\b/i.test(compact);
-
-      return hasGameNav && hasGameLines && !hasPlayerPropsTopTabs;
+        )
+      );
     }
+
 
     function isBetMgmPlayerPropsPage(text) {
       const compact = String(text || "").replace(/\s+/g, " ");
+      const sport = getBetMgmSportKind(compact);
 
-      const hasPlayerPropsTopTabs =
-        /\bPoints\b\s+\bFirst FG\b\s+\bAssists\b\s+\bRebounds\b\s+\bThree-pointers\b\s+\bCombo stats\b/i.test(compact);
+      if (sport === "NBA") {
+        return hasBetMgmRealNbaPlayerPropsTopTabs(compact);
+      }
 
-      const hasCorePlayerPropPage =
-        /\bPlayer props\b/i.test(compact) && hasPlayerPropsTopTabs;
+      if (sport === "NHL") {
+        return (
+          /\bPlayer props\b/i.test(compact) &&
+          (
+            /\bAnytime goalscorer\b/i.test(compact) ||
+            /\bPlayer shots\b/i.test(compact) ||
+            /\bGoalie saves\b/i.test(compact) ||
+            /\bPlayer points\b/i.test(compact) ||
+            /\bPlayer assists\b/i.test(compact)
+          )
+        );
+      }
 
-      const hasComboSection =
-        /\bPlayer points \+ rebounds \+ assists\b/i.test(compact) ||
-        /\bPlayer points \+ assists\b/i.test(compact) ||
-        /\bPlayer points \+ rebounds\b/i.test(compact) ||
-        /\bPlayer rebounds \+ assists\b/i.test(compact) ||
-        /\bPlayer double-double\b/i.test(compact) ||
-        /\bPlayer triple-double\b/i.test(compact);
-
-      return hasCorePlayerPropPage || hasComboSection;
+      return /\bPlayer props\b/i.test(compact) && !isBetMgmGameLinesShell(compact);
     }
 
-    function getBetMgmWorkflowActions() {
+
+    function isBetMgmLikelyNhlPage(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+      const path = String(window.location?.pathname || "").toLowerCase();
+
+      // IMPORTANT:
+      // BetMGM pages include global nav text like NBA / NHL / MLB on every page.
+      // Do NOT treat the presence of the word "NHL" alone as proof this is an NHL event.
+
+      const nbaEventSignals =
+        /\bBasketball\b/i.test(compact) ||
+        /\bUSA\s+NBA\b/i.test(compact) ||
+        /\bNBA\b[\s\S]{0,120}\b(Today|Tomorrow)\b/i.test(compact) ||
+        /\b(Pistons|Cavaliers|Thunder|Lakers|Timberwolves|Spurs|Knicks|76ers|Celtics|Hawks|Nuggets|Rockets|Raptors|Magic)\b/i.test(compact);
+
+      if (nbaEventSignals) return false;
+
+      const nhlEventSignals =
+        /\bHockey\b/i.test(compact) ||
+        /\bUSA\s+NHL\b/i.test(compact) ||
+        /nhl|hockey/i.test(path) ||
+        /\b(Avalanche|Wild|Sabres|Canadiens|Ducks|Golden Knights|Penguins|Flyers|Bruins|Lightning|Oilers|Stars)\b/i.test(compact) ||
+        (
+          /\bAnytime goalscorer\b/i.test(compact) &&
+          /\bPlayer shots\b/i.test(compact) &&
+          /\bGoalie saves\b/i.test(compact)
+        );
+
+      return nhlEventSignals;
+    }
+
+    function getBetMgmWorkflowActions(text = "") {
+      if (isBetMgmLikelyNhlPage(text)) {
+        return [
+          // O/U-like NHL markets only.
+          // Do not spend passes on First goalscorer, 2+ goals, 3+ goals, shutouts,
+          // or other markets that are not currently useful for Pinnacle matching.
+          { type: "drawer", label: "Player shots" },
+          { type: "drawer", label: "Player points" },
+          { type: "drawer", label: "Player assists" },
+          { type: "drawer", label: "Player power play points" },
+          { type: "drawer", label: "Goalie saves" },
+          { type: "drawer", label: "Goals against" },
+          { type: "drawer", label: "Player blocked shots" },
+        ];
+      }
+
       return [
-        // Start by explicitly opening the Points top tab.
-        // The starting Player props page may show points ladders but not the points O/U drawer.
+        // NBA top-tab-first workflow.
+        // Keep this O/U-focused. Do not parse visible 10+/15+/20+ ladders as normal O/U.
         { type: "tab", label: "Points" },
         { type: "drawer", label: "Player points O/U" },
 
@@ -2906,14 +3242,6 @@ function normalizeFanDuelLabel(value) {
         { type: "drawer", label: "Player three-pointers O/U" },
 
         { type: "tab", label: "Combo stats" },
-
-        // Combo ladders/binaries.
-        { type: "drawer", label: "Player points + assists" },
-        { type: "drawer", label: "Player rebounds + assists" },
-        { type: "drawer", label: "Player double-double" },
-        { type: "drawer", label: "Player triple-double" },
-
-        // Combo O/U drawers.
         { type: "drawer", label: "Player points + rebounds + assists O/U" },
         { type: "drawer", label: "Player points + assists O/U" },
         { type: "drawer", label: "Player points + rebounds O/U" },
@@ -2921,13 +3249,61 @@ function normalizeFanDuelLabel(value) {
       ];
     }
 
+
+
     function getBetMgmWorkflowProgressKey() {
       const path = String(window.location.pathname || "");
       return `EV_BETMGM_WORKFLOW_PROGRESS::${path}`;
     }
 
-    function getBetMgmNextWorkflowAction() {
-      const actions = getBetMgmWorkflowActions();
+    function getBetMgmEnteredPlayerPropsKey() {
+      const path = String(window.location.pathname || "");
+      return `EV_BETMGM_ENTERED_PLAYER_PROPS::${path}`;
+    }
+
+    function hasBetMgmEnteredPlayerProps() {
+      try {
+        return sessionStorage.getItem(getBetMgmEnteredPlayerPropsKey()) === "1";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function markBetMgmEnteredPlayerProps() {
+      try {
+        sessionStorage.setItem(getBetMgmEnteredPlayerPropsKey(), "1");
+      } catch (err) {
+        // ignore storage failures
+      }
+    }
+
+    function hasBetMgmForcedPlayerPropsClick() {
+      try {
+        return sessionStorage.getItem("EV_BETMGM_FORCED_PLAYER_PROPS_CLICKED") === "1";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function markBetMgmForcedPlayerPropsClick() {
+      try {
+        sessionStorage.setItem("EV_BETMGM_FORCED_PLAYER_PROPS_CLICKED", "1");
+      } catch (err) {
+        // ignore storage failures
+      }
+    }
+
+    function shouldForceBetMgmPlayerPropsFirst(text = "") {
+      const compact = String(text || "").replace(/\s+/g, " ");
+
+      if (hasBetMgmForcedPlayerPropsClick()) return false;
+
+      return /\bPlayer props\b/i.test(compact);
+    }
+
+
+    function getBetMgmNextWorkflowAction(text = "") {
+      const actions = getBetMgmWorkflowActions(text);
       const key = getBetMgmWorkflowProgressKey();
       const stored = Number(sessionStorage.getItem(key));
 
@@ -2945,51 +3321,232 @@ function normalizeFanDuelLabel(value) {
       return nextAction;
     }
 
+    async function clickBetMgmElementAtCenter(el) {
+      if (!el) return false;
+
+      try {
+        el.scrollIntoView({ block: "center", inline: "center" });
+        await sleep(250);
+
+        const rect = el.getBoundingClientRect();
+        const x = Math.max(1, Math.floor(rect.left + rect.width / 2));
+        const y = Math.max(1, Math.floor(rect.top + rect.height / 2));
+        const hit = document.elementFromPoint(x, y) || el;
+
+        const eventOptions = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y,
+          button: 0,
+          buttons: 1,
+        };
+
+        const pointerOptions = {
+          ...eventOptions,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          pressure: 0.5,
+        };
+
+        const targets = Array.from(
+          new Set([
+            el,
+            hit,
+            hit?.closest?.(".event-details-sitemap-pills-btn"),
+            hit?.closest?.("li"),
+            hit?.closest?.("button, [role='button'], [role='tab'], a"),
+            el.querySelector?.("button"),
+            el.querySelector?.("[role='button']"),
+            el.querySelector?.("[role='tab']"),
+          ].filter(Boolean))
+        );
+
+        for (const target of targets) {
+          try {
+            target.dispatchEvent(new PointerEvent("pointerover", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mouseover", eventOptions));
+            target.dispatchEvent(new PointerEvent("pointerdown", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mousedown", eventOptions));
+            target.dispatchEvent(new PointerEvent("pointerup", pointerOptions));
+            target.dispatchEvent(new MouseEvent("mouseup", eventOptions));
+            target.dispatchEvent(new MouseEvent("click", eventOptions));
+            target.click?.();
+          } catch (err) {
+            // keep trying
+          }
+
+          await sleep(60);
+        }
+
+        await sleep(450);
+        return true;
+      } catch (err) {
+        try {
+          el.click();
+          return true;
+        } catch (innerErr) {
+          return false;
+        }
+      }
+    }
+
+    function navigateBetMgmToMarket(marketId = "") {
+      const id = String(marketId || "").trim();
+      if (!id) return false;
+
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("market", id);
+
+        sessionStorage.setItem(
+          "EV_BETMGM_LAST_CLICK_DEBUG",
+          JSON.stringify({
+            mode: "navigate",
+            label: id,
+            found: true,
+            from: window.location.href,
+            to: url.toString(),
+            at: new Date().toISOString(),
+          })
+        );
+
+        window.location.assign(url.toString());
+        return true;
+      } catch (err) {
+        try {
+          const separator = window.location.href.includes("?") ? "&" : "?";
+          const nextUrl = `${window.location.href}${separator}market=${encodeURIComponent(id)}`;
+
+          sessionStorage.setItem(
+            "EV_BETMGM_LAST_CLICK_DEBUG",
+            JSON.stringify({
+              mode: "navigate",
+              label: id,
+              found: true,
+              from: window.location.href,
+              to: nextUrl,
+              fallback: true,
+              at: new Date().toISOString(),
+            })
+          );
+
+          window.location.assign(nextUrl);
+          return true;
+        } catch (innerErr) {
+          return false;
+        }
+      }
+    }
+
+
     function scheduleBetMgmNavClickByLabel(label) {
       if (!label) return false;
 
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         try {
           const wanted = clean(label).toLowerCase();
 
-          const candidates = Array.from(
-            document.querySelectorAll("button, a, [role='button'], [role='tab'], body *")
-          )
-            .filter((el) => {
-              if (!isElementVisible(el)) return false;
+          if (wanted === "player props") {
+            const navigated = navigateBetMgmToMarket("PlayerProps");
 
-              const text = clean(getElementText(el)).toLowerCase();
-              if (text !== wanted) return false;
+            if (!navigated) {
+              console.warn("EV Parlay BetMGM PlayerProps navigation failed");
+            }
 
-              const rect = el.getBoundingClientRect();
+            return;
+          }
 
-              return (
-                rect.width > 8 &&
-                rect.height > 8 &&
-                rect.width < 640 &&
-                rect.height < 160
-              );
-            })
-            .map((el) => findClickableAncestor(el) || el)
-            .filter((el) => el && isElementVisible(el))
-            .sort((a, b) => {
-              const ar = a.getBoundingClientRect();
-              const br = b.getBoundingClientRect();
 
-              return ar.top - br.top;
-            });
 
-          const button = candidates[0];
+          const menuIdByLabel = {
+            "sgp": "-2",
+            "player props": "PlayerProps",
+            "spreads": "Spread",
+            "spread": "Spread",
+            "totals": "Totals",
+            "total": "Totals",
+            "parlays": "Parlays",
+            "halves": "Halves",
+            "quarters": "Quarters",
+            "periods": "Periods",
+            "game props": "GameProps",
+            "team props": "TeamProps",
+            "all": "-1",
+          };
+
+          const menuId = menuIdByLabel[wanted] || "";
+
+          const getText = (el) =>
+            clean(
+              el?.innerText ||
+                el?.textContent ||
+                el?.getAttribute?.("aria-label") ||
+                el?.getAttribute?.("title") ||
+                ""
+            );
+
+          const visibleSmallEnough = (el) => {
+            if (!isElementVisible(el)) return false;
+
+            const rect = el.getBoundingClientRect();
+
+            return (
+              rect.width > 8 &&
+              rect.height > 8 &&
+              rect.width < 760 &&
+              rect.height < 220
+            );
+          };
+
+          let button = null;
+
+          if (menuId) {
+            button = document.querySelector(`button[data-menu-item-id="${menuId}"]`);
+          }
+
+          if (!button) {
+            button = Array.from(
+              document.querySelectorAll("button, [role='button'], [role='tab'], a")
+            ).find((el) => getText(el).toLowerCase() === wanted && visibleSmallEnough(el));
+          }
+
+          if (!button) {
+            const wrapper = Array.from(
+              document.querySelectorAll(".event-details-sitemap-pills-btn, li, div, span")
+            ).find((el) => getText(el).toLowerCase() === wanted && visibleSmallEnough(el));
+
+            button =
+              wrapper?.querySelector?.("button") ||
+              wrapper?.closest?.("button, [role='button'], [role='tab'], a") ||
+              findClickableAncestor(wrapper) ||
+              wrapper ||
+              null;
+          }
 
           try {
+            const rect = button?.getBoundingClientRect?.();
+
             sessionStorage.setItem(
               "EV_BETMGM_LAST_CLICK_DEBUG",
               JSON.stringify({
                 mode: "nav",
                 label,
+                menuId,
                 found: !!button,
-                text: button ? clean(button.innerText || button.textContent || "") : "",
+                tag: button ? String(button.tagName || "") : "",
+                text: button ? getText(button) : "",
+                dataMenuItemId: button ? String(button.getAttribute?.("data-menu-item-id") || "") : "",
                 className: button ? String(button.className || "") : "",
+                top: rect ? Math.round(rect.top) : "",
+                left: rect ? Math.round(rect.left) : "",
+                width: rect ? Math.round(rect.width) : "",
+                height: rect ? Math.round(rect.height) : "",
                 at: new Date().toISOString(),
               })
             );
@@ -3002,71 +3559,40 @@ function normalizeFanDuelLabel(value) {
             return;
           }
 
-          button.scrollIntoView({ block: "center", inline: "nearest" });
-          button.click();
+          button.scrollIntoView({ block: "center", inline: "center" });
+          await sleep(200);
+
+          // Click the exact BetMGM button and its touch target.
+          const touchTarget = button.querySelector?.(".ds-button-touch-target");
+          const targets = [touchTarget, button].filter(Boolean);
+
+          for (const target of targets) {
+            try {
+              target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerType: "mouse" }));
+              target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, composed: true }));
+              target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, composed: true, pointerType: "mouse" }));
+              target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, composed: true }));
+              target.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+              target.click?.();
+            } catch (err) {
+              // keep trying
+            }
+
+            await sleep(80);
+          }
         } catch (err) {
           console.warn("EV Parlay BetMGM scheduled nav click failed:", err);
         }
-      }, 500);
+      }, 650);
 
       return true;
     }
 
-    function scheduleBetMgmTopTabClickByLabel(label) {
-      if (!label) return false;
-
-      window.setTimeout(() => {
-        try {
-          const wanted = clean(label);
-
-          if (/first fg|defense|quarter|1st|2nd|3rd|4th|half/i.test(wanted)) {
-            return;
-          }
-
-          const buttons = Array.from(
-            document.querySelectorAll("button.ds-pill, button[class*='ds-pill']")
-          );
-
-          const button = buttons.find((candidate) => {
-            const text = clean(candidate.innerText || candidate.textContent || "");
-            return text.toLowerCase() === wanted.toLowerCase();
-          });
-
-          try {
-            sessionStorage.setItem(
-              "EV_BETMGM_LAST_CLICK_DEBUG",
-              JSON.stringify({
-                mode: "top_tab",
-                label: wanted,
-                found: !!button,
-                text: button ? clean(button.innerText || button.textContent || "") : "",
-                className: button ? String(button.className || "") : "",
-                at: new Date().toISOString(),
-              })
-            );
-          } catch (storageErr) {
-            // ignore storage failures
-          }
-
-          if (!button) {
-            console.warn("EV Parlay BetMGM top tab not found:", wanted);
-            return;
-          }
-
-          button.scrollIntoView({ block: "center", inline: "nearest" });
-          button.click();
-        } catch (err) {
-          console.warn("EV Parlay BetMGM scheduled top-tab click failed:", err);
-        }
-      }, 500);
-
-      return true;
-    }
 
     function scheduleBetMgmDrawerClickByLabel(label) {
       if (!label) return false;
 
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         try {
           const wanted = clean(label);
 
@@ -3074,25 +3600,84 @@ function normalizeFanDuelLabel(value) {
             return;
           }
 
-          const buttons = Array.from(
-            document.querySelectorAll("button.ds-accordion-header-clickable-area")
-          );
+          const exactText = (el) =>
+            clean(
+              el?.innerText ||
+                el?.textContent ||
+                el?.getAttribute?.("aria-label") ||
+                el?.getAttribute?.("title") ||
+                ""
+            ).toLowerCase() === wanted.toLowerCase();
 
-          const button = buttons.find((candidate) => {
-            const text = clean(candidate.innerText || candidate.textContent || "");
-            return text.toLowerCase() === wanted.toLowerCase();
-          });
+          const visibleUsable = (el) => {
+            if (!isElementVisible(el)) return false;
+
+            const rect = el.getBoundingClientRect();
+
+            return (
+              rect.width > 8 &&
+              rect.height > 8 &&
+              rect.width < 900 &&
+              rect.height < 260
+            );
+          };
+
+          // Prefer BetMGM accordion header buttons.
+          // Current BetMGM drawer headers look like:
+          // button.ds-accordion-header-clickable-area
+          // aria-label="Open Accordion"
+          const exactAccordionButtons = Array.from(
+            document.querySelectorAll("button.ds-accordion-header-clickable-area")
+          ).filter((candidate) => exactText(candidate) && visibleUsable(candidate));
+
+          const exactRoleButtons = Array.from(
+            document.querySelectorAll("button, [role='button'], [tabindex]")
+          ).filter((candidate) => exactText(candidate) && visibleUsable(candidate));
+
+          let button =
+            exactAccordionButtons.find((candidate) =>
+              /open accordion/i.test(String(candidate.getAttribute?.("aria-label") || ""))
+            ) ||
+            exactAccordionButtons[0] ||
+            exactRoleButtons[0] ||
+            null;
+
+          // Fallback: exact visible text node, then walk up to the clickable button.
+          if (!button) {
+            const textNodeMatch = Array.from(document.querySelectorAll("body *"))
+              .filter((candidate) => exactText(candidate) && visibleUsable(candidate))
+              .sort((a, b) => {
+                const ar = a.getBoundingClientRect();
+                const br = b.getBoundingClientRect();
+                return ar.width * ar.height - br.width * br.height;
+              })[0];
+
+            button =
+              textNodeMatch?.closest?.("button.ds-accordion-header-clickable-area") ||
+              textNodeMatch?.closest?.("button, [role='button'], [tabindex]") ||
+              findClickableAncestor(textNodeMatch) ||
+              textNodeMatch ||
+              null;
+          }
 
           try {
+            const rect = button?.getBoundingClientRect?.();
+
             sessionStorage.setItem(
               "EV_BETMGM_LAST_CLICK_DEBUG",
               JSON.stringify({
                 mode: "drawer",
                 label: wanted,
                 found: !!button,
+                tag: button ? String(button.tagName || "") : "",
                 text: button ? clean(button.innerText || button.textContent || "") : "",
-                ariaExpanded: button ? button.getAttribute("aria-expanded") : "",
+                ariaLabel: button ? String(button.getAttribute?.("aria-label") || "") : "",
+                ariaExpanded: button ? String(button.getAttribute?.("aria-expanded") || "") : "",
                 className: button ? String(button.className || "") : "",
+                top: rect ? Math.round(rect.top) : "",
+                left: rect ? Math.round(rect.left) : "",
+                width: rect ? Math.round(rect.width) : "",
+                height: rect ? Math.round(rect.height) : "",
                 at: new Date().toISOString(),
               })
             );
@@ -3105,15 +3690,46 @@ function normalizeFanDuelLabel(value) {
             return;
           }
 
-          button.scrollIntoView({ block: "center", inline: "nearest" });
-          button.click();
+          // Use the stronger coordinate helper if present.
+          if (typeof clickElementAtCenterReliably === "function") {
+            await clickElementAtCenterReliably(button);
+          } else {
+            button.scrollIntoView({ block: "center", inline: "center" });
+            await sleep(180);
+            button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, composed: true }));
+            button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, composed: true, pointerType: "mouse" }));
+            button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, composed: true }));
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+            button.click?.();
+          }
+
+          await sleep(900);
+
+          // Record after-click status so we can tell whether it opened.
+          try {
+            sessionStorage.setItem(
+              "EV_BETMGM_LAST_DRAWER_AFTER_CLICK",
+              JSON.stringify({
+                label: wanted,
+                ariaExpandedAfter: String(button.getAttribute?.("aria-expanded") || ""),
+                ariaLabelAfter: String(button.getAttribute?.("aria-label") || ""),
+                textAfter: clean(button.innerText || button.textContent || ""),
+                at: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            // ignore storage failures
+          }
         } catch (err) {
           console.warn("EV Parlay BetMGM scheduled drawer click failed:", err);
         }
-      }, 500);
+      }, 650);
 
       return true;
     }
+
+
 
     function scheduleBetMgmClickByLabel(label) {
       // Backward-compatible wrapper. Use top-tab click by default.
@@ -3124,60 +3740,103 @@ function normalizeFanDuelLabel(value) {
       const captures = [];
 
       let clickDebug = "";
+      let drawerAfterClickDebug = "";
       try {
         clickDebug = sessionStorage.getItem("EV_BETMGM_LAST_CLICK_DEBUG") || "";
+        drawerAfterClickDebug = sessionStorage.getItem("EV_BETMGM_LAST_DRAWER_AFTER_CLICK") || "";
       } catch (err) {
         clickDebug = "";
+        drawerAfterClickDebug = "";
       }
 
       const initial = rawPageText();
 
       if (initial && initial.trim()) {
         captures.push(
-          `BETMGM_INITIAL_CAPTURE${clickDebug ? `\nBETMGM_LAST_CLICK_DEBUG: ${clickDebug}` : ""}\n${initial}`
+          `BETMGM_INITIAL_CAPTURE${clickDebug ? `\nBETMGM_LAST_CLICK_DEBUG: ${clickDebug}` : ""}${drawerAfterClickDebug ? `\nBETMGM_LAST_DRAWER_AFTER_CLICK: ${drawerAfterClickDebug}` : ""}\n${initial}`
         );
       }
 
-      if (isBetMgmGameLandingPage(initial)) {
+      const isOnPlayerPropsRoute = /(?:^|[?&])market=PlayerProps(?:&|$)/i.test(
+        String(window.location.search || "")
+      );
+
+      const hasRealNbaPlayerPropsTabs = hasBetMgmRealNbaPlayerPropsTopTabs(initial);
+
+      const hasPlayerPropOuDrawers =
+        /\bPlayer points O\/U\b/i.test(initial) ||
+        /\bPlayer assists O\/U\b/i.test(initial) ||
+        /\bPlayer rebounds O\/U\b/i.test(initial) ||
+        /\bPlayer three-pointers O\/U\b/i.test(initial) ||
+        /\bPlayer points \+ rebounds \+ assists O\/U\b/i.test(initial) ||
+        /\bPlayer points \+ assists O\/U\b/i.test(initial) ||
+        /\bPlayer points \+ rebounds O\/U\b/i.test(initial) ||
+        /\bPlayer rebounds \+ assists O\/U\b/i.test(initial);
+
+      const isTruePlayerPropsLayout =
+        isOnPlayerPropsRoute || hasRealNbaPlayerPropsTabs || hasPlayerPropOuDrawers;
+
+      const playerPropsAttempts = getBetMgmPlayerPropsAttempts();
+
+      // IMPORTANT:
+      // The normal BetMGM game landing page contains preview labels like
+      // "Player points" / "Player assists" / "Player three-pointers".
+      // Those are NOT enough to treat the page as Player Props.
+      // Navigate to ?market=PlayerProps first unless the route/top-tabs/O-U drawers prove
+      // the real Player Props layout is already active.
+      if (
+        shouldOpenBetMgmPlayerProps(initial) &&
+        !isTruePlayerPropsLayout &&
+        playerPropsAttempts < 3
+      ) {
+        markBetMgmPlayerPropsAttempt();
         scheduleBetMgmNavClickByLabel("Player props");
 
-        captures.push("BETMGM_SCHEDULED_PLAYER_PROPS: Player props");
+        captures.push(`BETMGM_SCHEDULED_PLAYER_PROPS: Player props attempt ${playerPropsAttempts + 1}`);
 
         return mergeRawTextBlocks(captures) || rawPageText();
       }
 
+      if (!isTruePlayerPropsLayout) {
+        captures.push("BETMGM_PLAYER_PROPS_NOT_OPENED: still on game lines shell");
+        return mergeRawTextBlocks(captures) || rawPageText();
+      }
+
+      markBetMgmEnteredPlayerProps();
+
+      // Schedule the next action before clicking Show More.
+      // Show More expands pre-built SGPs and can clutter the page before the real O/U drawers open.
+      const nextAction = getBetMgmNextWorkflowAction(initial);
+
+      if (nextAction) {
+        if (nextAction.type === "tab") {
+          scheduleBetMgmTopTabClickByLabel(nextAction.label);
+          captures.push(`BETMGM_SCHEDULED_TOP_TAB: ${nextAction.label}`);
+          return mergeRawTextBlocks(captures) || rawPageText();
+        }
+
+        if (nextAction.type === "drawer") {
+          scheduleBetMgmDrawerClickByLabel(nextAction.label);
+          captures.push(`BETMGM_SCHEDULED_DRAWER: ${nextAction.label}`);
+          return mergeRawTextBlocks(captures) || rawPageText();
+        }
+      }
+
+      captures.push("BETMGM_NO_NEXT_WORKFLOW_ACTION: Player Props detected but no workflow action returned");
+
+      // Only after all workflow actions are done should we click Show More.
       const showMoreClicked = await clickBetMgmShowMoreOnly();
       await sleep(650);
 
-      const currentText = rawPageText();
-      if (currentText && currentText.trim()) {
-        captures.push(`BETMGM_CURRENT_CAPTURE: show more ${showMoreClicked}\n${currentText}`);
-      }
-
-      if (!isBetMgmPlayerPropsPage(currentText)) {
-        return mergeRawTextBlocks(captures) || rawPageText();
-      }
-
-      const nextAction = getBetMgmNextWorkflowAction();
-
-      if (!nextAction) {
-        return mergeRawTextBlocks(captures) || rawPageText();
-      }
-
-      if (nextAction.type === "tab") {
-        scheduleBetMgmTopTabClickByLabel(nextAction.label);
-        captures.push(`BETMGM_SCHEDULED_TOP_TAB: ${nextAction.label}`);
-        return mergeRawTextBlocks(captures) || rawPageText();
-      }
-
-      if (nextAction.type === "drawer") {
-        scheduleBetMgmDrawerClickByLabel(nextAction.label);
-        captures.push(`BETMGM_SCHEDULED_DRAWER: ${nextAction.label}`);
-        return mergeRawTextBlocks(captures) || rawPageText();
+      const expandedText = rawPageText();
+      if (expandedText && expandedText.trim()) {
+        captures.push(`BETMGM_CURRENT_CAPTURE: show more ${showMoreClicked}\n${expandedText}`);
       }
 
       return mergeRawTextBlocks(captures) || rawPageText();
     }
+
+
 
     async function buildBetMgmShowMoreRawText() {
       const captures = [];
@@ -3742,6 +4401,247 @@ function normalizeFanDuelLabel(value) {
 
     let wroteMainLines = false;
 
+    function normalizeTheScoreMainLineTeam(value = "") {
+      const text = clean(value)
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const aliases = new Map([
+        ["MIN Wild", "Minnesota Wild"],
+        ["Minnesota Wild", "Minnesota Wild"],
+        ["COL Avalanche", "Colorado Avalanche"],
+        ["Colorado Avalanche", "Colorado Avalanche"],
+
+        ["ANA Ducks", "Anaheim Ducks"],
+        ["Ducks", "Anaheim Ducks"],
+        ["VGK Golden Knights", "Vegas Golden Knights"],
+        ["VEG Golden Knights", "Vegas Golden Knights"],
+        ["Golden Knights", "Vegas Golden Knights"],
+
+        ["BUF Sabres", "Buffalo Sabres"],
+        ["Sabres", "Buffalo Sabres"],
+        ["MTL Canadiens", "Montreal Canadiens"],
+        ["Canadiens", "Montreal Canadiens"],
+
+        ["OKC Thunder", "Oklahoma City Thunder"],
+        ["Thunder", "Oklahoma City Thunder"],
+        ["LAL Lakers", "Los Angeles Lakers"],
+        ["LA Lakers", "Los Angeles Lakers"],
+        ["Lakers", "Los Angeles Lakers"],
+
+        ["MIN Timberwolves", "Minnesota Timberwolves"],
+        ["Timberwolves", "Minnesota Timberwolves"],
+        ["SAS Spurs", "San Antonio Spurs"],
+        ["SA Spurs", "San Antonio Spurs"],
+        ["Spurs", "San Antonio Spurs"],
+
+        ["DET Pistons", "Detroit Pistons"],
+        ["Pistons", "Detroit Pistons"],
+        ["CLE Cavaliers", "Cleveland Cavaliers"],
+        ["Cavaliers", "Cleveland Cavaliers"],
+      ]);
+
+      return aliases.get(text) || cleanTeamName(text);
+    }
+
+    function appendMainLinesFromVisibleText(container) {
+      if (wroteMainLines) return false;
+      if (!container) return false;
+
+      const raw = clean(container.innerText || container.textContent || "");
+
+      if (!/\bMain Lines\b/i.test(raw)) return false;
+      if (!/\bSpread\b/i.test(raw) || !/\bTotal\b/i.test(raw) || !/\bMoney\b/i.test(raw)) return false;
+
+      function escapeMainLineRegex(value = "") {
+        return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+
+      function writeTheScoreMainLines({
+        away,
+        home,
+        awaySpreadLine,
+        awaySpreadOdds,
+        totalLine,
+        overOdds,
+        awayMoney,
+        homeSpreadLine,
+        homeSpreadOdds,
+        underOdds,
+        homeMoney,
+      }) {
+        const spreadRegex = /^[+-]\d+(?:\.\d+)?$/;
+        const oddsRegex = /^(?:[+-]\d+|EVEN)$/i;
+
+        if (
+          !away ||
+          !home ||
+          !spreadRegex.test(awaySpreadLine || "") ||
+          !oddsRegex.test(awaySpreadOdds || "") ||
+          !Number.isFinite(Number(totalLine)) ||
+          !oddsRegex.test(overOdds || "") ||
+          !oddsRegex.test(awayMoney || "") ||
+          !spreadRegex.test(homeSpreadLine || "") ||
+          !oddsRegex.test(homeSpreadOdds || "") ||
+          !oddsRegex.test(underOdds || "") ||
+          !oddsRegex.test(homeMoney || "")
+        ) {
+          return false;
+        }
+
+        out.push("");
+        out.push("Market: Spread");
+        out.push(`${away} | ${awaySpreadLine} | ${toOdds(awaySpreadOdds)}`);
+        out.push(`${home} | ${homeSpreadLine} | ${toOdds(homeSpreadOdds)}`);
+
+        out.push("");
+        out.push("Market: Total");
+        out.push(`Over | ${totalLine} | ${toOdds(overOdds)}`);
+        out.push(`Under | ${totalLine} | ${toOdds(underOdds)}`);
+
+        out.push("");
+        out.push("Market: Moneyline");
+        out.push(`${away} | ${toOdds(awayMoney)}`);
+        out.push(`${home} | ${toOdds(homeMoney)}`);
+
+        wroteMainLines = true;
+        out.push("THESCORE_MAIN_LINES_TEXT_FALLBACK_CAPTURED");
+
+        return true;
+      }
+
+      const eventParts = String(event || "")
+        .split(" @ ")
+        .map((part) => cleanTeamName(part))
+        .filter(Boolean);
+
+      // Direct parser for the exact visible text shape found in console:
+      // Main Lines Cleveland Cavaliers @ Detroit Pistons Spread Total Money
+      // CLE Cavaliers +3.5 -105 O 212.5 -105 +140
+      // DET Pistons -3.5 -115 U 212.5 -115 -165
+      if (eventParts.length === 2 && !/^Unknown Event$/i.test(String(event || ""))) {
+        const eventPattern = escapeMainLineRegex(event);
+        const directPattern = new RegExp(
+          [
+            "\\bMain Lines\\b",
+            "\\s+",
+            eventPattern,
+            "\\s+Spread\\s+Total\\s+Money\\s+",
+            "(.+?)\\s+",
+            "([+-]\\d+(?:\\.\\d+)?)\\s+",
+            "((?:[+-]\\d+)|EVEN)\\s+",
+            "O\\s*(\\d+(?:\\.\\d+)?)\\s+",
+            "((?:[+-]\\d+)|EVEN)\\s+",
+            "((?:[+-]\\d+)|EVEN)\\s+",
+            "(.+?)\\s+",
+            "([+-]\\d+(?:\\.\\d+)?)\\s+",
+            "((?:[+-]\\d+)|EVEN)\\s+",
+            "U\\s*(\\d+(?:\\.\\d+)?)\\s+",
+            "((?:[+-]\\d+)|EVEN)\\s+",
+            "((?:[+-]\\d+)|EVEN)(?:\\s|$)",
+          ].join(""),
+          "i"
+        );
+
+        const match = raw.match(directPattern);
+
+        if (match) {
+          const overTotal = clean(match[4]);
+          const underTotal = clean(match[10]);
+
+          if (overTotal === underTotal) {
+            const wrote = writeTheScoreMainLines({
+              away: eventParts[0],
+              home: eventParts[1],
+              awaySpreadLine: clean(match[2]),
+              awaySpreadOdds: clean(match[3]),
+              totalLine: overTotal,
+              overOdds: clean(match[5]),
+              awayMoney: clean(match[6]),
+              homeSpreadLine: clean(match[8]),
+              homeSpreadOdds: clean(match[9]),
+              underOdds: clean(match[11]),
+              homeMoney: clean(match[12]),
+            });
+
+            if (wrote) return true;
+          }
+        }
+      }
+
+      // Fallback parser if the direct event-based regex fails.
+      const expandedLines = raw
+        .replace(/\b(Main Lines)\b/g, "\n$1\n")
+        .replace(/\b(Spread)\b/g, "\n$1\n")
+        .replace(/\b(Total)\b/g, "\n$1\n")
+        .replace(/\b(Money)\b/g, "\n$1\n")
+        .replace(/\b([A-Z]{2,4}\s+[A-Z][A-Za-z]+)\b/g, "\n$1\n")
+        .replace(/\b([+-]\d+(?:\.\d+)?)\b/g, "\n$1\n")
+        .replace(/\b([OU]\s*\d+(?:\.\d+)?)\b/g, "\n$1\n")
+        .split("\n")
+        .map(clean)
+        .filter(Boolean);
+
+      const working = expandedLines.filter((line) => {
+        if (!line) return false;
+        if (/^SGP Eligible$/i.test(line)) return false;
+        if (/^3-Way Moneyline$/i.test(line)) return false;
+        if (/^(Goals|Shots On Goal|Points|First Goalscorer|Period - Moneyline|Period - Total|Team To Score Next Goal)$/i.test(line)) return false;
+        return true;
+      });
+
+      const eventIndex = working.findIndex((line) => /\s@\s/.test(line));
+      if (eventIndex === -1) return false;
+
+      const headerIndex = working.findIndex(
+        (line, index) =>
+          index > eventIndex &&
+          /^Spread$/i.test(line) &&
+          /^Total$/i.test(working[index + 1] || "") &&
+          /^Money$/i.test(working[index + 2] || "")
+      );
+
+      if (headerIndex === -1) return false;
+
+      const awayRaw = working[headerIndex + 3];
+      const awaySpreadLine = working[headerIndex + 4];
+      const awaySpreadOdds = working[headerIndex + 5];
+      const overLine = working[headerIndex + 6];
+      const overOdds = working[headerIndex + 7];
+      const awayMoney = working[headerIndex + 8];
+
+      const homeRaw = working[headerIndex + 9];
+      const homeSpreadLine = working[headerIndex + 10];
+      const homeSpreadOdds = working[headerIndex + 11];
+      const underLine = working[headerIndex + 12];
+      const underOdds = working[headerIndex + 13];
+      const homeMoney = working[headerIndex + 14];
+
+      const away = eventParts[0] || normalizeTheScoreMainLineTeam(awayRaw);
+      const home = eventParts[1] || normalizeTheScoreMainLineTeam(homeRaw);
+
+      const overTotal = clean(overLine).replace(/^O\s*/i, "");
+      const underTotal = clean(underLine).replace(/^U\s*/i, "");
+
+      if (overTotal !== underTotal) return false;
+
+      return writeTheScoreMainLines({
+        away,
+        home,
+        awaySpreadLine,
+        awaySpreadOdds,
+        totalLine: overTotal,
+        overOdds,
+        awayMoney,
+        homeSpreadLine,
+        homeSpreadOdds,
+        underOdds,
+        homeMoney,
+      });
+    }
+
+
+
     function appendVisibleMainLinesFromContainer(container) {
       if (wroteMainLines || !container) return false;
 
@@ -3821,9 +4721,18 @@ function normalizeFanDuelLabel(value) {
       return true;
     }
 
-    // TheScore Popular tab can show main lines at page level instead of inside
-    // a details drawer titled "Main Lines".
-    appendVisibleMainLinesFromContainer(document.querySelector("main") || document.body);
+    const mainLinesFallbackContainer = document.querySelector("main") || document.body;
+
+    // Try the visible-text Main Lines fallback first.
+    // Current TheScore NBA/NHL pages expose true main lines as collapsed visible text:
+    // Main Lines / Event / Spread Total Money / Away / spread / odds / total / odds / money / Home...
+    //
+    // The older broad button parser can accidentally grab fake prop/H2H buttons from
+    // the whole page, write fake main lines, and set wroteMainLines = true before this
+    // better fallback gets a chance to run.
+    if (!appendMainLinesFromVisibleText(mainLinesFallbackContainer)) {
+      appendVisibleMainLinesFromContainer(mainLinesFallbackContainer);
+    }
 
     document.querySelectorAll("details[data-testid]").forEach((drawer) => {
       const titleEl = drawer.querySelector("summary h2");
@@ -3888,10 +4797,13 @@ function normalizeFanDuelLabel(value) {
       }
 
       // If this was a Main Lines drawer but the standard button parser failed,
-      // do not fall through to the generic ladder/table parser. That creates
+      // try the plain visible-text fallback before returning.
+      // Do not fall through to the generic ladder/table parser. That creates
       // malformed rows like: ANA Ducks | Total | -180.
-      if (/^Main Lines$/i.test(drawerMarket)) return;
-
+      if (/^Main Lines$/i.test(drawerMarket)) {
+        appendMainLinesFromVisibleText(drawer);
+        return;
+      }
       const ladderTable = drawer.querySelector("table");
       if (ladderTable) {
         out.push("");
@@ -4152,7 +5064,17 @@ function normalizeFanDuelLabel(value) {
       "defense",
 
       // Main lines / default tab
+      "main",
+      "main lines",
+      "game lines",
+      "lines",
+      "all",
+      "all odds",
+      "moneyline",
+      "spread",
+      "puck line",
       "popular",
+
 
       // NHL
       "goals",
@@ -4186,7 +5108,7 @@ function normalizeFanDuelLabel(value) {
 
     return (
       /^(points|rebounds|assists|threes|combos|defense)$/i.test(text) ||
-      /^(popular|goals|goal scorer|goalscorer|shots on goal|sog|points\/assists|saves|goalie saves|player saves|goalie\/defense|power play points|blocked shots|blocks|hits)$/i.test(text) ||
+      /^(main|main lines|game lines|lines|all|all odds|moneyline|spread|puck line|popular|goals|goal scorer|goalscorer|shots on goal|sog|points\/assists|saves|goalie saves|player saves|goalie\/defense|power play points|blocked shots|blocks|hits)$/i.test(text) ||
       /^(total bases|home runs|rbis|rbi|runs)$/i.test(text) ||
       /^(pitcher strikeouts|strikeouts|hits allowed|earned runs|outs recorded|walks allowed)$/i.test(text)
     );
@@ -4194,7 +5116,16 @@ function normalizeFanDuelLabel(value) {
 
   function getTheScoreMarketTabButtons() {
     const priority = [
-      // Main lines / default tab first.
+      // Main lines first. Popular often exports promo/player-H2H markets instead of true team lines.
+      "main",
+      "main lines",
+      "game lines",
+      "lines",
+      "all",
+      "all odds",
+      "moneyline",
+      "spread",
+      "puck line",
       "popular",
 
       // NHL priority next so saves/assists do not get cut off by noisy page buttons.
@@ -4328,6 +5259,44 @@ function normalizeFanDuelLabel(value) {
       }
     }
 
+    function hasTheScoreTrueTeamMainLines(text = "") {
+      const value = String(text || "");
+
+      const eventMatches = [...value.matchAll(/^Event:\s*(.+?)$/gim)]
+        .map((match) => String(match[1] || "").trim())
+        .filter((eventName) => /\s@\s/.test(eventName))
+        .filter((eventName) => !/To Record A (Double|Triple) Double|Race To \d+ Points|Method of/i.test(eventName));
+
+      if (!eventMatches.length) return false;
+
+      for (const eventName of eventMatches) {
+        const [awayRaw, homeRaw] = eventName.split(/\s@\s/).map((part) => clean(part));
+        if (!awayRaw || !homeRaw) continue;
+
+        const awayLast = awayRaw.split(/\s+/).slice(-1)[0];
+        const homeLast = homeRaw.split(/\s+/).slice(-1)[0];
+
+        const moneylinePattern = new RegExp(
+          `Market:\\s*Moneyline[\\s\\S]{0,700}(?:${escapeRegexForTheScore(awayRaw)}|${escapeRegexForTheScore(awayLast)})\\s*\\|\\s*(?:[+-]\\d+|EVEN)[\\s\\S]{0,700}(?:${escapeRegexForTheScore(homeRaw)}|${escapeRegexForTheScore(homeLast)})\\s*\\|\\s*(?:[+-]\\d+|EVEN)`,
+          "i"
+        );
+
+        const spreadPattern = new RegExp(
+          `Market:\\s*Spread[\\s\\S]{0,700}(?:${escapeRegexForTheScore(awayRaw)}|${escapeRegexForTheScore(awayLast)})\\s*\\|\\s*[+-]\\d+(?:\\.\\d+)?\\s*\\|\\s*(?:[+-]\\d+|EVEN)[\\s\\S]{0,700}(?:${escapeRegexForTheScore(homeRaw)}|${escapeRegexForTheScore(homeLast)})\\s*\\|\\s*[+-]\\d+(?:\\.\\d+)?\\s*\\|\\s*(?:[+-]\\d+|EVEN)`,
+          "i"
+        );
+
+        if (moneylinePattern.test(value) || spreadPattern.test(value)) return true;
+      }
+
+      return false;
+    }
+
+    function escapeRegexForTheScore(value = "") {
+      return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+
     function findTheScoreButtonByLabel(label) {
       const wanted = normalizeTheScoreMarketTabLabel(label);
 
@@ -4350,43 +5319,155 @@ function normalizeFanDuelLabel(value) {
     }
 
     await preparePageForExtraction();
-    exports.push(`THESCORE_INITIAL_CAPTURE\n${captureCurrentPage()}`);
 
-    // First: generic market-tab pass.
+    const initialCapture = captureCurrentPage();
+    exports.push(`THESCORE_INITIAL_CAPTURE\n${initialCapture}`);
+
+    const capturedTheScoreLabels = new Set(["popular", "initial", ""]);
+
+    function normalizeTheScoreCaptureKey(label = "") {
+      const text = normalizeTheScoreMarketTabLabel(label || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const aliases = new Map([
+        ["main", "main lines"],
+        ["main lines", "main lines"],
+        ["game lines", "main lines"],
+        ["lines", "main lines"],
+        ["all", "main lines"],
+        ["all odds", "main lines"],
+        ["moneyline", "main lines"],
+        ["spread", "main lines"],
+        ["puck line", "main lines"],
+
+        ["player points", "points"],
+        ["player rebounds", "rebounds"],
+        ["player assists", "assists"],
+        ["player threes", "threes"],
+        ["player three-pointers", "threes"],
+        ["3-pointers made", "threes"],
+        ["three-pointers made", "threes"],
+        ["player combos", "combos"],
+        ["player defense", "defense"],
+        ["points/assists", "points/assists"],
+        ["goalie defense", "goalie/defense"],
+        ["goalie/defense", "goalie/defense"],
+        ["goal scorer", "goals"],
+        ["goalscorer", "goals"],
+        ["player saves", "saves"],
+        ["goalie saves", "saves"],
+        ["shots on goal", "shots on goal"],
+        ["sog", "shots on goal"],
+      ]);
+
+      return aliases.get(text) || text;
+    }
+
+    async function captureTheScoreLabelOnce(label, button = null) {
+      const key = normalizeTheScoreCaptureKey(label || "");
+      if (!key || capturedTheScoreLabels.has(key)) return false;
+
+      const resolvedButton = button || findTheScoreButtonByLabel(label);
+      if (!resolvedButton) return false;
+
+      capturedTheScoreLabels.add(key);
+
+      const didCapture = await captureAfterTheScoreClick(key, resolvedButton);
+      await sleep(250);
+
+      return didCapture;
+    }
+
+    async function captureTheScoreMainLinesFirst() {
+      const mainLineLabels = [
+        "Main Lines",
+        "Game Lines",
+        "Lines",
+        "All Odds",
+        "All",
+        "Moneyline",
+        "Spread",
+        "Puck Line",
+      ];
+
+      for (const label of mainLineLabels) {
+        const button = findTheScoreButtonByLabel(label);
+        if (!button) continue;
+
+        const didCapture = await captureTheScoreLabelOnce(label, button);
+        if (!didCapture) continue;
+
+        const mergedSoFar = mergeStructuredExports(exports);
+        if (hasTheScoreTrueTeamMainLines(mergedSoFar)) {
+          exports.push("THESCORE_MAIN_LINES_CAPTURED: true team moneyline/spread found before props");
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+
+    // First: try true team game lines before prop tabs.
+    await captureTheScoreMainLinesFirst();
+
+    // Then: currently visible tab buttons, but de-duped by normalized capture key.
     const buttons = getTheScoreMarketTabButtons();
 
     for (const button of buttons) {
       const label = normalizeTheScoreMarketTabLabel(button.innerText || button.textContent || "");
-      await captureAfterTheScoreClick(label || "market", button);
-      await sleep(250);
+      await captureTheScoreLabelOnce(label, button);
     }
 
-    // Second: explicit NHL fallback pass. This catches tabs that were missed by
-    // the generic button collector or hidden beyond the first visible group.
-    const targetedNhlLabels = [
-      "Popular",
-      "Points/Assists",
-      "Goalie/Defense",
-      "Assists",
-      "Player Assists",
-      "Saves",
-      "Goalie Saves",
-      "Player Saves",
-      "Shots on Goal",
+    // Second: focused fallback pass, also de-duped.
+    // Do NOT include Popular here because initial capture already covers the default page.
+    const targetedLabels = [
+      // Main lines, if they were hidden or lazy-loaded.
+      "Main Lines",
+      "Game Lines",
+      "Lines",
+      "All Odds",
+      "All",
+      "Moneyline",
+      "Spread",
+      "Puck Line",
+
+      // NBA
       "Points",
+      "Rebounds",
+      "Assists",
+      "Threes",
+      "3-Pointers Made",
+      "Combos",
+      "Pts + Reb + Ast",
+      "Points + Rebounds",
+      "Points + Assists",
+      "Rebounds + Assists",
+
+      // NHL
       "Goals",
-      "Goal Scorer",
+      "Shots on Goal",
+      "Points/Assists",
+      "Points",
+      "Assists",
+      "Saves",
+      "Power Play Points",
+      "Goalie/Defense",
     ];
 
-    for (const label of targetedNhlLabels) {
-      const button = findTheScoreButtonByLabel(label);
-      if (!button) continue;
-
-      await captureAfterTheScoreClick(label, button);
-      await sleep(300);
+    for (const label of targetedLabels) {
+      await captureTheScoreLabelOnce(label);
     }
 
-    return mergeStructuredExports(exports);
+    const merged = mergeStructuredExports(exports);
+
+    if (!hasTheScoreTrueTeamMainLines(merged)) {
+      return `${merged}\n\nTHESCORE_MAIN_LINES_NOT_FOUND: true team moneyline/spread were not present in exported text`;
+    }
+
+    return merged;
   }
 
   if (detectedSource === "TheScore") {

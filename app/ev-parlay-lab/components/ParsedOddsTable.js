@@ -341,7 +341,46 @@ function MarketGroup({
 }
  
 function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDeleteRow }) {
+  const [oddsDraftByRowId, setOddsDraftByRowId] = useState({});
   const visibleRows = playerGroup.rows.slice(0, MAX_ROWS_PER_PLAYER_GROUP);
+
+  function getOddsDraftText(row) {
+    const key = String(row?.id || "");
+    if (key && Object.prototype.hasOwnProperty.call(oddsDraftByRowId, key)) {
+      return oddsDraftByRowId[key];
+    }
+
+    return parseEditableAmericanOddsState(row?.oddsAmerican).text;
+  }
+
+  function updateOddsDraft(row, value) {
+    const key = String(row?.id || "");
+    if (!key) return;
+
+    setOddsDraftByRowId((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }
+
+  function commitOddsDraft(row) {
+    const key = String(row?.id || "");
+    if (!key) return;
+
+    const text = Object.prototype.hasOwnProperty.call(oddsDraftByRowId, key)
+      ? oddsDraftByRowId[key]
+      : parseEditableAmericanOddsState(row?.oddsAmerican).text;
+
+    const next = parseEditableAmericanOddsState(text);
+
+    onUpdateRow(row.id, { oddsAmerican: next.value });
+
+    setOddsDraftByRowId((prev) => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+  }
  
   return (
     <>
@@ -363,20 +402,19 @@ function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDelete
             const oddsState = parseEditableAmericanOddsState(row.oddsAmerican);
             const warnings = formatWarnings(row.parseWarnings);
  
-            const rowKey = [
-              row.id,
-              row.sportsbook,
-              row.batchRole,
-              row.sport,
-              row.eventLabelRaw,
-              row.marketType,
-              row.selectionNormalized || row.selectionRaw,
-              row.lineValue ?? "",
-              row.oddsAmerican ?? "",
-              rowIndex,
-            ]
-              .map((part) => String(part ?? "").trim())
-              .join("::");
+            const rowKey =
+              row.id ||
+              [
+                row.sportsbook,
+                row.batchRole,
+                row.sport,
+                row.eventLabelRaw,
+                row.marketType,
+                row.selectionNormalized || row.selectionRaw,
+                rowIndex,
+              ]
+                .map((part) => String(part ?? "").trim())
+                .join("::");
  
             return (
               <tr key={rowKey}>
@@ -428,13 +466,28 @@ function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDelete
                 </td>
                 <td style={{ ...tdStyle, background: zebraBg }}>
                   <input
-                    value={oddsState.text}
+                    value={getOddsDraftText(row)}
                     placeholder="e.g. -110"
-                    onChange={(event) => {
-                      const next = parseEditableAmericanOddsState(event.target.value);
-                      onUpdateRow(row.id, { oddsAmerican: next.value });
+                    onChange={(event) => updateOddsDraft(row, event.target.value)}
+                    onBlur={() => commitOddsDraft(row)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.currentTarget.blur();
+                      }
+
+                      if (event.key === "Escape") {
+                        const key = String(row?.id || "");
+                        setOddsDraftByRowId((prev) => {
+                          const copy = { ...prev };
+                          delete copy[key];
+                          return copy;
+                        });
+                      }
                     }}
-                    style={smallInputStyle}
+                    style={{
+                      ...smallInputStyle,
+                      ...(row.userEdited ? editedInputStyle : null),
+                    }}
                   />
                 </td>
                 <td style={{ ...tdStyle, background: zebraBg }}>{row.isSharpSource ? "Y" : "—"}</td>
@@ -756,21 +809,26 @@ function parseEditableLineState(value) {
 }
  
 function parseEditableAmericanOddsState(value) {
-  if (!Number.isFinite(value)) return { text: "", value: null };
- 
-  const text = String(value);
+  const text = String(value ?? "").trim();
+
+  if (!text) {
+    return { text: "", value: null };
+  }
+
   const normalized = text.replace(/[^\d+\-]/g, "");
- 
+
   if (!/^[+-]?\d+$/.test(normalized)) {
     return { text, value: null };
   }
- 
+
   const num = Number(normalized);
+
   return {
     text,
-    value: Number.isFinite(num) ? num : null,
+    value: Number.isFinite(num) && num !== 0 ? num : null,
   };
 }
+
  
 function formatWarnings(value) {
   if (Array.isArray(value) && value.length) return value.join(", ");
@@ -1087,4 +1145,8 @@ const smallDangerButtonStyle = {
   cursor: "pointer",
   fontWeight: 800,
   whiteSpace: "nowrap",
+};
+const editedInputStyle = {
+  borderColor: "#f59e0b",
+  background: "#fffbeb",
 };
