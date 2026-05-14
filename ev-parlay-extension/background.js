@@ -2152,10 +2152,17 @@ function normalizeFanDuelLabel(value) {
 
         // NHL useful sections only
         "Any Time Goal Scorer",
+        "Anytime Goal Scorer",
         "Player 1+ Points",
+        "1+ Points",
         "Player 1+ Assists",
+        "1+ Assists",
         "Player to Record 1+ Powerplay Points",
+        "Player to Record 1+ Power Play Points",
+        "1+ Powerplay Points",
+        "1+ Power Play Points",
         "60 Min Player to Record 1+ Shots on Goal",
+        "60 Min 1+ Shots on Goal",
       ]);
 
       const normalizedText = normalizeFanDuelLabel(text);
@@ -2168,10 +2175,20 @@ function normalizeFanDuelLabel(value) {
       return (
         // NHL full-game O/U style drawers
         /^60 Min .+ Shots on Goal$/i.test(text) ||
+        /^60 Min \d+\+ Shots on Goal$/i.test(text) ||
+        /^60 Min Player to Record \d+\+ Shots on Goal$/i.test(text) ||
         /^60 Min .+ Total Saves$/i.test(text) ||
         /^.+ - 60 Min Alt Saves$/i.test(text) ||
         /^60 Min .+ Total Goals$/i.test(text) ||
-        /^.+ Total Goals$/i.test(text)
+        /^.+ Total Goals$/i.test(text) ||
+        /^(\d+)\+ Points$/i.test(text) ||
+        /^Player (\d+)\+ Points$/i.test(text) ||
+        /^(\d+)\+ Assists$/i.test(text) ||
+        /^Player (\d+)\+ Assists$/i.test(text) ||
+        /^(\d+)\+ Powerplay Points$/i.test(text) ||
+        /^(\d+)\+ Power Play Points$/i.test(text) ||
+        /^Player to Record (\d+)\+ Powerplay Points$/i.test(text) ||
+        /^Player to Record (\d+)\+ Power Play Points$/i.test(text)
       );
     }
 
@@ -2268,6 +2285,163 @@ function normalizeFanDuelLabel(value) {
 
       return totalClicked;
     }
+
+    function getFanDuelNhlCurrentPageKind() {
+      const path = String(window.location?.pathname || "").toLowerCase();
+      const text = clean(document.body?.innerText || "");
+
+      if (/\/goals\b/i.test(path) || /\bGoals Odds\b/i.test(text)) return "goals";
+      if (/\/shots\b/i.test(path) || /\bShots Odds\b/i.test(text)) return "shots";
+      if (/points\/assists/i.test(path) || /\bPoints\/Assists Odds\b/i.test(text)) return "points_assists";
+      if (/\/goalies\b/i.test(path) || /\bGoalies Odds\b/i.test(text)) return "goalies";
+
+      return "";
+    }
+
+    function isFanDuelNhlTargetDrawerLabel(value = "") {
+      const text = clean(value);
+      const pageKind = getFanDuelNhlCurrentPageKind();
+
+      if (!text) return false;
+
+      // Avoid period props / partial-game props.
+      if (/\b(1st|2nd|3rd|4th)\s+(Period|Quarter)\b/i.test(text)) return false;
+      if (/\bEach Period\b/i.test(text)) return false;
+
+      if (pageKind === "goals") {
+        return (
+          (/^.+ Total Goals$/i.test(text) && !/^Game Specials/i.test(text)) ||
+          /^(Any Time|Anytime) Goal Scorer$/i.test(text)
+        );
+      }
+
+      if (pageKind === "shots") {
+        return (
+          /^60 Min .+ Shots on Goal$/i.test(text) ||
+          /^60 Min \d+\+ Shots on Goal$/i.test(text) ||
+          /^60 Min Player to Record \d+\+ Shots on Goal$/i.test(text)
+        );
+      }
+
+      if (pageKind === "points_assists") {
+        return (
+          /^1\+ Points$/i.test(text) ||
+          /^Player 1\+ Points$/i.test(text) ||
+          /^1\+ Assists$/i.test(text) ||
+          /^Player 1\+ Assists$/i.test(text) ||
+          /^1\+ Powerplay Points$/i.test(text) ||
+          /^1\+ Power Play Points$/i.test(text) ||
+          /^Player to Record 1\+ Powerplay Points$/i.test(text) ||
+          /^Player to Record 1\+ Power Play Points$/i.test(text)
+        );
+      }
+
+      if (pageKind === "goalies") {
+        return (
+          /^60 Min .+ Total Saves$/i.test(text) ||
+          /^.+ - 60 Min Alt Saves$/i.test(text)
+        );
+      }
+
+      // Landing/popular fallback. Keep this narrow.
+      return (
+        /^.+ Total Goals$/i.test(text) ||
+        /^60 Min .+ Shots on Goal$/i.test(text) ||
+        /^60 Min .+ Total Saves$/i.test(text) ||
+        /^.+ - 60 Min Alt Saves$/i.test(text)
+      );
+    }
+
+    function getFanDuelNhlTargetDrawerCandidates() {
+      const direct = Array.from(
+        document.querySelectorAll("button, a, [role='button'], [role='tab']")
+      );
+
+      const textMatches = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => {
+          if (!isElementVisible(el)) return false;
+
+          const text = getElementText(el);
+          if (!isFanDuelNhlTargetDrawerLabel(text)) return false;
+
+          const rect = el.getBoundingClientRect();
+
+          return (
+            rect.width > 8 &&
+            rect.height > 8 &&
+            rect.width < 760 &&
+            rect.height < 180
+          );
+        })
+        .map(findClickableAncestor);
+
+      const all = [...direct, ...textMatches];
+      const seen = new Set();
+      const candidates = [];
+
+      for (const el of all) {
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+
+        if (!isElementVisible(el)) continue;
+
+        const ownText = getElementText(el);
+        const childText = Array.from(el.querySelectorAll("*"))
+          .map((child) => getElementText(child))
+          .find((value) => isFanDuelNhlTargetDrawerLabel(value));
+
+        const label = isFanDuelNhlTargetDrawerLabel(ownText) ? ownText : childText;
+        if (!label) continue;
+
+        const rect = el.getBoundingClientRect();
+
+        // Avoid clicking giant body/page wrappers.
+        if (rect.width > 900 || rect.height > 240) continue;
+
+        candidates.push({ el, label, top: rect.top, left: rect.left });
+      }
+
+      return candidates
+        .sort((a, b) => a.top - b.top || a.left - b.left)
+        .slice(0, 40);
+    }
+
+    async function clickFanDuelNhlTargetDrawers(options = {}) {
+      const clicked = new Set();
+      let totalClicked = 0;
+      const maxPasses = Number(options.maxPasses || 2);
+      const maxClicks = Number(options.maxClicks || 18);
+
+      for (let pass = 0; pass < maxPasses; pass += 1) {
+        const candidates = getFanDuelNhlTargetDrawerCandidates();
+        let clickedThisPass = 0;
+
+        for (const { el, label } of candidates) {
+          if (!isElementVisible(el)) continue;
+
+          const key = normalizeFanDuelLabel(label);
+          if (!key || clicked.has(key)) continue;
+
+          const ok = await clickElementReliably(el);
+
+          if (ok) {
+            clicked.add(key);
+            totalClicked += 1;
+            clickedThisPass += 1;
+            await sleep(550);
+          }
+
+          if (totalClicked >= maxClicks) break;
+        }
+
+        if (totalClicked >= maxClicks || clickedThisPass === 0) break;
+
+        await sleep(550);
+      }
+
+      return totalClicked;
+    }
+
 
         function getFanDuelShowMoreCandidates() {
       const directButtons = Array.from(
@@ -2517,22 +2691,39 @@ function normalizeFanDuelLabel(value) {
       const showMoreClicked = await clickFanDuelShowMoreOnly(8);
       await sleep(650);
 
-      const expandedClicked = await clickFanDuelExpandableSections({
-        maxPasses: 1,
-        maxClicks: 12,
+      // First open page-specific NHL O/U drawers.
+      // This is especially important on the Goals page where generic expansion
+      // often misses player-specific "Total Goals" drawers.
+      const targetedNhlHeadersClicked = await clickFanDuelNhlTargetDrawers({
+        maxPasses: 2,
+        maxClicks: 18,
       });
 
       await sleep(650);
-      await clickFanDuelShowMoreOnly(8);
+
+      const expandedClicked = await clickFanDuelExpandableSections({
+        maxPasses: 1,
+        maxClicks: 8,
+      });
+
+      await sleep(650);
+      const showMoreAfterClicked = await clickFanDuelShowMoreOnly(8);
+      await sleep(650);
+
+      // IMPORTANT:
+      // Do not run clickFanDuelNhlTargetDrawers a second time here.
+      // FanDuel drawer clicks are toggles. The prior version clicked the same
+      // player-specific headers twice, which opened them and then closed them
+      // before the final capture.
+      const targetedNhlHeadersAfterClicked = 0;
 
       const currentText = rawPageText();
 
       if (currentText && currentText.trim()) {
         captures.push(
-          `FANDUEL_NHL_CURRENT_CAPTURE: show more ${showMoreClicked}; headers ${expandedClicked}\n${currentText}`
+          `FANDUEL_NHL_CURRENT_CAPTURE: show more ${showMoreClicked}+${showMoreAfterClicked}; targeted headers ${targetedNhlHeadersClicked}+${targetedNhlHeadersAfterClicked}; generic headers ${expandedClicked}\n${currentText}`
         );
       }
-
       const nextLabel = getFanDuelNextNhlWorkflowLabel();
 
       if (nextLabel) {

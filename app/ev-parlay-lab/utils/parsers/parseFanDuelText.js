@@ -896,34 +896,88 @@ function parseFanDuelNhlVisibleProps(lines, startIndex, event, sport) {
 
 function parseFanDuelNhlAnytimeGoalScorer(lines, startIndex, event, sport) {
   const rows = [];
-  const idx = findLineIndexAfter(lines, startIndex, /^Any Time Goal Scorer$/i);
 
-  if (idx === -1) return rows;
+  for (let idx = Math.max(0, startIndex); idx < lines.length - 1; idx += 1) {
+    if (!/^(Any Time|Anytime) Goal Scorer$/i.test(normalizeLine(lines[idx]))) {
+      continue;
+    }
 
-  const end = findFanDuelVisibleSectionEnd(lines, idx + 1);
+    let parsedRowsInThisSection = 0;
 
-  for (let i = idx + 1; i < end - 1; i += 1) {
-    const player = normalizeLine(lines[i]);
-    const odds = parseAmericanOdds(lines[i + 1]);
+    for (let i = idx + 1; i < lines.length - 1; i += 1) {
+      const player = normalizeLine(lines[i]);
+      const odds = parseAmericanOdds(lines[i + 1]);
 
-    if (!looksLikePlayerName(player) || odds === null) continue;
+      // Stop this occurrence when the anytime goalscorer list has ended.
+      // The first occurrence is often collapsed and immediately followed by
+      // Player 1+ Points / shots / other headings. That is fine; the outer loop
+      // will keep searching for a later expanded Any Time Goal Scorer section.
+      if (
+        /^Player \d+\+ Points$/i.test(player) ||
+        /^\d+\+ Points$/i.test(player) ||
+        /^60 Min Player to Record \d+\+ Shots on Goal$/i.test(player) ||
+        /^60 Min \d+\+ Shots on Goal$/i.test(player) ||
+        /^Player \d+\+ Assists$/i.test(player) ||
+        /^\d+\+ Assists$/i.test(player) ||
+        /^First Goal Scorer$/i.test(player) ||
+        /^Player to Score \d+\+ Goals$/i.test(player) ||
+        /^Game Specials/i.test(player) ||
+        /^First (Home|Away) Team Goal Scorer$/i.test(player) ||
+        /^Second Goal Scorer$/i.test(player) ||
+        /^Third Goal Scorer$/i.test(player) ||
+        /^(1st|2nd|3rd) Period Any Time Goal Scorer$/i.test(player) ||
+        /^(1st|2nd|3rd) Period First Goal Scorer$/i.test(player) ||
+        /^Game to Reach Overtime/i.test(player) ||
+        /^Any Time Goal Scorer \/ Team to Win Parlay$/i.test(player) ||
+        /^Anytime Goal Scorer \/ Team to Win Parlay$/i.test(player) ||
+        /^.+ Total Goals$/i.test(player) ||
+        new RegExp(`^${escapeRegExp(event)}\\s+Goals\\s+Odds$`, "i").test(player) ||
+        /^Bet on /i.test(player) ||
+        /^Verifying location/i.test(player) ||
+        /^ABOUT$/i.test(player)
+      ) {
+        break;
+      }
 
-    rows.push(
-      buildRow({
-        sport,
-        event,
-        marketType: "player_goals",
-        selection: `${player} Over`,
-        lineValue: 0.5,
-        oddsAmerican: odds,
-      })
-    );
+      // Skip helper/show lines but keep scanning inside this occurrence.
+      if (
+        /^Tap a player/i.test(player) ||
+        /^Show (more|less)$/i.test(player) ||
+        /^Combine up to/i.test(player) ||
+        !player
+      ) {
+        continue;
+      }
 
-    i += 1;
+      if (!looksLikePlayerName(player) || odds === null) continue;
+
+      rows.push(
+        buildRow({
+          sport,
+          event,
+          marketType: "player_goals",
+          selection: `${player} Over`,
+          lineValue: 0.5,
+          oddsAmerican: odds,
+        })
+      );
+
+      parsedRowsInThisSection += 1;
+      i += 1;
+    }
+
+    // Small optimization: if we parsed a full expanded goalscorer list, skip ahead.
+    // Do not return early, because multi-pass raw can contain repeated captures
+    // and dedupeRows() will remove exact duplicates later.
+    if (parsedRowsInThisSection > 0) {
+      continue;
+    }
   }
 
   return rows;
 }
+
+
 
 function parseFanDuelNhlMilestoneSections(lines, startIndex, event, sport) {
   const rows = [];
@@ -964,7 +1018,9 @@ function parseFanDuelNhlMilestoneSections(lines, startIndex, event, sport) {
 function parseFanDuelNhlMilestoneHeader(header) {
   const text = normalizeLine(header);
 
-  let m = text.match(/^60 Min Player to Record (\d+)\+ Shots on Goal$/i);
+  let m =
+    text.match(/^60 Min Player to Record (\d+)\+ Shots on Goal$/i) ||
+    text.match(/^60 Min (\d+)\+ Shots on Goal$/i);
   if (m) {
     return {
       marketType: "player_shots_on_goal",
@@ -972,7 +1028,9 @@ function parseFanDuelNhlMilestoneHeader(header) {
     };
   }
 
-  m = text.match(/^Player (\d+)\+ Points$/i);
+  m =
+    text.match(/^Player (\d+)\+ Points$/i) ||
+    text.match(/^(\d+)\+ Points$/i);
   if (m) {
     const threshold = Number(m[1]);
 
@@ -986,7 +1044,9 @@ function parseFanDuelNhlMilestoneHeader(header) {
     };
   }
 
-  m = text.match(/^Player (\d+)\+ Assists$/i);
+  m =
+    text.match(/^Player (\d+)\+ Assists$/i) ||
+    text.match(/^(\d+)\+ Assists$/i);
   if (m) {
     const threshold = Number(m[1]);
 
@@ -999,8 +1059,11 @@ function parseFanDuelNhlMilestoneHeader(header) {
     };
   }
 
-  m = text.match(/^Player to Record (\d+)\+ Powerplay Points$/i);
-  if (m) {
+  m =
+    text.match(/^Player to Record (\d+)\+ Powerplay Points$/i) ||
+    text.match(/^Player to Record (\d+)\+ Power Play Points$/i) ||
+    text.match(/^(\d+)\+ Powerplay Points$/i) ||
+    text.match(/^(\d+)\+ Power Play Points$/i);  if (m) {
     const threshold = Number(m[1]);
     if (threshold !== 1) return null;
 
