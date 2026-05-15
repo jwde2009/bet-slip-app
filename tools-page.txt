@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-function ToolsPageContent() {
+export default function ToolsPage() {
   const searchParams = useSearchParams();
 
   const [americanDecimalInput, setAmericanDecimalInput] = useState("");
@@ -366,7 +366,7 @@ function ToolsPageContent() {
         </div>
 
         <div style={gridStyle}>
-          <ToolCard title="American ↔ Decimal" icon="🔄">
+          <ToolCard title="American â†” Decimal" icon="ðŸ”„">
             <label style={labelStyle}>
               Odds
               <input
@@ -390,7 +390,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Implied Probability / Break-Even" icon="🎲">
+          <ToolCard title="Implied Probability / Break-Even" icon="ðŸŽ²">
             <label style={labelStyle}>
               Odds
               <input
@@ -415,7 +415,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="No-Vig Calculator (2-way)" icon="🧮">
+          <ToolCard title="No-Vig Calculator (2-way)" icon="ðŸ§®">
             <label style={labelStyle}>
               Side A Odds
               <input value={novigA} onChange={(e) => setNovigA(e.target.value)} style={inputStyle} />
@@ -445,7 +445,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Single Bet EV Finder" icon="🎯">
+          <ToolCard title="Single Bet EV Finder" icon="ðŸŽ¯">
             {singleBetLabel ? (
               <div style={selectedBetBannerStyle}>
                 {singleBetLabel}
@@ -487,7 +487,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Stake Comparison" icon="⚖️" defaultCollapsed={true}>
+          <ToolCard title="Stake Comparison" icon="âš–ï¸" defaultCollapsed={true}>
             {singleBetLabel ? (
               <div style={selectedBetBannerStyle}>
                 {singleBetLabel}
@@ -538,7 +538,7 @@ function ToolsPageContent() {
                         {(stakeComparisonResult.diffPct * 100).toFixed(2)}%
                       </ResultValue>
                     ) : (
-                      "—"
+                      "â€”"
                     )}
                   </div>
                 </>
@@ -548,7 +548,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Boost Calculator" icon="⚡" defaultCollapsed={true}>
+          <ToolCard title="Boost Calculator" icon="âš¡" defaultCollapsed={true}>
             <label style={labelStyle}>
               Base Odds
               <input value={boostOdds} onChange={(e) => setBoostOdds(e.target.value)} style={inputStyle} />
@@ -579,7 +579,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Parlay EV Calculator" icon="🎯" defaultCollapsed={true}>
+          <ToolCard title="Parlay EV Calculator" icon="ðŸŽ¯" defaultCollapsed={true}>
             <label style={labelStyle}>
               Legs (comma separated)
               <input
@@ -605,7 +605,7 @@ function ToolsPageContent() {
               <textarea
                 value={parlayLabelsInput}
                 onChange={(e) => setParlayLabelsInput(e.target.value)}
-                placeholder="Game 1 — Team A ML || Game 2 — Team B ML"
+                placeholder="Game 1 â€” Team A ML || Game 2 â€” Team B ML"
                 style={textareaStyle}
               />
             </label>
@@ -628,7 +628,7 @@ function ToolsPageContent() {
                     <div style={parlayLabelListStyle}>
                       {parlayResult.labels.map((label) => (
                         <div key={label} style={parlayLabelItemStyle}>
-                          • {label}
+                          â€¢ {label}
                         </div>
                       ))}
                     </div>
@@ -643,7 +643,7 @@ function ToolsPageContent() {
                     {Number.isFinite(parlayResult.fairHitProb) ? (
                       <strong>{(parlayResult.fairHitProb * 100).toFixed(2)}%</strong>
                     ) : (
-                      "—"
+                      "â€”"
                     )}
                   </div>
                   <div>
@@ -653,7 +653,7 @@ function ToolsPageContent() {
                         {(parlayResult.evPct * 100).toFixed(2)}%
                       </ResultValue>
                     ) : (
-                      "—"
+                      "â€”"
                     )}
                   </div>
                   <button
@@ -672,7 +672,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Boost Targeting Tool" icon="🚀" defaultCollapsed={true}>
+          <ToolCard title="Boost Targeting Tool" icon="ðŸš€" defaultCollapsed={true}>
             <label style={labelStyle}>
               Boost %
               <input value={boostFinderBoostPct} onChange={(e) => setBoostFinderBoostPct(e.target.value)} style={inputStyle} />
@@ -690,7 +690,7 @@ function ToolsPageContent() {
               {boostFinderResult.length ? (
                 boostFinderResult.map((row) => (
                   <div key={row.label}>
-                    <strong>{row.label}</strong> — Boosted {formatAmerican(row.boostedAmerican)} • EV{" "}
+                    <strong>{row.label}</strong> â€” Boosted {formatAmerican(row.boostedAmerican)} â€¢ EV{" "}
                     <ResultValue value={row.evPct}>
                       {(row.evPct * 100).toFixed(2)}%
                     </ResultValue>
@@ -702,7 +702,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Edge Finder" icon="🔎" defaultCollapsed={true}>
+          <ToolCard title="Edge Finder" icon="ðŸ”Ž" defaultCollapsed={true}>
             <label style={labelStyle}>
               Minimum Edge %
               <input value={edgeFinderMinPct} onChange={(e) => setEdgeFinderMinPct(e.target.value)} style={inputStyle} />
@@ -720,11 +720,11 @@ function ToolsPageContent() {
               {edgeFinderResult.length ? (
                 edgeFinderResult.map((row) => (
                   <div key={row.label}>
-                    <strong>{row.label}</strong> — Edge{" "}
+                    <strong>{row.label}</strong> â€” Edge{" "}
                     <ResultValue value={row.edgePct}>
                       {(row.edgePct * 100).toFixed(2)}%
                     </ResultValue>
-                    {" "}• EV{" "}
+                    {" "}â€¢ EV{" "}
                     <ResultValue value={row.evPct}>
                       {(row.evPct * 100).toFixed(2)}%
                     </ResultValue>
@@ -736,7 +736,7 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard title="Hedge Calculator" icon="🛡️" defaultCollapsed={true}>
+          <ToolCard title="Hedge Calculator" icon="ðŸ›¡ï¸" defaultCollapsed={true}>
             <label style={labelStyle}>
               Bet A Odds
               <input value={hedgeOddsA} onChange={(e) => setHedgeOddsA(e.target.value)} style={inputStyle} />
@@ -903,7 +903,7 @@ function ResultValue({ value, children }) {
 }
 
 function formatAmerican(value) {
-  if (!Number.isFinite(value)) return "—";
+  if (!Number.isFinite(value)) return "â€”";
   const rounded = Math.round(value);
   return rounded > 0 ? `+${rounded}` : `${rounded}`;
 }
@@ -1066,14 +1066,6 @@ const copyButtonStyle = {
   cursor: "pointer",
   fontWeight: 700,
 };
-
-export default function ToolsPage() {
-  return (
-    <Suspense fallback={<div style={{ padding: 20 }}>Loading tools...</div>}>
-      <ToolsPageContent />
-    </Suspense>
-  );
-}
 
 const resultBoxStyle = {
   background: "#ffffff",
