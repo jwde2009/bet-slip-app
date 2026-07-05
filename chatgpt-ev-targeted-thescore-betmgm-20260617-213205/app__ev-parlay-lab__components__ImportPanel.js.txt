@@ -1,0 +1,448 @@
+FILE: app\ev-parlay-lab\components\ImportPanel.js
+EXPORTED_AT: 2026-06-17T21:32:07.2045700-05:00
+SOURCE_LENGTH_CHARS: 11857
+============================================================
+"use client";
+
+import { useState } from "react";
+
+const SPORTSBOOK_OPTIONS = [
+  "Auto",
+  "DraftKings",
+  "FanDuel",
+  "BetMGM",
+  "Caesars",
+  "Pinnacle",
+  "TheScore",
+  "Manual",
+];
+
+export default function ImportPanel({
+  rawText,
+  setRawText,
+  sportsbook,
+  setSportsbook,
+  batchRole,
+  setBatchRole,
+  onParse,
+  onClearInput,
+  onClearParsedRows,
+  hasRows,
+  lastParsedAt,
+  pendingImports = [],
+  pendingUrlImport = null,
+  onLoadNewestImport,
+  onClearPendingImports,
+  onClearSavedSession,
+  importMode = "append",
+  setImportMode,
+  defaultCollapsed = true,
+}) {
+  const [betMgmLadderEvent, setBetMgmLadderEvent] = useState("");
+  const [betMgmLadderMarket, setBetMgmLadderMarket] = useState("Player points");
+  const [betMgmLadderThreshold, setBetMgmLadderThreshold] = useState("1+");
+
+  function insertBetMgmLadderMarker() {
+    const event = String(betMgmLadderEvent || "").trim();
+    const market = String(betMgmLadderMarket || "").trim();
+    const threshold = String(betMgmLadderThreshold || "").trim();
+
+    if (!event || !market || !threshold) {
+      window.alert("Enter event, market, and threshold before inserting the BetMGM ladder marker.");
+      return;
+    }
+
+    const marker = `BETMGM_MANUAL_LADDER_CAPTURE: sport=WNBA | event=${event} | market=${market} | threshold=${threshold}`;
+    const current = String(rawText || "");
+    const nextText = current.trim()
+      ? `${current.trim()}\n\n${marker}\n`
+      : `${marker}\n`;
+
+    setRawText(nextText);
+  }
+
+  return (
+    <details style={sectionStyle}>
+      <summary style={summaryStyle}>
+        <span>1. Import Odds</span>
+        <span style={summaryMetaStyle}>
+          {pendingImports.length ? `${pendingImports.length} pending import${pendingImports.length === 1 ? "" : "s"}` : "Collapsed by default"}
+        </span>
+      </summary>
+
+      <p style={mutedStyle}>
+        Paste extracted odds text here and choose the source book. Extension imports can be loaded from the pending-import tools at the bottom of this box.
+      </p>
+
+      <div style={controlsRowStyle}>
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>Sportsbook</span>
+          <select
+            value={sportsbook}
+            onChange={(e) => {
+              const nextBook = e.target.value;
+              setSportsbook(nextBook);
+
+              if (nextBook === "Pinnacle") {
+                setBatchRole("fair_odds");
+              } else if (nextBook !== "Auto") {
+                setBatchRole("target");
+              }
+            }}
+            style={inputStyle}
+          >
+            {SPORTSBOOK_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>Batch Role</span>
+          <select
+            value={batchRole}
+            onChange={(e) => setBatchRole(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="target">Target book</option>
+            <option value="fair_odds">Fair odds / sharp source</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={betMgmLadderHelperStyle}>
+        <div style={betMgmLadderTitleStyle}>BetMGM Manual Ladder Helper</div>
+        <div style={betMgmLadderSubtleStyle}>
+          Use this when BetMGM shows ladder-only WNBA props. Insert a marker, then paste the ladder text below it.
+        </div>
+
+        <div style={betMgmLadderGridStyle}>
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>Event</span>
+            <input
+              value={betMgmLadderEvent}
+              onChange={(event) => setBetMgmLadderEvent(event.target.value)}
+              placeholder="Connecticut Sun @ Chicago Sky"
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>Market</span>
+            <select
+              value={betMgmLadderMarket}
+              onChange={(event) => setBetMgmLadderMarket(event.target.value)}
+              style={inputStyle}
+            >
+              <option value="Player points">Player points</option>
+              <option value="Player rebounds">Player rebounds</option>
+              <option value="Player assists">Player assists</option>
+              <option value="Player three-pointers">Player three-pointers</option>
+              <option value="Player points + rebounds + assists">Player points + rebounds + assists</option>
+              <option value="Player points + rebounds">Player points + rebounds</option>
+              <option value="Player points + assists">Player points + assists</option>
+              <option value="Player rebounds + assists">Player rebounds + assists</option>
+            </select>
+          </label>
+
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>Active Threshold</span>
+            <input
+              value={betMgmLadderThreshold}
+              onChange={(event) => setBetMgmLadderThreshold(event.target.value)}
+              placeholder="1+, 2+, 10+, etc."
+              style={inputStyle}
+            />
+          </label>
+
+          <button type="button" onClick={insertBetMgmLadderMarker} style={secondaryButtonStyle}>
+            Insert BetMGM Ladder Marker
+          </button>
+        </div>
+      </div>
+
+      <textarea
+        value={rawText || ""}
+        onChange={(e) => setRawText(e.target.value)}
+        style={textareaStyle}
+        placeholder="Paste odds text here..."
+        spellCheck={false}
+      />
+
+      <div style={{ marginTop: 8, fontSize: 12, color: "#166534", fontWeight: 700 }}>
+        Input chars: {(rawText || "").length}
+      </div>
+
+      <div style={actionRowStyle}>
+        <button type="button" onClick={onParse} style={primaryButtonStyle}>
+          Parse Input
+        </button>
+
+        <button type="button" onClick={onClearInput} style={secondaryButtonStyle}>
+          Clear Input
+        </button>
+
+        <button
+          type="button"
+          onClick={onClearParsedRows}
+          style={{
+            ...dangerButtonStyle,
+            ...(hasRows ? {} : disabledButtonStyle),
+          }}
+          disabled={!hasRows}
+        >
+          Clear Parsed Rows
+        </button>
+
+        <span style={mutedStyle}>
+          {lastParsedAt ? `Last parsed: ${new Date(lastParsedAt).toLocaleString()}` : "Not parsed yet"}
+        </span>
+      </div>
+
+      {pendingUrlImport ? (
+        <div style={importNoticeStyle}>
+          Imported scraped text from URL. Review or click Parse.
+        </div>
+      ) : null}
+
+      <div style={pendingPanelStyle}>
+        <div style={pendingTitleStyle}>Pending scraped imports: {pendingImports.length}</div>
+
+        <div style={pendingActionRowStyle}>
+          <button
+            type="button"
+            onClick={() => onLoadNewestImport?.({ append: false })}
+            style={primaryButtonStyle}
+          >
+            Load newest import
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onLoadNewestImport?.({ append: true })}
+            style={secondaryButtonStyle}
+          >
+            Append newest import
+          </button>
+
+          <label style={inlineFieldStyle}>
+            Import Mode
+            <select
+              value={importMode}
+              onChange={(event) => setImportMode?.(event.target.value)}
+              style={inputStyle}
+            >
+              <option value="append">Append / dedupe</option>
+              <option value="replace_book">Replace this book</option>
+              <option value="replace_book_event">Replace this book + event</option>
+            </select>
+          </label>
+
+          <button type="button" onClick={onClearPendingImports} style={dangerButtonStyle}>
+            Clear pending imports
+          </button>
+
+          <button type="button" onClick={onClearSavedSession} style={warningButtonStyle}>
+            Clear saved session
+          </button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+const sectionStyle = {
+  background: "#f0fdf4",
+  border: "2px solid #166534",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const summaryStyle = {
+  cursor: "pointer",
+  fontWeight: 900,
+  color: "#14532d",
+  fontSize: 20,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summaryMetaStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "4px 9px",
+};
+
+const mutedStyle = {
+  color: "#166534",
+  fontSize: 14,
+};
+
+const controlsRowStyle = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const fieldStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  minWidth: 220,
+};
+
+const fieldLabelStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#166534",
+  textTransform: "uppercase",
+};
+
+const inlineFieldStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#166534",
+};
+
+const inputStyle = {
+  padding: "8px 10px",
+  borderRadius: 8,
+  border: "1px solid #86efac",
+  background: "#fff",
+  color: "#14532d",
+  fontWeight: 700,
+};
+
+const textareaStyle = {
+  width: "100%",
+  minHeight: 220,
+  padding: 12,
+  borderRadius: 8,
+  border: "1px solid #86efac",
+  fontFamily: "monospace",
+  fontSize: 14,
+  resize: "vertical",
+  background: "#fff",
+  color: "#111",
+};
+
+const actionRowStyle = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+  marginTop: 12,
+};
+
+const baseButtonStyle = {
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 14px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const primaryButtonStyle = {
+  ...baseButtonStyle,
+  background: "#166534",
+  color: "#f0fdf4",
+};
+
+const secondaryButtonStyle = {
+  ...baseButtonStyle,
+  background: "#dcfce7",
+  color: "#14532d",
+  border: "1px solid #86efac",
+};
+
+const dangerButtonStyle = {
+  ...baseButtonStyle,
+  background: "#fef2f2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+};
+
+const warningButtonStyle = {
+  ...baseButtonStyle,
+  background: "#fff7ed",
+  color: "#7c2d12",
+  border: "1px solid #fdba74",
+};
+
+const disabledButtonStyle = {
+  opacity: 0.45,
+  cursor: "not-allowed",
+};
+
+const importNoticeStyle = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+  color: "#166534",
+  fontWeight: 700,
+};
+
+const pendingPanelStyle = {
+  marginTop: 14,
+  padding: 12,
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+};
+
+const pendingTitleStyle = {
+  fontWeight: 900,
+  color: "#166534",
+  marginBottom: 8,
+};
+
+const pendingActionRowStyle = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const betMgmLadderHelperStyle = {
+  marginTop: 12,
+  marginBottom: 12,
+  padding: 12,
+  borderRadius: 10,
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+};
+
+const betMgmLadderTitleStyle = {
+  fontWeight: 900,
+  color: "#7c2d12",
+  marginBottom: 4,
+};
+
+const betMgmLadderSubtleStyle = {
+  fontSize: 12,
+  color: "#9a3412",
+  fontWeight: 700,
+  marginBottom: 10,
+};
+
+const betMgmLadderGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 10,
+  alignItems: "end",
+};

@@ -38,6 +38,7 @@ function getMatch(text, regex) {
 
 function extractStake(text) {
   const raw =
+    getMatch(text, /\bOriginal cost:?\s*\$?([\d,]+(?:\.\d{2})?)/i) ||
     getMatch(text, /\bCost:\s*\$?([\d,]+(?:\.\d{2})?)/i) ||
     getMatch(text, /\bAmount:\s*\$?([\d,]+(?:\.\d{2})?)/i);
   return raw ? raw.replace(/,/g, "") : "";
@@ -63,6 +64,12 @@ function isLikelyMetaLine(line = "") {
   const s = String(line || "").toLowerCase();
   return (
     /\bkalshi\b/.test(s) ||
+    /^(basketball|football|baseball|hockey|soccer|tennis)$/i.test(String(line || "").trim()) ||
+    /\bodds\s+\d+(?:\.\d+)?%\s+chance\b/i.test(line) ||
+    /\boriginal cost\b/i.test(line) ||
+    /\bmax payout\b/i.test(line) ||
+    /\bpaid out\b/i.test(line) ||
+    /\bpaid\s+\$?\d/i.test(line) ||
     /\bportfolio\b/.test(s) ||
     /\bmarket(s)? pay\b/.test(s) ||
     /\bcost:\b/.test(s) ||
@@ -212,6 +219,7 @@ function normalizeTotalSelection(side, number, suffix = "") {
 function classifyLeg(line) {
   const value = cleanLine(line);
   if (!value) return null;
+  if (isLikelyMetaLine(value)) return null;
 
   const lower = value.toLowerCase();
 
@@ -264,14 +272,22 @@ function classifyLeg(line) {
     };
   }
 
-  // 🔥 fallback: if it looks like a meaningful line, keep it
-  if (value.length > 5 && !isLikelyMetaLine(value)) {
-    return {
-      raw: value,
-      selection: value,
-      betType: "",
-      marketDetail: value,
-    };
+  // Fallback: if it looks like a meaningful team/player side, keep it.
+  if (value.length > 2 && /[A-Za-z]/.test(value)) {
+    const cleanedSide = value
+      .replace(/^[=~<>\-_\s]+/, "")
+      .replace(/^\d+\s+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (cleanedSide && !isLikelyMetaLine(cleanedSide)) {
+      return {
+        raw: value,
+        selection: cleanedSide,
+        betType: "moneyline",
+        marketDetail: value,
+      };
+    }
   }
 
   return null;
@@ -335,16 +351,163 @@ function getConfidenceFlag(legs, stake, fixtureEvent) {
   return "Low";
 }
 
-function shouldReviewLater({ legs, selection, betType }) {
+function shouldReviewLater({ legs, selection, betType, status, payout, oddsUS }) {
   if (!legs.length) return "Y";
   if (!selection) return "Y";
   if (!betType) return "Y";
+  if (!oddsUS) return "Y";
 
-  // DO NOT require odds or fixture for Kalshi
+  // Kalshi is tracked with calculated American odds from cost/max payout.
+  // Result/accounting still needs review unless settled payout is clear.
+  if (!status || status === "Open") return "Y";
+  if (status === "Won" && !payout) return "Y";
+
   return "N";
 }
 
-export function parseKalshiSlip(cleaned, shared = {}) {
+function getDateFromSourceFileName(sourceFileName = "") {
+  const s = String(sourceFileName || "");
+
+  let m = s.match(/Screenshot_(\d{4})(\d{2})(\d{2})-/i);
+  if (m) {
+    const [, y, mo, d] = m;
+    return `${mo}/${d}/${y}`;
+  }
+
+  // Handles 4-4-26.png, 4-10-26 2.png, folder/4-14-26 3.png
+  m = s.match(/(?:^|[\\/])?(\d{1,2})-(\d{1,2})-(\d{2,4})(?:\s+\d+)?\.[A-Za-z0-9]+$/);
+  if (m) {
+    const mm = String(m[1]).padStart(2, "0");
+    const dd = String(m[2]).padStart(2, "0");
+    const yyyy = String(m[3]).length === 2 ? `20${m[3]}` : String(m[3]);
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  return "";
+}
+
+function normalizeKalshiMoney(value = "") {
+  let s = String(value || "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.]/g, "")
+    .trim();
+
+  if (!s) return "";
+
+  // OCR can read $6,413.00 as $6.413.00.
+  const dotCount = (s.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    const parts = s.split(".");
+    const decimals = parts.pop();
+    s = `${parts.join("")}.${decimals}`;
+  }
+
+  const n = Number(s);
+  if (!Number.isFinite(n)) return "";
+
+  return n.toFixed(2);
+}
+
+function extractKalshiPayout(text = "") {
+  const s = String(text || "");
+
+  // Prefer actual paid-out language. Do NOT use "Max payout" as settled payout.
+  const paid =
+    s.match(/\b\d+\s+markets?\s+paid\s+\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bpaid\s+out\s+\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bpaid\s+\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    "";
+
+  if (paid) {
+    const money = normalizeKalshiMoney(paid);
+    return money;
+  }
+  
+  const direct =
+    s.match(/\bPayout:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bReturn(?:ed|s)?:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bProfit:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    "";
+
+  return direct ? normalizeKalshiMoney(direct) : "";
+}
+
+function detectKalshiStatus(text = "") {
+  const lower = String(text || "").toLowerCase();
+
+  if (
+    /\bpaid\s+out\s+\$?0(?:\.00)?\b/.test(lower) ||
+    /\bpaid\s+\$?0(?:\.00)?\b/.test(lower) ||
+    /\b\d+\s+markets?\s+paid\s+\$?0(?:\.00)?\b/.test(lower)
+  ) {
+    return "Lost";
+  }
+
+  if (
+    /\bpaid\s+out\s+\$?[1-9][\d,.]*(?:\.\d{1,2})?\b/.test(lower) ||
+    /\bpaid\s+\$?[1-9][\d,.]*(?:\.\d{1,2})?\b/.test(lower) ||
+    /\b\d+\s+markets?\s+paid\s+\$?[1-9][\d,.]*(?:\.\d{1,2})?\b/.test(lower)
+  ) {
+    return "Won";
+  }
+
+  if (/\bwon\b|settled yes|returned|profit/.test(lower)) return "Won";
+  if (/\blost\b|settled no|expired worthless/.test(lower)) return "Lost";
+  if (/\bopen\b|portfolio|order completed|bought|filled/.test(lower)) return "Open";
+
+  return "";
+}
+
+function extractKalshiMaxPayout(text = "") {
+  const s = String(text || "");
+
+  const raw =
+    s.match(/\bMax payout:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bMaximum payout:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bPotential payout:?\s*\$?([\d,.]+(?:\.\d{1,2})?)/i)?.[1] ||
+    "";
+
+  return raw ? normalizeKalshiMoney(raw) : "";
+}
+
+function americanOddsFromStakeAndReturnLocal(stake = "", payout = "") {
+  const s = Number(String(stake || "").replace(/,/g, ""));
+  const p = Number(String(payout || "").replace(/,/g, ""));
+
+  if (!Number.isFinite(s) || !Number.isFinite(p) || s <= 0 || p <= s) return "";
+
+  const profit = p - s;
+
+  if (profit >= s) {
+    return `+${Math.round((profit / s) * 100)}`;
+  }
+
+  return `${Math.round(-(s / profit) * 100)}`;
+}
+
+function extractKalshiProbabilityOdds(text = "") {
+  const m = String(text || "").match(/\bOdds\s+(\d+(?:\.\d+)?)%\s+chance\b/i);
+  if (!m) return "";
+
+  const p = Number(m[1]) / 100;
+
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return "";
+
+  if (p > 0.5) {
+    return `${Math.round((-100 * p) / (1 - p))}`;
+  }
+
+  return `+${Math.round((100 * (1 - p)) / p)}`;
+}
+
+function extractKalshiBetId(text = "") {
+  return (
+    String(text || "").match(/\b(?:Order ID|Order|Trade ID|Position ID)[:# ]+([A-Z0-9-]+)/i)?.[1] ||
+    ""
+  );
+}
+
+export function parseKalshiSlip(cleaned, shared = {}, sourceFileName = "", originalText = "") {
   const {
     detectStatus,
     extractBetId,
@@ -352,7 +515,7 @@ export function parseKalshiSlip(cleaned, shared = {}) {
     parsePlacedDate,
   } = shared || {};
 
-  const sourceText = normalizeText(cleaned || "");
+  const sourceText = normalizeText(originalText || cleaned || "");
   const lines = getLines(sourceText);
   const debugTrace = [];
 
@@ -363,6 +526,12 @@ export function parseKalshiSlip(cleaned, shared = {}) {
 
   const bookmaker = "Kalshi";
   const stake = extractStake(sourceText);
+  const maxPayout = extractKalshiMaxPayout(sourceText);
+  const settledPayoutForOdds = extractKalshiPayout(sourceText);
+  const oddsUS =
+    americanOddsFromStakeAndReturnLocal(stake, maxPayout) ||
+    americanOddsFromStakeAndReturnLocal(stake, settledPayoutForOdds) ||
+    extractKalshiProbabilityOdds(sourceText);
 
   const placed =
     typeof parsePlacedDate === "function"
@@ -370,10 +539,29 @@ export function parseKalshiSlip(cleaned, shared = {}) {
       : { raw: "", normalized: "", dateObj: null, dateOnly: "" };
 
   const rawPlacedDate = placed.raw || "";
-  const betDate = placed.dateOnly || "";
+  const betDate = placed.dateOnly || getDateFromSourceFileName(sourceFileName);
 
-  const status = typeof detectStatus === "function" ? detectStatus(sourceText) : "";
-  const betId = typeof extractBetId === "function" ? extractBetId(sourceText) : "";
+  const status =
+    detectKalshiStatus(sourceText) ||
+    (typeof detectStatus === "function" ? detectStatus(sourceText) : "");
+
+  const win =
+    status === "Won"
+      ? "Y"
+      : status === "Lost"
+      ? "N"
+      : "";
+
+  const payout =
+    status === "Lost"
+      ? "0.00"
+      : extractKalshiPayout(sourceText);
+
+  const toWin = status === "Lost" ? "0.00" : "";
+
+  const betId =
+    extractKalshiBetId(sourceText) ||
+    (typeof extractBetId === "function" ? extractBetId(sourceText) : "");
   const legCountFromTicket = extractLegCount(sourceText);
 
   const legs = buildLegs(lines, debugTrace);
@@ -417,6 +605,9 @@ export function parseKalshiSlip(cleaned, shared = {}) {
     selection,
     betType,
     fixtureEvent,
+    status,
+    payout,
+    oddsUS,
   });
 
   const row = {
@@ -428,20 +619,25 @@ export function parseKalshiSlip(cleaned, shared = {}) {
     betType,
     fixtureEvent,
     stake,
-    oddsUS: "",
-    oddsSource: "",
-    oddsMissingReason: "kalshi_no_american_odds_detected",
+    oddsUS,
+    oddsSource: oddsUS ? "Calculated from cost/max payout" : "",
+    oddsMissingReason: oddsUS ? "" : "kalshi_odds_missing",
     live: "N",
     bonusBet: "N",
-    win: "",
+    win,
     marketDetail,
-    payout: "",
-    toWin: "",
+    payout,
+    toWin,
     rawPlacedDate,
     status,
-    parseWarning: reviewLater === "Y" ? "kalshi_needs_manual_review" : "",
+    parseWarning: [
+      reviewLater === "Y" ? "kalshi_needs_manual_review" : "",
+      !status || status === "Open" ? "kalshi_result_needs_review" : "",
+    ]
+      .filter(Boolean)
+      .join(" | "),
     duplicateWarning: "",
-    sourceFileName: "",
+    sourceFileName,
     sourceText,
     sourceImageUrl: "",
     reviewNotes: "",

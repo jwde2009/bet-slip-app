@@ -311,7 +311,20 @@ if (
       isParlay: false,
     }) || "";
 
-  const status = typeof detectStatus === "function" ? detectStatus(sourceText) : "";
+  const status =
+    (typeof detectStatus === "function" ? detectStatus(sourceText) : "") ||
+    (/\bWon\b/i.test(sourceText) ? "Won" : "") ||
+    (/\bLost\b/i.test(sourceText) ? "Lost" : "") ||
+    (/\bVoid|Push\b/i.test(sourceText) ? "Voided" : "");
+
+  const win =
+    status === "Won"
+      ? "Y"
+      : status === "Lost"
+      ? "N"
+      : "";
+
+  const payout = status === "Lost" ? "0.00" : "";
   const betId = typeof extractBetId === "function" ? extractBetId(sourceText) : "";
 
   const reviewLater =
@@ -331,9 +344,9 @@ if (
     oddsMissingReason: oddsUS ? "" : "bet365_odds_missing",
     live: "N",
     bonusBet: "N",
-    win: "",
+    win,
     marketDetail,
-    payout: "",
+    payout,
     toWin,
     rawPlacedDate: placed.raw || "",
     status,

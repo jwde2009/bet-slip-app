@@ -1,0 +1,455 @@
+﻿FILE: app\ev-parlay-lab\page.js
+LINE: 596
+TERM: Kelly
+TEXT: function calculateSingleKellyStake({
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 598
+TERM: Kelly
+TEXT:   kellyFraction,
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 603
+TERM: Kelly
+TEXT:   const resolvedKellyFraction = Number(kellyFraction) || 0;
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 607
+TERM: Kelly
+TEXT:     !(resolvedKellyFraction > 0) ||
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 619
+TERM: Kelly
+TEXT:   const fullKellyFraction = (b * p - q) / b;
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 621
+TERM: Kelly
+TEXT:   if (!(fullKellyFraction > 0)) {
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 625
+TERM: Kelly
+TEXT:   return resolvedBankroll * resolvedKellyFraction * fullKellyFraction;
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 728
+TERM: Kelly
+TEXT:         suggestedKellyStake: calculateSingleKellyStake({
+
+FILE: app\ev-parlay-lab\page.js
+LINE: 730
+TERM: Kelly
+TEXT:           kellyFraction: filters?.kellyFraction,
+
+FILE: app\ev-parlay-lab\components\ParlayFilters.js
+LINE: 30
+TERM: Kelly
+TEXT:   ["Boosted Kelly", "Ranks by Kelly-style stake size after boost using your bankroll and Kelly fraction."],
+
+FILE: app\ev-parlay-lab\components\ParlayFilters.js
+LINE: 177
+TERM: Kelly
+TEXT:             <option value="kelly">Boosted Kelly</option>
+
+FILE: app\ev-parlay-lab\components\ParlayFilters.js
+LINE: 245
+TERM: Kelly
+TEXT:           Kelly Fraction
+
+FILE: app\ev-parlay-lab\components\ParlayFilters.js
+LINE: 251
+TERM: Kelly
+TEXT:             value={draftFilters.kellyFraction ?? 0.25}
+
+FILE: app\ev-parlay-lab\components\ParlayFilters.js
+LINE: 252
+TERM: Kelly
+TEXT:             onChange={(e) => updateField("kellyFraction", Number(e.target.value))}
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 32
+TERM: actualSgp
+TEXT:   const [actualSgpOddsByParlayId, setActualSgpOddsByParlayId] = useState({});
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 37
+TERM: repairMojibake
+TEXT:   const safeSavedPlacedParlays = repairMojibakeDeep(savedPlacedParlays);
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 180
+TERM: actualSgp
+TEXT:                 const actualSgpOddsText = actualSgpOddsByParlayId[parlay.id] ?? "";
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 181
+TERM: buildActualSgpRegrade
+TEXT:                 const actualSgpRegrade = buildActualSgpRegrade(parlay, actualSgpOddsText, stakeValue);
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 243
+TERM: actualSgp
+TEXT:                                 actualSgpRegrade?.actualBoostedAmerican ??
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 246
+TERM: actualSgp
+TEXT:                               actualBookSgpOddsAmerican: actualSgpRegrade?.actualRawAmerican ?? null,
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 247
+TERM: actualSgp
+TEXT:                               actualBoostedSgpOddsAmerican: actualSgpRegrade?.actualBoostedAmerican ?? null,
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 284
+TERM: actualSgp
+TEXT:                                   value={actualSgpOddsText}
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 287
+TERM: actualSgp
+TEXT:                                     setActualSgpOddsByParlayId((prev) => ({
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 331
+TERM: actualSgp
+TEXT:                             {actualSgpRegrade ? (
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 332
+TERM: actualSgp
+TEXT:                               <div style={actualSgpRegradeGridStyle}>
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 333
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Raw SGP Odds" value={formatAmerican(actualSgpRegrade.actualRawAmerican)} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 334
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Boosted SGP Odds" value={formatAmerican(actualSgpRegrade.actualBoostedAmerican)} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 335
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Raw EV %" value={formatPct(actualSgpRegrade.actualRawEvPct)} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 336
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Boosted EV %" value={formatPct(actualSgpRegrade.actualBoostedEvPct)} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 337
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Stake Used" value={`$${Number(actualSgpRegrade.actualStakeUsed || 0).toFixed(2)}`} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 338
+TERM: actualSgp
+TEXT:                                 <MetricRow label="Actual Expected $" value={`$${Number(actualSgpRegrade.actualExpectedProfitAtStake || 0).toFixed(2)}`} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 371
+TERM: Kelly
+TEXT:                               <MetricRow label="Boosted Kelly" value={`$${Number(parlay.recommendedDevigSnapshot.boostedSuggestedKellyStake ?? 0).toFixed(2)}`} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 420
+TERM: Kelly
+TEXT:                           <MetricRow label="Boosted Kelly" value={`$${Number(parlay.boostedSuggestedKellyStake ?? parlay.suggestedKellyStake ?? 0).toFixed(2)}`} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 421
+TERM: Kelly
+TEXT:                           <MetricRow label="Raw Kelly" value={`$${Number(parlay.rawSuggestedKellyStake ?? 0).toFixed(2)}`} />
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 457
+TERM: repairMojibake
+TEXT: function repairMojibakeText(value) {
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 478
+TERM: repairMojibake
+TEXT: function repairMojibakeDeep(value) {
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 479
+TERM: repairMojibake
+TEXT:   if (typeof value === "string") return repairMojibakeText(value);
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 482
+TERM: repairMojibake
+TEXT:     return value.map((item) => repairMojibakeDeep(item));
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 487
+TERM: repairMojibake
+TEXT:       Object.entries(value).map(([key, item]) => [key, repairMojibakeDeep(item)])
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 518
+TERM: buildActualSgpRegrade
+TEXT: function buildActualSgpRegrade(parlay, rawActualAmerican, stakeOverride) {
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 564
+TERM: actualExpected
+TEXT:     actualExpectedProfitAtStake: stake * actualBoostedEvPct,
+
+FILE: app\ev-parlay-lab\components\ParlayResults.js
+LINE: 770
+TERM: actualSgp
+TEXT: const actualSgpRegradeGridStyle = {
+
+FILE: app\ev-parlay-lab\components\TopEdgeBetsPanel.js
+LINE: 73
+TERM: Kelly
+TEXT:                   label="Suggested Kelly Stake"
+
+FILE: app\ev-parlay-lab\components\TopEdgeBetsPanel.js
+LINE: 74
+TERM: Kelly
+TEXT:                   value={`$${Number(bet.suggestedKellyStake || 0).toFixed(2)}`}
+
+FILE: app\ev-parlay-lab\components\TopEdgeBetsPanel.js
+LINE: 179
+TERM: Kelly
+TEXT:     Number.isFinite(bet.suggestedKellyStake)
+
+FILE: app\ev-parlay-lab\components\TopEdgeBetsPanel.js
+LINE: 180
+TERM: Kelly
+TEXT:       ? Math.max(0, bet.suggestedKellyStake).toFixed(2)
+
+FILE: app\ev-parlay-lab\components\TopEdgeBetsPanel.js
+LINE: 184
+TERM: Kelly
+TEXT:   params.set("singleKellyFraction", "0.25");
+
+FILE: app\ev-parlay-lab\data\sampleData.js
+LINE: 13
+TERM: Kelly
+TEXT:   kellyFraction: 0.25,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 706
+TERM: Kelly
+TEXT:   const rawSuggestedKellyStake = calculateSuggestedKellyStake({
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 708
+TERM: Kelly
+TEXT:     kellyFraction: Number(filters.kellyFraction) || 0,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 713
+TERM: Kelly
+TEXT:   const boostedSuggestedKellyStake = calculateSuggestedKellyStake({
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 715
+TERM: Kelly
+TEXT:     kellyFraction: Number(filters.kellyFraction) || 0,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 720
+TERM: Kelly
+TEXT:   const suggestedKellyStake = boostedSuggestedKellyStake;
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 752
+TERM: Kelly
+TEXT:     suggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 753
+TERM: Kelly
+TEXT:     rawSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 754
+TERM: Kelly
+TEXT:     boostedSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 794
+TERM: Kelly
+TEXT:     suggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1019
+TERM: Kelly
+TEXT:   const rawSuggestedKellyStake = calculateSuggestedKellyStake({
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1021
+TERM: Kelly
+TEXT:     kellyFraction: Number(filters.kellyFraction) || 0,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1026
+TERM: Kelly
+TEXT:   const boostedSuggestedKellyStake = calculateSuggestedKellyStake({
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1028
+TERM: Kelly
+TEXT:     kellyFraction: Number(filters.kellyFraction) || 0,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1039
+TERM: Kelly
+TEXT:     rawSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1040
+TERM: Kelly
+TEXT:     boostedSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1053
+TERM: Kelly
+TEXT:   suggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1054
+TERM: Kelly
+TEXT:   rawSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1055
+TERM: Kelly
+TEXT:   boostedSuggestedKellyStake,
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1127
+TERM: Kelly
+TEXT:       `Boosted Kelly stake â‰ˆ $${Number(boostedSuggestedKellyStake || 0).toFixed(2)}`
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1130
+TERM: Kelly
+TEXT:       `Raw Kelly stake â‰ˆ $${Number(rawSuggestedKellyStake || 0).toFixed(2)}`
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1132
+TERM: Kelly
+TEXT:   } else if (Number.isFinite(boostedSuggestedKellyStake) && boostedSuggestedKellyStake > 0) {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1133
+TERM: Kelly
+TEXT:     notes.push(`Kelly-style stake â‰ˆ $${boostedSuggestedKellyStake.toFixed(2)}`);
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1136
+TERM: Kelly
+TEXT:   if (stake > 0 && Number.isFinite(suggestedKellyStake) && suggestedKellyStake > 0) {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1137
+TERM: Kelly
+TEXT:     if (stake > suggestedKellyStake * 1.5) {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1139
+TERM: Kelly
+TEXT:     } else if (stake < suggestedKellyStake * 0.6) {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1149
+TERM: Kelly
+TEXT: function calculateSuggestedKellyStake({ bankroll, kellyFraction, winProbability, decimalOdds }) {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1156
+TERM: Kelly
+TEXT:   if (!Number.isFinite(kellyFraction) || kellyFraction <= 0) return 0;
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1159
+TERM: Kelly
+TEXT:   const fullKelly = (b * p - q) / b;
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1160
+TERM: Kelly
+TEXT:   if (!(fullKelly > 0)) return 0;
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1162
+TERM: Kelly
+TEXT:   return bankroll * fullKelly * kellyFraction;
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1262
+TERM: Kelly
+TEXT:   if (mode === "kelly") {
+
+FILE: app\ev-parlay-lab\utils\parlayEngine.js
+LINE: 1263
+TERM: Kelly
+TEXT:     return compareNumberDesc(a.boostedSuggestedKellyStake ?? a.suggestedKellyStake, b.boostedSuggestedKellyStake ?? b.suggestedKellyStake)
+
+FILE: app\tools\page.js
+LINE: 22
+TERM: Kelly
+TEXT:   const [singleBetKellyFraction, setSingleBetKellyFraction] = useState("0.25");
+
+FILE: app\tools\page.js
+LINE: 59
+TERM: Kelly
+TEXT:     const singleKellyFractionFromUrl = searchParams.get("singleKellyFraction");
+
+FILE: app\tools\page.js
+LINE: 76
+TERM: Kelly
+TEXT:     if (singleKellyFractionFromUrl) setSingleBetKellyFraction(singleKellyFractionFromUrl);
+
+FILE: app\tools\page.js
+LINE: 151
+TERM: Kelly
+TEXT:     const fraction = Number(singleBetKellyFraction);
+
+FILE: app\tools\page.js
+LINE: 166
+TERM: Kelly
+TEXT:     const fullKelly = (b * fairProbability - q) / b;
+
+FILE: app\tools\page.js
+LINE: 167
+TERM: Kelly
+TEXT:     const suggestedStake = bankroll * Math.max(0, fullKelly) * fraction;
+
+FILE: app\tools\page.js
+LINE: 187
+TERM: Kelly
+TEXT:     singleBetKellyFraction,
+
+FILE: app\tools\page.js
+LINE: 354
+TERM: Kelly
+TEXT:               Quick calculators for line conversion, no-vig pricing, EV, boosts, Kelly sizing, and hedging.
+
+FILE: app\tools\page.js
+LINE: 510
+TERM: Kelly
+TEXT:               Kelly Fraction
+
+FILE: app\tools\page.js
+LINE: 511
+TERM: Kelly
+TEXT:               <input value={singleBetKellyFraction} onChange={(e) => setSingleBetKellyFraction(e.target.value)} style={inputStyle} />
+
+FILE: app\tools\page.js
+LINE: 546
+TERM: Kelly
+TEXT:                 <div>Enter valid odds, probability, bankroll, Kelly fraction, and stake.</div>
+

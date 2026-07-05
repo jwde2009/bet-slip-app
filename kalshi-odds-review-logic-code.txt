@@ -1,0 +1,4319 @@
+
+
+===== app/page.js =====
+"use client";
+import Link from "next/link";
+import { parseBetSlip, enrichRow } from "./utils/parser";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+  detectOddsMissingReason,
+  extractBestOdds,
+  extractPayouts,
+} from "./utils/oddsHelpers";
+
+import {
+  addDuplicateWarnings,
+  computeConfidence,
+  getDisplayedBookmaker,
+  impliedProbabilityFromAmericanOdds,
+  makeDuplicateKey,
+} from "./utils/tableHelpers";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReviewTable from "./components/ReviewTable";
+import TopActionGrid from "./components/TopActionGrid";
+import FilterBar from "./components/FilterBar";
+import UploadDropZone from "./components/UploadDropZone";
+import UploadBatchStatus from "./components/UploadBatchStatus";
+import ReviewLegend from "./components/ReviewLegend";
+import Tesseract from "tesseract.js";
+
+import { detectLeague } from "./utils/detectLeague";
+
+const evLabButtonStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  borderRadius: 8,
+  background: "#166534",
+  color: "#f0fdf4",
+  textDecoration: "none",
+  fontWeight: 700,
+  border: "2px solid #14532d",
+};
+
+const BOOKMAKER_UPLOAD_OPTIONS = [
+  "Auto",
+
+  // Core / Missouri / regular books
+  "Bet365",
+  "BetMGM",
+  "Caesars",
+  "Circa",
+  "DraftKings",
+  "Fanatics",
+  "FanDuel",
+  "Kalshi",
+  "The Score",
+
+  // Offshore / text-ticket style books
+  "My Bookie",
+  "SportsBetting.ag",
+  "Lucky Rebel",
+  "bet105",
+  "Bovada",
+  "BetOnline",
+  "BetUS",
+  "LowVig",
+  "NoVig",
+  "Prophet X",
+  "Fliff",
+
+  // Illinois
+  "IL-Bet365",
+  "IL-BetMGM",
+  "IL-Caesars",
+  "IL-FanDuel",
+  "IL-Fanatics",
+  "IL-DraftKings",
+  "IL-Hard Rock",
+  "IL-BetRivers",
+  "IL-Circa",
+
+  // Indiana
+  "IN-Bet365",
+  "IN-BetMGM",
+  "IN-Caesars",
+  "IN-FanDuel",
+  "IN-Fanatics",
+  "IN-DraftKings",
+  "IN-BetRivers",
+  "IN-Hard Rock",
+  "IN-Bally",
+  "IN-SBK",
+  "IN-Betr",
+
+  // Ohio
+  "OH-Bet365",
+  "OH-BetMGM",
+  "OH-Caesars",
+  "OH-FanDuel",
+  "OH-Fanatics",
+  "OH-DraftKings",
+  "OH-BetRivers",
+  "OH-Hard Rock",
+  "OH-Bally",
+  "OH-Prime Sports",
+  "OH-Betr",
+  "OH-BetJack",
+  "OH-Betly",
+
+  // Kentucky
+  "KY-Bet365",
+  "KY-BetMGM",
+  "KY-Caesars",
+  "KY-FanDuel",
+  "KY-Fanatics",
+  "KY-DraftKings",
+  "KY-Prime Sports",
+  "KY-Circa",
+
+  // Michigan
+  "MI-Bet365",
+  "MI-BetMGM",
+  "MI-Caesars",
+  "MI-FanDuel",
+  "MI-Fanatics",
+  "MI-Hard Rock",
+  "MI-BetRivers",
+  "MI-DraftKings",
+  "MI-Golden Nugget",
+  "MI-Four Winds",
+  "MI-Firekeepers",
+  "MI-Play Gun Lake",
+  "MI-PlayEagle",
+];
+
+const BET_TYPE_OPTIONS = [
+  "",
+  "straight",
+  "moneyline",
+  "spread",
+  "total",
+  "player prop",
+  "game prop",
+  "parlay",
+  "futures",
+];
+
+const BET_SOURCE_OPTIONS = [
+  "",
+  "EV",
+  "Promo",
+  "Boost",
+  "Parlay",
+  "Hedge",
+  "Middle",
+  "Live",
+  "Fun",
+  "Manual Fix",
+  "Needs Check",
+];
+
+const ACCOUNT_OPTIONS = ["Me", "Wife"];
+
+function normalizeUploadBookmakerLabel(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+  if (text === "Auto") return "Auto";
+
+  return text
+    .replace(/(^|-)bet365\b/gi, "$1Bet365")
+    .replace(/(^|-)thescore\b/gi, "$1The Score")
+    .replace(/(^|-)the score\b/gi, "$1The Score");
+}
+
+function getReviewPassStatus(row = {}) {
+  const status = String(row.status || "").toLowerCase();
+
+  if (row.betDateNeedsConfirm === "Y" || !row.betDate) return "Date Confirm";
+  const isKalshi = String(row.bookmaker || "").toLowerCase().includes("kalshi");
+
+  if (!row.stake || (!row.oddsUS && !isKalshi)) return "Parser Issue";  if (!row.selection) return "Parser Issue";
+  if (!row.win && !["open", "cashed out", "voided", "void", "push"].includes(status)) {
+    return "Parser Issue";
+  }
+
+  if (
+    row.likelyHedge === "Y" ||
+    row.hedgeOverride === "" ||
+    row.hedgeOverride === undefined ||
+    (
+      String(row.betType || "").toLowerCase().includes("player prop") &&
+      (!row.playerLastName || !row.propMarket)
+    )
+  ) {
+    return "Hedge Check";
+  }
+
+  if (!row.sportLeague || !row.fixtureEvent) return "Context Needed";
+  if (row.reviewResolved === "Y") return "Export Ready";
+
+  return "Clean";
+}
+
+function rowIsHedgeCritical(row = {}) {
+  const betType = String(row.betType || "").toLowerCase();
+  const status = String(row.status || "").toLowerCase();
+  const isKalshi = String(row.bookmaker || "").toLowerCase().includes("kalshi");
+
+  const missingCore =
+    row.betDateNeedsConfirm === "Y" ||
+    !row.betDate ||
+    !row.bookmaker ||
+    !row.stake ||
+    (!row.oddsUS && !isKalshi) ||
+    !row.win && !["open", "cashed out", "voided", "void", "push"].includes(status) ||
+    !row.sportLeague;
+
+  const possibleHedge =
+    row.likelyHedge === "Y" ||
+    row.autoLikelyHedge === "Y" ||
+    row.hedgeOverride === "" ||
+    row.hedgeOverride === undefined;
+
+  const playerPropMissingContext =
+    betType.includes("player prop") &&
+    (!row.playerLastName || !row.propMarket);
+
+  const teamSportMissingContext =
+    !row.participantANormalized &&
+    !row.participantBNormalized &&
+    !row.fixtureEvent;
+
+  return !!(
+    missingCore ||
+    possibleHedge ||
+    playerPropMissingContext ||
+    teamSportMissingContext
+  );
+}
+
+function buildPreExportChecklist(rowsToCheck = []) {
+  const activeRows = rowsToCheck.filter((row) => row.archived !== "Y");
+
+  const counts = {
+    active: activeRows.length,
+    unreviewed: activeRows.filter((row) => row.reviewResolved !== "Y").length,
+    reviewLater: activeRows.filter((row) => row.reviewLater === "Y").length,
+    unconfirmedDates: activeRows.filter((row) => row.betDateNeedsConfirm === "Y").length,
+    missingDates: activeRows.filter((row) => !row.betDate).length,
+    missingMoney: activeRows.filter((row) => {
+      const isKalshi = String(row.bookmaker || "").toLowerCase().includes("kalshi");
+      return !row.stake || (!row.oddsUS && !isKalshi);
+    }).length,
+    missingResult: activeRows.filter((row) => {
+      const status = String(row.status || "").toLowerCase();
+      return !row.win && !["open", "cashed out", "voided", "void", "push"].includes(status);
+    }).length,
+    missingLeague: activeRows.filter((row) => !row.sportLeague).length,
+    possibleHedgesNotReviewed: activeRows.filter(
+      (row) => row.likelyHedge === "Y" && row.hedgeOverride !== "Y" && row.hedgeOverride !== "N"
+    ).length,
+  };
+
+  const blockers = [
+    counts.unconfirmedDates ? `${counts.unconfirmedDates} unconfirmed copied dates` : "",
+    counts.missingDates ? `${counts.missingDates} missing dates` : "",
+    counts.missingMoney ? `${counts.missingMoney} rows missing stake/odds` : "",
+    counts.missingResult ? `${counts.missingResult} rows missing result` : "",
+    counts.reviewLater ? `${counts.reviewLater} rows marked Review Later` : "",
+    counts.unreviewed ? `${counts.unreviewed} unreviewed rows` : "",
+    counts.possibleHedgesNotReviewed ? `${counts.possibleHedgesNotReviewed} possible hedges not confirmed/denied` : "",
+  ].filter(Boolean);
+
+  return {
+    counts,
+    blockers,
+    okToExport: blockers.length === 0,
+    message:
+      blockers.length === 0
+        ? `Pre-export check passed. ${counts.active} active rows ready.`
+        : `Pre-export warnings:\n- ${blockers.join("\n- ")}\n\nExport anyway?`,
+  };
+}
+
+
+function getRowAttentionLevel(row) {
+  if (!row) return "";
+
+  const parseWarningText = String(row.parseWarning || "").toLowerCase();
+  const duplicateWarningText = String(row.duplicateWarning || "").toLowerCase();
+  const status = String(row.status || "").toLowerCase();
+  const confidence = String(row.confidenceFlag || "").toLowerCase();
+  const isKalshi = String(row.bookmaker || "").toLowerCase().includes("kalshi");
+
+const hasCopiedDateConfirmIssue =
+  !!row.betDate &&
+  (
+    row.betDateNeedsConfirm === "Y" ||
+    parseWarningText.includes("bet_date_copied_from_previous_upload_row_needs_confirm")
+  );
+
+const hasMissingDateConfirmIssue =
+  !row.betDate &&
+  (
+    row.betDateNeedsConfirm === "Y" ||
+    parseWarningText.includes("bet_date_missing_needs_confirm")
+  );
+
+
+  const hasCriticalMoneyIssue =
+    !row.stake ||
+    (!row.oddsUS && !isKalshi) ||
+    parseWarningText.includes("stake_missing") ||
+    parseWarningText.includes("odds_missing");
+
+  const hasCriticalIdentityIssue =
+    !row.selection ||
+    parseWarningText.includes("selection_missing");
+
+  const hasResultIssue =
+    !row.win &&
+    !["open", "cashed out", "voided", "void", "push"].includes(status);
+
+  const hasSoftIssue =
+    !row.fixtureEvent ||
+    !row.betDate ||
+    !row.sportLeague ||
+    confidence === "low" ||
+    confidence === "medium" ||
+    parseWarningText.includes("fixture_missing") ||
+    parseWarningText.includes("no_bet_date_detected") ||
+    parseWarningText.includes("payout_estimated") ||
+    parseWarningText.includes("multiple_bets_detected") ||
+    parseWarningText.includes("cashout_layout_detected") ||
+    parseWarningText.includes("payout_missing");
+
+  if (row.reviewResolved === "Y") {
+    return hasCriticalMoneyIssue || hasCriticalIdentityIssue || hasResultIssue
+      ? "resolved-critical"
+      : "resolved";
+  }
+
+  if (duplicateWarningText.includes("duplicate")) return "duplicate";
+
+if (hasMissingDateConfirmIssue || hasCriticalMoneyIssue || hasCriticalIdentityIssue || hasResultIssue) {
+  return "critical";
+}
+
+if (hasCopiedDateConfirmIssue) {
+  return "date-confirm";
+}
+
+  if (hasSoftIssue) {
+    return "soft";
+  }
+
+  return "";
+}
+
+function cleanTextLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getMatch(text, regex, group = 1) {
+  const match = String(text || "").match(regex);
+  return match ? String(match[group] || "").trim() : "";
+}
+
+function detectLive(text) {
+  return /\blive\b/i.test(String(text || "")) ? "Y" : "N";
+}
+
+function parseVisibleTeamMatchup(lines) {
+  const teamLines = [];
+  for (const line of lines) {
+    const cleaned = cleanTextLine(line);
+    if (!cleaned) continue;
+    if (
+      /\bTrail Blazers\b|\bNuggets\b|\bBucks\b|\bClippers\b|\bHornets\b|\bCeltics\b|\bPacers\b|\bBulls\b|\bMIL\b|\bPOR\b|\bDEN\b|\bIND\b|\bLA Clippers\b/i.test(
+        cleaned
+      )
+    ) {
+      teamLines.push(cleaned.replace(/\s+\d+.*$/, "").trim());
+    }
+  }
+  const deduped = [];
+  for (const t of teamLines) {
+    if (!deduped.includes(t)) deduped.push(t);
+  }
+  if (deduped.length >= 2) return `${deduped[0]} @ ${deduped[1]}`;
+  return "";
+}
+
+function parseMyBetsCards(lines) {
+  const cards = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/\b(Wager:|Wager Amount:)\s*\$?/i.test(line)) continue;
+
+    const windowStart = Math.max(0, i - 4);
+    const windowEnd = Math.min(lines.length, i + 8);
+    const cardLines = lines.slice(windowStart, windowEnd);
+    const cardText = cardLines.join("\n");
+
+    const selectionLine =
+      cardLines.find((l) => /[+-]\d{2,5}.*(?:Open|Cashed Out|Won|Lost|Paid)?/i.test(l)) || "";
+    const marketLine =
+      cardLines.find((l) =>
+        /\b(Moneyline|Live Moneyline|Points O\/U|Assists O\/U|Rebounds O\/U|Three Pointers(?: Made)?(?: O\/U| Made O\/U)?|Total Games|Games Spread|Triple-Double|Double-Double|Earned Runs(?: Allowed)?(?: O\/U)?|Anytime Goalscorer)\b/i.test(
+          l
+        )
+      ) || "";
+    const wagerLine = cardLines.find((l) => /\bWager:\s*\$?|\bWager Amount:\s*\$?/i.test(l)) || "";
+    const payoutLine = cardLines.find((l) => /\b(To Pay:|Paid:|Total Payout:)\s*\$?/i.test(l)) || "";
+    const eventLine =
+      cardLines.find((l) => /\b(Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i.test(l)) || "";
+    const visibleMatchup = parseVisibleTeamMatchup(cardLines);
+
+    const rawSelection = cleanTextLine(selectionLine)
+      .replace(/\b(?:Open|Cashed Out|Won|Lost)\b/gi, "")
+      .replace(/[+-]\d{2,5}.*$/i, "")
+      .trim();
+
+    const extractedPayouts = extractPayouts(cardText);
+
+    cards.push({
+      rawSelection,
+      marketDetail: cleanTextLine(marketLine),
+      fixtureEvent: cleanTextLine(eventLine || visibleMatchup),
+      stake:
+        getMatch(wagerLine, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i) ||
+        getMatch(cardText, /(?:Wager:|Wager Amount:)\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+      payout: extractedPayouts.payout,
+      oddsUS:
+        getMatch(selectionLine, /([+-]\d{2,5})/) ||
+        getMatch(cardText, /([+-]\d{2,5})\s+(?:Open|Cashed Out|Won|Lost)\b/i) ||
+        "",
+      status: /\bCashed Out\b/i.test(cardText)
+        ? "Cashed Out"
+        : /\bOpen\b/i.test(cardText)
+        ? "Open"
+        : /\bWon\b/i.test(cardText)
+        ? "Won"
+        : /\bLost\b/i.test(cardText)
+        ? "Lost"
+        : "",
+      live: detectLive(cardText),
+      sourceText: cardText,
+      screenType: "my_bets_card",
+    });
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const card of cards) {
+    const key = [
+      card.rawSelection,
+      card.marketDetail,
+      card.stake,
+      card.payout,
+      card.oddsUS,
+      card.status,
+    ].join("|");
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(card);
+    }
+  }
+  return unique;
+}
+
+function getImageBitmapFromFile(file) {
+  if (typeof createImageBitmap === "function") {
+    return createImageBitmap(file);
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+
+    img.onerror = (error) => {
+      URL.revokeObjectURL(url);
+      reject(error);
+    };
+
+    img.src = url;
+  });
+}
+
+async function makeFooterOcrBlobs(file) {
+  const blobs = [];
+
+  async function makeOneFooterBlob({ footerRatio, scale, filter }) {
+    try {
+      const bitmap = await getImageBitmapFromFile(file);
+
+      const width = bitmap.width || bitmap.naturalWidth;
+      const height = bitmap.height || bitmap.naturalHeight;
+
+      if (!width || !height) return null;
+
+      const footerHeight = Math.max(90, Math.floor(height * footerRatio));
+      const sourceY = Math.max(0, height - footerHeight);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width * scale;
+      canvas.height = footerHeight * scale;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.filter = filter;
+      ctx.drawImage(
+        bitmap,
+        0,
+        sourceY,
+        width,
+        footerHeight,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      return await new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), "image/png");
+      });
+    } catch (error) {
+      console.warn("Footer OCR crop failed", error);
+      return null;
+    }
+  }
+
+  const attempts = [
+    {
+      footerRatio: 0.30,
+      scale: 4,
+      filter: "grayscale(1) contrast(2.8) brightness(1.2)",
+    },
+    {
+      footerRatio: 0.45,
+      scale: 4,
+      filter: "grayscale(1) contrast(3.2) brightness(1.25)",
+    },
+    {
+      footerRatio: 0.60,
+      scale: 3,
+      filter: "grayscale(1) contrast(2.6) brightness(1.15)",
+    },
+  ];
+
+  for (const attempt of attempts) {
+    const blob = await makeOneFooterBlob(attempt);
+    if (blob) blobs.push(blob);
+  }
+
+  return blobs;
+}
+
+function textContainsPlacedDate(text = "") {
+  return /\bPlaced:?\s*[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}/i.test(String(text || ""));
+}
+
+function extractFooterDateHints(text = "") {
+  const raw = String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!raw) return [];
+
+  const hints = [];
+
+  const placedMatches = raw.match(
+    /\bPlaced:?\s*[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)\b/gi
+  ) || [];
+
+  for (const match of placedMatches) {
+    hints.push(match.replace(/\s+/g, " ").trim());
+  }
+
+  const dateTimeMatches = raw.match(
+    /\b[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)\b/gi
+  ) || [];
+
+  for (const match of dateTimeMatches) {
+    const cleaned = match.replace(/\s+/g, " ").trim();
+
+    if (!hints.some((hint) => hint.includes(cleaned))) {
+      hints.push(`Placed: ${cleaned}`);
+    }
+  }
+
+  return Array.from(new Set(hints));
+}
+
+async function readOcrTextForFile(file) {
+  const fullResult = await Tesseract.recognize(file, "eng", { logger: () => {} });
+  const fullText = fullResult.data.text || "";
+
+  // If the normal OCR already caught the placed date, do not append noisy footer OCR.
+  if (textContainsPlacedDate(fullText)) {
+    return fullText;
+  }
+
+  const footerBlobs = await makeFooterOcrBlobs(file);
+
+  if (!footerBlobs.length) {
+    return fullText;
+  }
+
+  const dateHints = [];
+
+  for (let i = 0; i < footerBlobs.length; i += 1) {
+    try {
+      const footerResult = await Tesseract.recognize(footerBlobs[i], "eng", {
+        logger: () => {},
+      });
+
+      const footerText = footerResult.data.text || "";
+      const hints = extractFooterDateHints(footerText);
+
+      for (const hint of hints) {
+        if (!dateHints.includes(hint)) {
+          dateHints.push(hint);
+        }
+      }
+    } catch (error) {
+      console.warn("Footer OCR pass failed", error);
+    }
+  }
+
+  if (!dateHints.length) return fullText;
+
+  return `${fullText}\n\n--- DATE OCR ---\n${dateHints.join("\n")}`;
+}
+
+
+
+function escapeCsv(value) {
+  const str = String(value ?? "");
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function americanOddsFromProbabilityValue(value) {
+  const p = Number(value);
+
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return "";
+
+  if (p > 0.5) {
+    return `${Math.round((-100 * p) / (1 - p))}`;
+  }
+
+  return `+${Math.round((100 * (1 - p)) / p)}`;
+}
+
+function getTrackerOdds(row) {
+  if (row.oddsUS) return row.oddsUS;
+
+  const bookmaker = String(getDisplayedBookmaker(row) || row.bookmaker || "").toLowerCase();
+
+  if (bookmaker.includes("kalshi") && row.impliedProbability) {
+    return americanOddsFromProbabilityValue(row.impliedProbability);
+  }
+
+  return "";
+}
+
+function buildTrackerCsvData(rowsToExport) {
+  const headers = [
+    "Event Date",
+    "Bet Date",
+    "Sportsbook",
+    "League",
+    "Selection",
+    "Bet Type",
+    "Tipper",
+    "My variable",
+    "Event",
+    "Live Score",
+    "Result",
+    "Stake",
+    "Odds",
+    "Bonus Bet",
+    "Win",
+    "Potential return",
+  ];
+
+  const csvRows = rowsToExport.map((row) => [
+    escapeCsv(row.eventDate),
+    escapeCsv(row.betDate),
+    escapeCsv(getDisplayedBookmaker(row)),
+    escapeCsv(row.sportLeague),
+    escapeCsv(row.selection),
+    escapeCsv(row.betType),
+    escapeCsv(""),
+    escapeCsv(row.betSourceTag),
+    escapeCsv(row.fixtureEvent),
+    escapeCsv(""),
+    escapeCsv(""),
+    escapeCsv(row.stake),
+    escapeCsv(getTrackerOdds(row)),
+    escapeCsv(row.bonusBet),
+    escapeCsv(row.win),
+    escapeCsv(""),
+  ]);
+
+  return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+}
+
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+};
+
+const selectStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+};
+
+const textAreaStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#fff",
+  color: "#000",
+  minHeight: 90,
+  resize: "vertical",
+};
+
+const buttonStyle = {
+  padding: "8px 12px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+const noticeStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #c8e6c9",
+  borderRadius: 4,
+  backgroundColor: "#e8f5e9",
+  color: "#1b5e20",
+  display: "inline-block",
+};
+
+const warningStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #ffe082",
+  borderRadius: 4,
+  backgroundColor: "#fff8e1",
+  color: "#7a5a00",
+  display: "inline-block",
+};
+
+const duplicateStyle = {
+  marginTop: 8,
+  padding: "8px 12px",
+  border: "1px solid #ffccbc",
+  borderRadius: 4,
+  backgroundColor: "#fff3e0",
+  color: "#a84300",
+  display: "inline-block",
+};
+
+const cellStyle = {
+  border: "1px solid #ccc",
+  padding: 8,
+  verticalAlign: "top",
+  background: "#fff",
+  color: "#000",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+export default function Home() {
+  const [rows, setRows] = useState([]);
+  const [selectedRowId, setSelectedRowId] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [showArchivedRows, setShowArchivedRows] = useState(false);
+  const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState("");
+  const [saveNotice, setSaveNotice] = useState("");
+  const [showReviewLaterOnly, setShowReviewLaterOnly] = useState(false);
+  const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
+  const [showLikelyParserIssuesOnly, setShowLikelyParserIssuesOnly] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [showLegacySelectedRowEditor, setShowLegacySelectedRowEditor] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: "betDate", direction: "desc" });
+  const [tableMode, setTableMode] = useState("debug");
+  const [uploadBatches, setUploadBatches] = useState([]);
+  const [savedFilterView, setSavedFilterView] = useState("default");
+  const [showHedgesOnly, setShowHedgesOnly] = useState(false);
+  const [smartReviewMode, setSmartReviewMode] = useState(true);
+  const [showGuaranteedProfitOnly, setShowGuaranteedProfitOnly] = useState(false);
+  const [showHedgeCriticalOnly, setShowHedgeCriticalOnly] = useState(false);  const [columnWidths, setColumnWidths] = useState({
+    select: 52,
+    edit: 84,
+    image: 96,
+    sourceFileName: 180,
+    accountOwner: 90,
+    bookmaker: 110,
+    betId: 150,
+    eventDate: 105,
+    betDate: 105,
+    sportLeague: 110,
+    selection: 220,
+    betType: 110,
+    betSourceTag: 110,
+    fixtureEvent: 220,
+    stake: 90,
+    oddsUS: 90,
+    oddsMissingReason: 150,
+    impliedProbability: 90,
+    confidenceFlag: 95,
+    likelyParserIssue: 80,
+    live: 70,
+    bonusBet: 75,
+    reviewLater: 75,
+    warnings: 220,
+    actions: 170,
+  });
+
+  const resizeStateRef = useRef(null);
+  const [uploadOwner, setUploadOwner] = useState("Me");
+  const [uploadBookmaker, setUploadBookmaker] = useState("Auto");
+  const [changelog, setChangelog] = useState([
+    "v1: initial OCR parser and CSV export",
+    "v2: editor, duplicate handling, account owner, source tags, implied probability, confidence",
+    "v3: upload owner toggle, editor above table, league and prop detection expanded, QA helpers",
+    "v4: local storage, app state import/export, changelog, improved league and prop classification",
+    "v5: odds missing reason, stronger college/soccer league fallbacks, image thumbnails, improved upload button and review table",
+    "v6: screen type classification, stronger odds/payout fallback, parlay summaries, improved DK hardening",
+    "v10: modular action grid + filter bar foundation",
+"v11: preview panel cleanup, review-mode UX, cleaner control layout",
+  ]);
+  const noticeTimerRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("betSlipAppStateV1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+    } catch (error) {
+      console.error("Could not load local app state", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    applySavedFilterView("review_queue");
+  }, []);
+
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "betSlipAppStateV1",
+        JSON.stringify({ rows, uploadOwner, uploadBookmaker, changelog })
+      );
+    } catch (error) {
+      console.error("Could not save local app state", error);
+    }
+  }, [rows, uploadOwner, uploadBookmaker, changelog]);
+
+    const rowsWithWarnings = useMemo(() => {
+    const enriched = rows.map(enrichRow);
+
+    // Step 1: duplicates
+    const withDuplicates = addDuplicateWarnings(enriched);
+
+    // Step 2: hedge detection (CRITICAL FIX)
+    const withHedges = addLikelyHedgeFlags(withDuplicates);
+
+    // Step 3: GUARANTEE hedge fields persist
+    return withHedges.map(row => ({
+      ...row,
+      likelyHedge: row.likelyHedge || "N",
+      hedgeClusterId: row.hedgeClusterId || "",
+      guaranteedProfit: row.guaranteedProfit || "N",
+    }));
+  }, [rows]);
+
+  
+  function rowNeedsReview(row) {
+    const parseWarningText = String(row?.parseWarning || "").toLowerCase();
+
+    return (
+      row.reviewResolved !== "Y" &&
+      (
+        row.betDateNeedsConfirm === "Y" ||
+        row.likelyParserIssue === "Y" ||
+        rowIsHedgeCritical(row) ||
+        !row.sportLeague ||
+        (!row.oddsUS && !String(row.bookmaker || "").toLowerCase().includes("kalshi")) ||
+        !row.stake ||
+        row.oddsSource === "Calculated" ||
+        !!row.parseWarning ||
+        parseWarningText.includes("stake_missing") ||
+        parseWarningText.includes("selection_missing") ||
+        parseWarningText.includes("fixture_missing")
+      )
+    );
+  }
+
+  const visibleRows = useMemo(() => {
+    let next = rowsWithWarnings;
+
+    if (!showArchivedRows) next = next.filter((row) => row.archived !== "Y");
+    if (showReviewLaterOnly) next = next.filter((row) => row.reviewLater === "Y");
+    if (showLowConfidenceOnly) next = next.filter((row) => row.confidenceFlag === "Low");
+    if (showLikelyParserIssuesOnly) next = next.filter((row) => row.likelyParserIssue === "Y");
+    if (showNeedsReviewOnly) next = next.filter((row) => rowNeedsReview(row));
+    if (showHedgesOnly) next = next.filter((row) => row.likelyHedge === "Y");
+    if (showGuaranteedProfitOnly) next = next.filter((row) => row.guaranteedProfit === "Y");
+    if (showHedgeCriticalOnly) next = next.filter((row) => rowIsHedgeCritical(row));
+    if (reviewMode) {
+      next = next.filter((row) => rowNeedsReview(row) || row.reviewLater === "Y");
+    }
+
+    if (smartReviewMode) {
+      next = next.filter(
+        (row) => row.reviewLater === "Y" || Number(row.reviewPriority || 0) >= 3
+      );
+    }
+
+    next = [...next].sort((a, b) => {
+      const bucketOrder = { Critical: 0, High: 1, Standard: 2, Later: 3 };
+
+      const bucketA = bucketOrder[a.reviewBucket] ?? 99;
+      const bucketB = bucketOrder[b.reviewBucket] ?? 99;
+      if (bucketA !== bucketB) return bucketA - bucketB;
+
+      const priorityA = Number(a.reviewPriority || 0);
+      const priorityB = Number(b.reviewPriority || 0);
+      if (priorityA !== priorityB) return priorityB - priorityA;
+
+      const dateA = String(a.betDate || a.eventDate || "");
+      const dateB = String(b.betDate || b.eventDate || "");
+      return dateB.localeCompare(dateA);
+    });
+
+    return groupHedgeRowsTogether(next);
+
+    return groupHedgeRowsTogether(next);
+  }, [
+    rowsWithWarnings,
+    showArchivedRows,
+    showReviewLaterOnly,
+    showLowConfidenceOnly,
+    showLikelyParserIssuesOnly,
+    showNeedsReviewOnly,
+    showHedgesOnly,
+    showGuaranteedProfitOnly,
+    showHedgeCriticalOnly,
+    reviewMode,
+    smartReviewMode,
+  ]);
+
+const nextBestReviewRow = useMemo(() => {
+  return visibleRows.find((row) => row.reviewLater === "Y") || visibleRows[0] || null;
+}, [visibleRows]);
+
+const jumpToNextBestReviewRow = () => {
+  if (nextBestReviewRow) {
+    setSelectedRowId(nextBestReviewRow.id);
+  }
+};
+
+const reviewedCount = rowsWithWarnings.filter(
+  (row) => row.reviewResolved === "Y"
+).length;
+
+const exportableCount = rowsWithWarnings.filter(
+  (row) => row.archived !== "Y"
+).length;
+
+const counts = {
+  total: rowsWithWarnings.length,
+  visible: visibleRows.length,
+  needsReview: rowsWithWarnings.filter((row) => rowNeedsReview(row)).length,
+  reviewLater: rowsWithWarnings.filter((row) => row.reviewLater === "Y").length,
+  lowConfidence: rowsWithWarnings.filter((row) => row.confidenceFlag === "Low").length,
+  parserIssues: rowsWithWarnings.filter((row) => row.likelyParserIssue === "Y").length,
+  archived: rowsWithWarnings.filter((row) => row.archived === "Y").length,
+  hedges: rowsWithWarnings.filter((row) => row.likelyHedge === "Y").length,
+  guaranteedProfit: rowsWithWarnings.filter((row) => row.guaranteedProfit === "Y").length,
+  hedgeCritical: rowsWithWarnings.filter((row) => rowIsHedgeCritical(row)).length,
+  unconfirmedDates: rowsWithWarnings.filter((row) => row.betDateNeedsConfirm === "Y").length,
+  exportReady: rowsWithWarnings.filter((row) => getReviewPassStatus(row) === "Export Ready").length,
+  possibleHedgesNotReviewed: rowsWithWarnings.filter(
+    (row) => row.likelyHedge === "Y" && row.hedgeOverride !== "Y" && row.hedgeOverride !== "N"
+  ).length,
+  selected: selectedIds.length,
+  reviewed: reviewedCount,
+  exportable: exportableCount,
+};
+
+  const selectedRow =
+    rowsWithWarnings.find((row) => row.id === selectedRowId) || null;
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const selectedVisibleIds = visibleRows.map((row) => row.id);
+  const allVisibleSelected =
+    selectedVisibleIds.length > 0 && selectedVisibleIds.every((id) => selectedIds.includes(id));
+
+  useEffect(() => {
+    if (!selectedRowId && visibleRows.length > 0) setSelectedRowId(visibleRows[0].id);
+    if (
+      selectedRowId &&
+      rowsWithWarnings.length > 0 &&
+      !rowsWithWarnings.some((row) => row.id === selectedRowId)
+    ) {
+      setSelectedRowId(visibleRows[0]?.id || rowsWithWarnings[0]?.id || "");
+    }
+    if (rowsWithWarnings.length === 0) setSelectedRowId("");
+  }, [rowsWithWarnings, visibleRows, selectedRowId]);
+
+  const showNotice = (message) => {
+    setSaveNotice(message);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => {
+      setSaveNotice("");
+      noticeTimerRef.current = null;
+    }, 2000);
+  };
+
+  const moveSelection = (delta) => {
+    if (visibleRows.length === 0) return;
+    const index = visibleRows.findIndex((row) => row.id === selectedRowId);
+    if (index === -1) return setSelectedRowId(visibleRows[0].id);
+    const nextIndex = Math.min(Math.max(index + delta, 0), visibleRows.length - 1);
+    setSelectedRowId(visibleRows[nextIndex].id);
+  };
+
+    const selectNextAfter = (id) => {
+    const index = visibleRows.findIndex((row) => row.id === id);
+    if (index === -1) return;
+    const next = visibleRows[index + 1] || visibleRows[index - 1] || null;
+    if (next) setSelectedRowId(next.id);
+  };
+
+  const selectNextNeedsReviewAfter = (id) => {
+    const index = visibleRows.findIndex((row) => row.id === id);
+    if (index === -1) return;
+
+    const after = visibleRows.slice(index + 1);
+    const before = visibleRows.slice(0, index).reverse();
+
+    const nextNeedsReview =
+      after.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      before.find((row) => rowNeedsReview(row) || row.reviewLater === "Y") ||
+      after[0] ||
+      before[0] ||
+      null;
+
+    if (nextNeedsReview) setSelectedRowId(nextNeedsReview.id);
+  };
+
+  const selectNextHedgeRow = () => {
+    const next = visibleRows.find(
+      (row) => row.likelyHedge === "Y" && row.reviewResolved !== "Y"
+    );
+    if (next) setSelectedRowId(next.id);
+  };
+
+
+  function classifySideKey(row) {
+    const selection = String(row?.selection || "").toLowerCase().trim();
+    const marketDetail = String(row?.marketDetail || "").toLowerCase().trim();
+    const betType = String(row?.betType || "").toLowerCase().trim();
+
+    if (!selection && !marketDetail) return "";
+
+    if (betType === "moneyline") {
+      return `moneyline:${selection}`;
+    }
+
+    if (betType === "spread") {
+      return `spread:${selection}`;
+    }
+
+    if (betType === "total") {
+      const totalText = `${selection} ${marketDetail}`.toLowerCase();
+
+      const noOver = totalText.match(/\bno on over\s+(\d+(?:\.\d+)?)/i);
+      if (noOver) return `total:under:${noOver[1]}`;
+
+      const noUnder = totalText.match(/\bno on under\s+(\d+(?:\.\d+)?)/i);
+      if (noUnder) return `total:over:${noUnder[1]}`;
+
+      const over = totalText.match(/\bover\s+(\d+(?:\.\d+)?)/i);
+      if (over) return `total:over:${over[1]}`;
+
+      const under = totalText.match(/\bunder\s+(\d+(?:\.\d+)?)/i);
+      if (under) return `total:under:${under[1]}`;
+    }
+
+    return `${betType}:${selection}`;
+  }
+
+  function normalizeSimpleHedgeText(value = "") {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizePropMarketForHedge(value = "") {
+    const text = normalizeSimpleHedgeText(value);
+
+    if (!text) return "";
+
+    if (/assist/.test(text)) return "assists";
+    if (/rebound/.test(text)) return "rebounds";
+    if (/\bpoints?\b|\bpts\b/.test(text)) return "points";
+    if (/three|3 pointer|3 pointers|threes/.test(text)) return "threes";
+    if (/double double/.test(text)) return "double-double";
+    if (/triple double/.test(text)) return "triple-double";
+    if (/shot.*goal|sog/.test(text)) return "shots-on-goal";
+    if (/anytime.*goal|goalscorer|goal scorer|player goals|\bgoals?\b/.test(text)) return "goals";
+    if (/save/.test(text)) return "saves";
+    if (/strikeout|ks\b/.test(text)) return "strikeouts";
+    if (/total base/.test(text)) return "total-bases";
+    if (/home run|homer/.test(text)) return "home-runs";
+    if (/hit\b|hits\b/.test(text)) return "hits";
+    if (/rbi/.test(text)) return "rbis";
+
+    return text;
+  }
+
+  function getPlayerLastNameForHedge(row = {}) {
+    const raw =
+      row.playerLastName ||
+      row.canonicalSubject ||
+      row.canonicalPlayer ||
+      row.canonicalTeam ||
+      "";
+
+    const cleaned = normalizeSimpleHedgeText(raw);
+    if (!cleaned) return "";
+
+    const parts = cleaned.split(" ").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  }
+
+  function makePossiblePlayerPropHedgeKey(row = {}) {
+    const betDate = String(row.betDate || "").trim();
+    if (!betDate) return "";
+
+    const bookmaker = String(row.bookmaker || "").trim();
+    if (!bookmaker) return "";
+
+    const marketSource =
+      row.propMarket ||
+      row.canonicalMarketContext ||
+      row.marketDetail ||
+      row.canonicalMarketFamily ||
+      "";
+
+    const propMarket = normalizePropMarketForHedge(marketSource);
+    const lastName = getPlayerLastNameForHedge(row);
+
+    if (!lastName || !propMarket) return "";
+
+    // This intentionally does NOT require fixture/event because this is a weak possible-hedge rescue.
+    // Exact hedge logic can still use canonical fixture/side/line when available.
+    const league = String(row.sportLeague || "").trim().toLowerCase();
+
+    return [betDate, league, lastName, propMarket].join("||");
+  }
+
+
+  function areLikelyOpposites(rowA, rowB) {
+  if (!rowA || !rowB) return false;
+  if (rowA.id === rowB.id) return false;
+  if (
+  rowA.canonicalResultTarget &&
+  rowB.canonicalResultTarget &&
+  rowA.canonicalResultTarget !== rowB.canonicalResultTarget
+) return false;
+  if (rowA.canonicalSubjectType !== rowB.canonicalSubjectType) return false;
+  if (rowA.canonicalMarketFamily !== rowB.canonicalMarketFamily) return false;
+
+  const bookmakerA = String(rowA.bookmaker || "").trim().toLowerCase();
+  const bookmakerB = String(rowB.bookmaker || "").trim().toLowerCase();
+  if (bookmakerA && bookmakerB && bookmakerA === bookmakerB) return false;
+
+  const possiblePropKeyA = makePossiblePlayerPropHedgeKey(rowA);
+  const possiblePropKeyB = makePossiblePlayerPropHedgeKey(rowB);
+
+  if (
+    possiblePropKeyA &&
+    possiblePropKeyB &&
+    possiblePropKeyA === possiblePropKeyB
+  ) {
+    return "POSSIBLE_PLAYER_PROP_HEDGE";
+  }
+
+
+  const sideA = String(rowA.canonicalSide || "").toLowerCase();
+  const sideB = String(rowB.canonicalSide || "").toLowerCase();
+
+  // Exact hedge: opposite side, same exact selection line/market
+  if (
+    rowA.canonicalOppositeKey &&
+    rowB.canonicalSelectionKey &&
+    rowA.canonicalOppositeKey === rowB.canonicalSelectionKey
+  ) {
+    if (sideA === sideB) return false;
+    return "EXACT_HEDGE";
+  }
+
+  // Middle: same market shell, opposite O/U sides, different lines
+  if (
+    rowA.canonicalHedgeKey &&
+    rowB.canonicalHedgeKey &&
+    rowA.canonicalHedgeKey === rowB.canonicalHedgeKey
+  ) {
+    const lineA = parseFloat(rowA.canonicalLine);
+    const lineB = parseFloat(rowB.canonicalLine);
+
+    if (
+      Number.isFinite(lineA) &&
+      Number.isFinite(lineB) &&
+      lineA !== lineB &&
+      (
+        (sideA === "over" && sideB === "under") ||
+        (sideA === "under" && sideB === "over")
+      )
+    ) {
+      return "MIDDLE";
+    }
+  }
+
+  return false;
+}
+
+function makeHedgeDedupKey(row) {
+  return [
+    row.canonicalSelectionKey || "",
+    row.bookmaker || "",
+    row.betId || `${row.stake}|${row.oddsUS}`
+  ].join("|");
+}
+
+function addLikelyHedgeFlags(rowsInput) {
+  function impliedProb(odds) {
+    const o = Number(odds);
+    if (!o) return 0;
+    return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+  }
+
+  function buildClusterId(rows) {
+    return rows
+      .map((r) => r.id)
+      .sort()
+      .join("__");
+  }
+
+  const clusterMap = new Map();
+
+  for (const row of rowsInput) {
+    const matches = rowsInput.filter((other) => {
+      if (!other || other.id === row.id) return false;
+
+      const rowDedupKey = makeHedgeDedupKey(row);
+      const otherDedupKey = makeHedgeDedupKey(other);
+
+      if (rowDedupKey === otherDedupKey) return false;
+
+      return !!areLikelyOpposites(row, other);
+    });
+
+    if (!matches.length) continue;
+
+    const clusterRows = [row, ...matches];
+    const clusterId = buildClusterId(clusterRows);
+
+    for (const clusterRow of clusterRows) {
+      if (!clusterMap.has(clusterRow.id)) {
+        clusterMap.set(clusterRow.id, {
+          clusterId,
+          clusterRows,
+        });
+      }
+    }
+  }
+
+  return rowsInput.map((row) => {
+    const cluster = clusterMap.get(row.id);
+
+    if (!cluster) {
+      return {
+        ...row,
+        likelyHedge: "N",
+        autoLikelyHedge: "N",
+        hedgeClusterId: "",
+        hedgeClusterSize: "",
+        hedgePartnerBookmaker: "",
+        hedgeConfidence: "",
+        hedgeQuality: "",
+        guaranteedProfit: "N",
+        guaranteedProfitAmount: "",
+      };
+    }
+
+    const otherBooks = cluster.clusterRows
+      .filter((r) => r.id !== row.id)
+      .map((r) => getDisplayedBookmaker(r))
+      .filter(Boolean);
+
+    const clusterSize = cluster.clusterRows.length;
+
+    let confidence = "Medium";
+
+    if (clusterSize >= 3) {
+      confidence = "High";
+    }
+
+    const allOdds = cluster.clusterRows
+      .map((r) => Number(r.oddsUS))
+      .filter((n) => Number.isFinite(n));
+
+    let quality = "Likely Hedge";
+
+    if (allOdds.length >= 2) {
+      const impliedTotal = allOdds.reduce(
+        (acc, odds) => acc + impliedProb(odds),
+        0
+      );
+
+      if (impliedTotal < 1) {
+        quality = "Possible Arbitrage";
+      }
+    }
+
+    return {
+      ...row,
+      likelyHedge: "Y",
+      autoLikelyHedge: "Y",
+      hedgeClusterId: cluster.clusterId,
+      hedgeClusterSize: clusterSize,
+      hedgePartnerBookmaker: otherBooks.join(", "),
+      hedgeConfidence: confidence,
+      hedgeQuality: quality,
+      guaranteedProfit: "N",
+      guaranteedProfitAmount: "",
+    };
+  });
+}
+
+function groupHedgeRowsTogether(rowsInput) {
+  const grouped = [];
+  const used = new Set();
+
+  const clusters = new Map();
+
+  for (const row of rowsInput) {
+    if (!row.hedgeClusterId) continue;
+
+    if (!clusters.has(row.hedgeClusterId)) {
+      clusters.set(row.hedgeClusterId, []);
+    }
+
+    clusters.get(row.hedgeClusterId).push(row);
+  }
+
+  for (const row of rowsInput) {
+    if (used.has(row.id)) continue;
+
+    if (
+      row.likelyHedge === "Y" &&
+      row.hedgeClusterId &&
+      clusters.has(row.hedgeClusterId)
+    ) {
+      const clusterRows = clusters.get(row.hedgeClusterId);
+
+      for (const clusterRow of clusterRows) {
+        grouped.push(clusterRow);
+        used.add(clusterRow.id);
+      }
+
+      continue;
+    }
+
+    grouped.push(row);
+    used.add(row.id);
+  }
+
+  return grouped;
+}
+
+  useEffect(() => {
+    const handler = (event) => {
+      if (!selectedRowId) return;
+      const tag = String(event.target?.tagName || "").toLowerCase();
+      if (["input", "textarea", "select"].includes(tag)) return;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelection(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSelection(-1);
+      } else if (event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        setWinStatusForRow(selectedRowId, "Y", true);
+      } else if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setWinStatusForRow(selectedRowId, "N", true);
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed ✓");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewLater: row.reviewLater === "Y" ? "N" : "Y",
+                  reviewResolved: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Review later toggled");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                  exported: "Y",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed + exported");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                  archived: "Y",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed + archived");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        selectNextHedgeRow();
+      }
+       else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewResolved: "Y",
+                  reviewLater: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Reviewed ✓");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      } else if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === selectedRowId
+              ? enrichRow({
+                  ...row,
+                  reviewLater: row.reviewLater === "Y" ? "N" : "Y",
+                  reviewResolved: "N",
+                })
+              : row
+          )
+        );
+        showNotice("Review later toggled");
+        setTimeout(() => selectNextNeedsReviewAfter(selectedRowId), 0);
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedRowId, visibleRows]);
+
+function fillMissingBetDatesFromPreviousUploadRows(rowsInput = []) {
+  let lastKnownBetDate = "";
+
+  return (rowsInput || [])
+    .filter(Boolean)
+    .map((row) => {
+      if (row.betDate) {
+        lastKnownBetDate = row.betDate;
+
+        return enrichRow({
+          ...row,
+          betDateInferred: row.betDateInferred || "N",
+          betDateNeedsConfirm: row.betDateNeedsConfirm || "N",
+          betDateConfirmed: row.betDateConfirmed || "Y",
+        });
+      }
+
+      if (lastKnownBetDate) {
+        return enrichRow({
+          ...row,
+          betDate: lastKnownBetDate,
+          eventDate: row.eventDate || lastKnownBetDate,
+          betDateInferred: "Y",
+          betDateNeedsConfirm: "Y",
+          betDateConfirmed: "N",
+          reviewLater: "Y",
+          reviewResolved: "N",
+          parseWarning: [
+            row.parseWarning,
+            "bet_date_copied_from_previous_upload_row_needs_confirm",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+        });
+      }
+
+      return enrichRow({
+        ...row,
+        betDateInferred: "N",
+        betDateNeedsConfirm: "Y",
+        betDateConfirmed: "N",
+        reviewLater: "Y",
+        reviewResolved: "N",
+        parseWarning: [row.parseWarning, "bet_date_missing_needs_confirm"]
+          .filter(Boolean)
+          .join(" | "),
+      });
+    });
+}
+
+
+ function createUploadBatch(files, batchBookmaker) {
+  const id = crypto.randomUUID();
+
+  let folder = "";
+  let parentFolder = "";
+
+  if (files[0]?.webkitRelativePath) {
+    const parts = files[0].webkitRelativePath.split("/");
+
+    if (parts.length >= 2) {
+      folder = parts[parts.length - 2];
+    }
+
+    if (parts.length >= 3) {
+      parentFolder = parts[parts.length - 3];
+    }
+  }
+
+  const batch = {
+    id,
+    label: `Batch ${uploadBatches.length + 1}`,
+    status: "queued",
+    fileCount: files.length,
+    processedCount: 0,
+    rowsCreated: 0,
+    errorCount: 0,
+    fileNames: files.map((file) => file.name),
+    folder,
+    parentFolder,
+    uploadBookmaker: batchBookmaker,
+    createdAt: Date.now(),
+  };
+
+  setUploadBatches((prev) => [batch, ...prev]);
+  return id;
+}
+
+  function updateUploadBatch(batchId, updates) {
+    setUploadBatches((prev) =>
+      prev.map((batch) =>
+        batch.id === batchId
+          ? { ...batch, ...updates }
+          : batch
+      )
+    );
+  }
+
+  function clearUploadHistory() {
+    setUploadBatches([]);
+  }
+
+  function applySavedFilterView(nextView) {
+    setSavedFilterView(nextView);
+
+    if (nextView === "default") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "review_queue") {
+      setReviewMode(true);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "needs_review") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(true);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "parser_issues") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(true);
+      setShowArchivedRows(false);
+      return;
+    }
+
+    if (nextView === "archived") {
+      setReviewMode(false);
+      setShowNeedsReviewOnly(false);
+      setShowReviewLaterOnly(false);
+      setShowLowConfidenceOnly(false);
+      setShowLikelyParserIssuesOnly(false);
+      setShowArchivedRows(true);
+    }
+  }
+
+  const handleUpload = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) =>
+      String(file.type || "").startsWith("image/")
+    );
+    if (files.length === 0) return;
+
+    const batchBookmaker = normalizeUploadBookmakerLabel(uploadBookmaker);
+    const batchOwner = uploadOwner;
+
+    const batchId = createUploadBatch(files, batchBookmaker);
+    showNotice(`Accepted ${files.length} image${files.length === 1 ? "" : "s"} for upload`);
+
+    setProcessing(true);
+    setProcessingMessage(`Processing 0 of ${files.length}...`);
+    updateUploadBatch(batchId, { status: "processing" });
+
+    let errorCount = 0;
+    const newRows = [];
+    const concurrency = 12;
+
+    async function processOneFile(file, index) {
+      let folder = "";
+      let parentFolder = "";
+
+      if (file.webkitRelativePath) {
+        const parts = file.webkitRelativePath.split("/");
+
+        if (parts.length >= 2) {
+          folder = parts[parts.length - 2];
+        }
+
+        if (parts.length >= 3) {
+          parentFolder = parts[parts.length - 3];
+        }
+      }
+
+      try {
+        setProcessingMessage(`Processing ${index + 1} of ${files.length}: ${file.name}`);
+
+        const sourceName = file.webkitRelativePath || file.name;
+
+        const extractedText = await readOcrTextForFile(file);
+        const parsed = parseBetSlip(extractedText, sourceName, batchBookmaker);
+
+        const forcedBookmaker =
+          batchBookmaker && batchBookmaker !== "Auto"
+            ? batchBookmaker
+            : parsed.bookmaker;
+
+        const row = enrichRow({
+          ...parsed,
+          bookmaker: forcedBookmaker,
+          folder,
+          parentFolder,
+          parserId: parsed.id || "",
+          id: crypto.randomUUID(),
+          accountOwner: batchOwner,
+          sourceImageUrl: URL.createObjectURL(file),
+          sourceFileName: sourceName,
+          sourceRelativePath: sourceName,
+        });
+
+        newRows[index] = row;
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount: index + 1,
+          rowsCreated: newRows.filter(Boolean).length,
+          errorCount,
+        });
+      } catch (error) {
+        console.error(error);
+        errorCount += 1;
+
+        updateUploadBatch(batchId, {
+          status: "processing",
+          processedCount: index + 1,
+          rowsCreated: newRows.filter(Boolean).length,
+          errorCount,
+        });
+      }
+    }
+
+    try {
+      for (let i = 0; i < files.length; i += concurrency) {
+        const chunk = files.slice(i, i + concurrency);
+        await Promise.all(
+          chunk.map((file, offset) => processOneFile(file, i + offset))
+        );
+      }
+
+      const orderedNewRows = fillMissingBetDatesFromPreviousUploadRows(newRows);
+
+      setRows((prev) => [...prev, ...orderedNewRows]);
+      const uploadedReviewRows = orderedNewRows
+        .filter((row) => row.reviewLater === "Y")
+        .sort((a, b) => Number(b.reviewPriority || 0) - Number(a.reviewPriority || 0));
+
+
+      if (uploadedReviewRows[0]?.id) {
+        setSelectedRowId(uploadedReviewRows[0].id);
+      } else if (orderedNewRows[0]) {
+        setSelectedRowId(orderedNewRows[0].id);
+      }
+
+      updateUploadBatch(batchId, {
+        status: errorCount > 0 ? (orderedNewRows.length > 0 ? "partial" : "failed") : "complete",
+        processedCount: files.length,
+        rowsCreated: orderedNewRows.length,
+        errorCount,
+      });
+
+      showNotice(
+        `Batch complete: ${orderedNewRows.length} row${orderedNewRows.length === 1 ? "" : "s"} created`      );
+    } catch (error) {
+      console.error(error);
+      updateUploadBatch(batchId, {
+        status: "failed",
+        processedCount: files.length,
+        rowsCreated: newRows.length,
+        errorCount: errorCount + 1,
+      });
+      showNotice("Could not process upload batch");
+    } finally {
+      setProcessing(false);
+      setProcessingMessage("");
+    }
+  };
+
+  const handleRowFieldChange = (id, field, value) =>
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+    );
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleSelectAllVisible = () =>
+    setSelectedIds((prev) =>
+      allVisibleSelected
+        ? prev.filter((id) => !selectedVisibleIds.includes(id))
+        : Array.from(new Set([...prev, ...selectedVisibleIds]))
+    );
+
+  const deleteRow = (id) => {
+    selectNextAfter(id);
+    setRows((prev) => prev.filter((row) => row.id !== id));
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    showNotice("Row deleted");
+  };
+
+  const setWinStatusForSelected = (winValue) => {
+    if (selectedIds.length === 0) {
+      showNotice(`No selected rows to mark ${winValue === "Y" ? "win" : "loss"}`);
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (!selectedIds.includes(row.id)) return row;
+        const next = {
+          ...row,
+          win: winValue,
+          status: winValue === "Y" ? "Won" : "Lost",
+        };
+        return enrichRow(next);
+      })
+    );
+
+    showNotice(
+      `${selectedIds.length} row${selectedIds.length === 1 ? "" : "s"} marked ${
+        winValue === "Y" ? "win" : "loss"
+      }`
+    );
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.length === 0) return showNotice("No selected rows to delete");
+    const currentId = selectedRowId;
+    setRows((prev) => prev.filter((row) => !selectedIds.includes(row.id)));
+    setSelectedIds([]);
+    if (selectedIds.includes(currentId)) setSelectedRowId("");
+    showNotice("Selected rows deleted");
+  };
+
+  const clearAll = () => {
+    setRows([]);
+    setSelectedIds([]);
+    setSelectedRowId("");
+    showNotice("All rows cleared");
+  };
+
+  const setWinStatusForRow = (id, winValue, advance = false) => {
+  setRows((prev) =>
+    prev.map((row) => {
+      if (row.id !== id) return row;
+
+      const next = {
+        ...row,
+        win: winValue,
+        status: winValue === "Y" ? "Won" : "Lost",
+        reviewResolved: "Y",
+        reviewLater: "N",
+      };
+
+      return enrichRow(next);
+    })
+  );
+
+  showNotice(winValue === "Y" ? "Marked win ✓" : "Marked loss ✓");
+
+  if (advance) {
+    setTimeout(() => selectNextNeedsReviewAfter(id), 0);
+  }
+};
+
+  const ignoreDuplicateForRow = (id) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? enrichRow({ ...row, duplicateIgnored: row.duplicateIgnored === "Y" ? "N" : "Y" })
+          : row
+      )
+    );
+    showNotice("Duplicate preference updated");
+  };
+
+  const mergeDuplicatesIntoSelected = () => {
+    if (!selectedRow) return showNotice("Select a row first");
+    const key = makeDuplicateKey(selectedRow);
+    const duplicateIds = rowsWithWarnings
+      .filter((row) => row.id !== selectedRow.id && makeDuplicateKey(row) === key)
+      .map((row) => row.id);
+
+    if (duplicateIds.length === 0) return showNotice("No duplicates to merge");
+
+    setRows((prev) => prev.filter((row) => !duplicateIds.includes(row.id)));
+    setSelectedIds((prev) => prev.filter((id) => !duplicateIds.includes(id)));
+    showNotice(`Merged ${duplicateIds.length} duplicate row${duplicateIds.length === 1 ? "" : "s"}`);
+  };
+
+  const buildCsvData = (rowsToExport, debug = false) => {
+    if (debug) {
+      const headers = [
+        "Row ID",
+        "Bet ID",
+        "Source File Name",
+        "Source Relative Path",
+        "Account Owner",
+        "EventDate",
+        "Bet Date",
+        "Bookmaker",
+        "Sport / League",
+        "Selection",
+        "Bet Type",
+        "Bet Source Tag",
+        "Fixture / Event",
+        "Stake",
+        "Odds (US)",
+        "Odds Source",
+        "Odds Missing Reason",
+        "Implied Probability",
+        "Confidence",
+        "Live",
+        "Bonus Bet",
+        "Win",
+        "Review Later",
+        "Likely Hedge",
+        "Auto Likely Hedge",
+        "Hedge Override",
+        "Hedge Cluster ID",
+        "Hedge Confidence",
+        "Hedge Quality",
+        "Guaranteed Profit",
+        "Guaranteed Profit Amount",
+        "Hedge Partner Bookmaker",
+        "Hedge Stake",
+        "Hedge Profit Low",
+        "Hedge Profit High",
+        "Hedge Profit If This Wins",
+        "Hedge Profit If Other Wins",
+        "Market Detail",
+        "Payout",
+        "To Win",
+        "Raw Placed Date",
+        "Status",
+        "Parse Warning",
+        "Duplicate Warning",
+        "Review Notes",
+        "OCR Text",
+        "Debug Trace",
+      ];
+
+      const csvRows = rowsToExport.map((row) => [
+        escapeCsv(row.id),
+        escapeCsv(row.betId),
+        escapeCsv(row.sourceFileName),
+        escapeCsv(row.sourceRelativePath),
+        escapeCsv(row.accountOwner),
+        escapeCsv(row.eventDate),
+        escapeCsv(row.betDate),
+        escapeCsv(getDisplayedBookmaker(row)),
+        escapeCsv(row.sportLeague),
+        escapeCsv(row.selection),
+        escapeCsv(row.betType),
+        escapeCsv(row.betSourceTag),
+        escapeCsv(row.fixtureEvent),
+        escapeCsv(row.stake),
+        escapeCsv(row.oddsUS),
+        escapeCsv(row.oddsSource),
+        escapeCsv(row.oddsMissingReason),
+        escapeCsv(row.impliedProbability),
+        escapeCsv(row.confidenceFlag),
+        escapeCsv(row.live),
+        escapeCsv(row.bonusBet),
+        escapeCsv(row.win),
+        escapeCsv(row.reviewLater),
+        escapeCsv(row.likelyHedge),
+        escapeCsv(row.autoLikelyHedge),
+        escapeCsv(row.hedgeOverride),
+        escapeCsv(row.hedgeClusterId),
+        escapeCsv(row.hedgeConfidence),
+        escapeCsv(row.hedgeQuality),
+        escapeCsv(row.guaranteedProfit),
+        escapeCsv(row.guaranteedProfitAmount),
+        escapeCsv(row.hedgePartnerBookmaker),
+        escapeCsv(row.hedgeStake),
+        escapeCsv(row.hedgeProfitLow),
+        escapeCsv(row.hedgeProfitHigh),
+        escapeCsv(row.hedgeProfitIfThisWins),
+        escapeCsv(row.hedgeProfitIfOtherWins),
+        escapeCsv(row.marketDetail),
+        escapeCsv(row.payout),
+        escapeCsv(row.toWin),
+        escapeCsv(row.rawPlacedDate),
+        escapeCsv(row.status),
+        escapeCsv(row.parseWarning),
+        escapeCsv(row.duplicateWarning),
+        escapeCsv(row.reviewNotes),
+        escapeCsv(row.sourceText),
+        escapeCsv(JSON.stringify(row.debugTrace || [])),
+      ]);
+
+      return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+    }
+
+        const headers = [
+      "eventDate",
+      "betDate",
+      "bookmaker",
+      "sportLeague",
+      "selection",
+      "betType",
+      "fixtureEvent",
+      "stake",
+      "oddsUS",
+      "payout",
+      "toWin",
+      "betId",
+      "betSourceTag",
+      "accountOwner",
+      "likelyHedge",
+      "hedgeClusterId",
+      "hedgeConfidence",
+      "hedgeQuality",
+      "guaranteedProfit",
+      "guaranteedProfitAmount",
+      "hedgePartnerBookmaker",
+      "hedgeStake",
+      "hedgeProfitIfThisWins",
+      "hedgeProfitIfOtherWins",
+    ];
+
+    const csvRows = rowsToExport.map((row) => [
+      escapeCsv(row.eventDate),
+      escapeCsv(row.betDate),
+      escapeCsv(getDisplayedBookmaker(row)),
+      escapeCsv(row.sportLeague),
+      escapeCsv(row.selection),
+      escapeCsv(row.betType),
+      escapeCsv(row.betSourceTag),
+      escapeCsv(row.fixtureEvent),
+      escapeCsv(row.stake),
+      escapeCsv(row.oddsUS),
+      escapeCsv(row.oddsSource),
+      escapeCsv(row.oddsMissingReason),
+      escapeCsv(row.impliedProbability),
+      escapeCsv(row.confidenceFlag),
+      escapeCsv(row.live),
+      escapeCsv(row.bonusBet),
+      escapeCsv(row.win),
+    ]);
+
+    return [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+  };
+
+  const downloadCsv = (filename, content) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportStandardCsv = () => {
+    if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
+
+    const activeRows = rowsWithWarnings.filter((row) => row.archived !== "Y");
+    const checklist = buildPreExportChecklist(activeRows);
+
+    if (!checklist.okToExport && !window.confirm(checklist.message)) return;
+
+    const groupedRows = groupHedgeRowsTogether(activeRows);
+    downloadCsv("betting-tracker-export.csv", buildTrackerCsvData(groupedRows));
+    showNotice("Tracker CSV exported");
+  };
+
+  const exportDebugCsv = () => {
+    if (rowsWithWarnings.length === 0) return showNotice("No rows to export");
+    const groupedRows = groupHedgeRowsTogether(rowsWithWarnings);
+    downloadCsv("bet-slip-debug-data.csv", buildCsvData(groupedRows, true));
+    showNotice("Debug CSV exported");
+  };
+
+  const exportSelectedCsv = (debug = false) => {
+    const rowsToExport = rowsWithWarnings.filter((row) => selectedIds.includes(row.id));
+    if (rowsToExport.length === 0) return showNotice("No selected rows to export");
+
+    const groupedRows = groupHedgeRowsTogether(rowsToExport);
+
+    downloadCsv(
+      debug ? "bet-slip-selected-debug-data.csv" : "bet-slip-selected-data.csv",
+      buildCsvData(groupedRows, debug)
+    );
+    showNotice(`Exported ${groupedRows.length} selected row${groupedRows.length === 1 ? "" : "s"}`);
+  };
+
+  const copySelectedOcr = async () => {
+    if (!selectedRow?.sourceText) return showNotice("No OCR text to copy");
+    try {
+      await navigator.clipboard.writeText(selectedRow.sourceText);
+      showNotice("OCR text copied");
+    } catch (error) {
+      console.error(error);
+      showNotice("Could not copy OCR text");
+    }
+  };
+
+  const exportAppState = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      rows,
+      uploadOwner,
+      uploadBookmaker,
+      changelog,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "bet-slip-app-state.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotice("App state exported");
+  };
+
+  const importAppState = async (fileList) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      if (typeof parsed.uploadOwner === "string") setUploadOwner(parsed.uploadOwner);
+      if (typeof parsed.uploadBookmaker === "string") setUploadBookmaker(parsed.uploadBookmaker);
+      if (Array.isArray(parsed.changelog)) setChangelog(parsed.changelog);
+      showNotice("App state imported");
+    } catch (error) {
+      console.error(error);
+      showNotice("Could not import app state");
+    }
+  };
+
+  const addChangelogEntry = () => {
+    const entry = window.prompt("Add a changelog entry");
+    if (!entry) return;
+    setChangelog((prev) => [`${new Date().toLocaleDateString()} - ${entry}`, ...prev]);
+    showNotice("Changelog updated");
+  };
+
+  const startResize = (event, columnKey) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    resizeStateRef.current = {
+      columnKey,
+      startX: event.clientX,
+      startWidth: columnWidths[columnKey] || 120,
+    };
+
+    const onMouseMove = (moveEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+
+      const delta = moveEvent.clientX - state.startX;
+      const nextWidth = Math.max(60, state.startWidth + delta);
+
+      setColumnWidths((prev) => ({
+        ...prev,
+        [state.columnKey]: nextWidth,
+      }));
+    };
+
+    const onMouseUp = () => {
+      resizeStateRef.current = null;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const editorFields = [
+    ["eventDate", "EventDate"],
+    ["betDate", "Bet Date"],
+    ["bookmaker", "Bookmaker"],
+    ["sportLeague", "Sport / League"],
+    ["selection", "Selection"],
+    ["fixtureEvent", "Fixture / Event"],
+    ["stake", "Stake"],
+    ["oddsUS", "Odds (US)"],
+    ["marketDetail", "Market Detail (helper)"],
+    ["payout", "Payout (helper)"],
+    ["toWin", "To Win (helper)"],
+    ["rawPlacedDate", "Raw Placed Date (helper)"],
+    ["status", "Status (helper)"],
+    ["parseWarning", "Parse Warning (helper)"],
+    ["sourceFileName", "Source File Name (helper)"],
+    ["betId", "Bet ID (helper)"],
+  ];
+
+function archiveSelectedRows() {
+  if (!selectedIds.length) return;
+
+  const confirmed = window.confirm(
+    `Archive ${selectedIds.length} selected row${selectedIds.length === 1 ? "" : "s"}?`
+  );
+
+  if (!confirmed) return;
+
+  setRows((prev) =>
+    prev.map((row) =>
+      selectedIds.includes(row.id)
+        ? { ...row, archived: "Y", exported: row.exported || "N" }
+        : row
+    )
+  );
+
+  setSelectedIds([]);
+  showNotice("Selected rows archived");
+}
+
+function unarchiveSelectedRows() {
+  if (!selectedIds.length) return;
+
+  setRows((prev) =>
+    prev.map((row) =>
+      selectedIds.includes(row.id)
+        ? { ...row, archived: "N" }
+        : row
+    )
+  );
+
+  setSelectedIds([]);
+  showNotice("Selected rows unarchived");
+}
+
+function clearArchiveFlags() {
+  const archivedCount = rows.filter((row) => row.archived === "Y").length;
+
+  if (!archivedCount) {
+    showNotice("No archived rows to clear");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Unarchive all ${archivedCount} archived row${archivedCount === 1 ? "" : "s"}?`
+  );
+
+  if (!confirmed) return;
+
+  setRows((prev) =>
+    prev.map((row) => ({
+      ...row,
+      archived: "N",
+    }))
+  );
+
+  showNotice("Archive flags cleared");
+}
+
+  function confirmDatesForRowIds(rowIds = []) {
+    if (!rowIds.length) return showNotice("No rows selected");
+
+    setRows((prev) =>
+      prev.map((row) =>
+        rowIds.includes(row.id)
+          ? enrichRow({
+              ...row,
+              betDateNeedsConfirm: "N",
+              betDateConfirmed: "Y",
+            })
+          : row
+      )
+    );
+
+    showNotice(`Confirmed dates for ${rowIds.length} row${rowIds.length === 1 ? "" : "s"}`);
+  }
+
+  function confirmDatesForSelectedRows() {
+    confirmDatesForRowIds(selectedIds);
+  }
+
+  function confirmDatesForVisibleRows() {
+    const visibleIds = visibleRows
+      .filter((row) => row.betDateNeedsConfirm === "Y")
+      .map((row) => row.id);
+
+    confirmDatesForRowIds(visibleIds);
+  }
+
+  function exportReviewedRowsOnly() {
+    const rowsToExport = rowsWithWarnings.filter(
+      (row) =>
+        row.archived !== "Y" &&
+        row.reviewResolved === "Y" &&
+        row.betDateNeedsConfirm !== "Y"
+    );
+
+    if (!rowsToExport.length) return showNotice("No reviewed rows ready to export");
+
+    const checklist = buildPreExportChecklist(rowsToExport);
+
+    if (!checklist.okToExport && !window.confirm(checklist.message)) return;
+
+    const groupedRows = groupHedgeRowsTogether(rowsToExport);
+    downloadCsv("betting-tracker-reviewed-only.csv", buildTrackerCsvData(groupedRows));
+
+    setRows((prev) =>
+      prev.map((row) =>
+        rowsToExport.some((exportRow) => exportRow.id === row.id)
+          ? { ...row, exported: "Y" }
+          : row
+      )
+    );
+
+    showNotice(`Exported ${groupedRows.length} reviewed row${groupedRows.length === 1 ? "" : "s"}`);
+  }
+
+  function archiveExportedReviewedRows() {
+    const rowsToArchive = rowsWithWarnings.filter(
+      (row) =>
+        row.archived !== "Y" &&
+        row.reviewResolved === "Y" &&
+        row.exported === "Y"
+    );
+
+    if (!rowsToArchive.length) return showNotice("No exported reviewed rows to archive");
+
+    const confirmed = window.confirm(
+      `Archive ${rowsToArchive.length} exported reviewed row${rowsToArchive.length === 1 ? "" : "s"}?`
+    );
+
+    if (!confirmed) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        rowsToArchive.some((archiveRow) => archiveRow.id === row.id)
+          ? { ...row, archived: "Y" }
+          : row
+      )
+    );
+
+    showNotice("Exported reviewed rows archived");
+  }
+
+  function runPreExportChecklist() {
+    const checklist = buildPreExportChecklist(rowsWithWarnings);
+    window.alert(checklist.message.replace("\n\nExport anyway?", ""));
+  }
+
+
+  function markSelectedRowsExported() {
+    if (!selectedIds.length) return;
+
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedIds.includes(row.id)
+          ? { ...row, exported: "Y" }
+          : row
+      )
+    );
+
+    showNotice("Selected rows marked exported");
+  }
+
+  function exportSelectedRowsToCsv() {
+    const selectedRows = rowsWithWarnings.filter(
+      (row) => selectedIds.includes(row.id) && row.archived !== "Y"
+    );
+
+    if (!selectedRows.length) return showNotice("No selected active rows to export");
+
+    const groupedRows = groupHedgeRowsTogether(selectedRows);
+
+    const unreviewed = groupedRows.filter(
+      (row) => row.reviewResolved !== "Y"
+    );
+
+    if (unreviewed.length > 0) {
+      showNotice(`⚠️ ${unreviewed.length} rows not reviewed`);
+    }
+
+    const headers = [
+      "eventDate",
+      "betDate",
+      "bookmaker",
+      "sportLeague",
+      "selection",
+      "betType",
+      "fixtureEvent",
+      "stake",
+      "oddsUS",
+      "payout",
+      "toWin",
+      "betId",
+      "betSourceTag",
+      "accountOwner",
+      "likelyHedge",
+      "hedgeQuality",
+      "hedgePartnerBookmaker",
+      "hedgeStake",
+      "hedgeProfitIfThisWins",
+      "hedgeProfitIfOtherWins",
+    ];
+
+    const csv = [
+      headers.join(","),
+      ...groupedRows.map((row) =>
+        headers.map((header) => escapeCsv(row[header])).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `bet-slip-export-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    markSelectedRowsExported();
+    showNotice(`Exported ${groupedRows.length} row${groupedRows.length === 1 ? "" : "s"} in current batch`);
+  }
+
+  return (
+    <div
+      style={{
+        padding: 20,
+        fontFamily: "Arial, sans-serif",
+        maxWidth: 1600,
+        margin: "0 auto",
+        backgroundColor: "#ffffff",
+        color: "#000000",
+        minHeight: "100vh",
+      }}
+    >
+      <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  }}
+>
+  <div>
+    <h1 style={{ margin: 0 }}>Bet Slip Reader</h1>
+    <p style={{ margin: "4px 0 0 0", color: "#555" }}>
+      Upload bet slips, review parsed data, detect hedges, and export clean records.
+    </p>
+  </div>
+
+  <Link href="/ev-parlay-lab" style={evLabButtonStyle}>
+    Open EV Parlay Lab →
+  </Link>
+</div>
+
+            <div
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginBottom: 12,
+          padding: 12,
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          background: "#f9fafb",
+        }}
+      >
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+          Upload owner
+          <select
+            value={uploadOwner}
+            onChange={(e) => setUploadOwner(e.target.value)}
+            style={{ ...selectStyle, width: 120, padding: "6px 8px" }}
+          >
+            <option value="Me">Me</option>
+            <option value="Wife">Wife</option>
+          </select>
+        </label>
+
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+          Upload sportsbook
+          <select
+            value={uploadBookmaker}
+            onChange={(e) => setUploadBookmaker(e.target.value)}
+            style={{ ...selectStyle, width: 150, padding: "6px 8px" }}
+          >
+            
+            {BOOKMAKER_UPLOAD_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ color: "#14532d", display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+  Filter View
+  <select
+    value={savedFilterView}
+    onChange={(e) => applySavedFilterView(e.target.value)}
+    style={{ ...selectStyle, width: 160, padding: "6px 8px" }}
+  >
+    <option value="default">Default</option>
+    <option value="review_queue">Review Queue</option>
+    <option value="needs_review">Needs Review</option>
+    <option value="parser_issues">Parser Issues</option>
+    <option value="archived">Archived</option>
+  </select>
+</label>
+      </div>
+
+            <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(520px, 700px) minmax(340px, 1fr)",
+          gap: 16,
+          alignItems: "stretch",
+          marginBottom: 12,
+        }}
+      >
+        
+        <TopActionGrid
+          hasRows={rowsWithWarnings.length > 0}
+          hasSelectedRows={selectedIds.length > 0}
+          onUpload={handleUpload}
+          onExportCsv={exportStandardCsv}
+          onExportDebugCsv={exportDebugCsv}
+          onExportSelectedCsv={exportSelectedCsv}
+          onExportSelectedDebugCsv={exportSelectedCsv}
+          onExportAppState={exportAppState}
+          onImportAppState={importAppState}
+          onAddChangelogEntry={addChangelogEntry}
+          onDeleteSelected={deleteSelected}
+          onMarkSelectedWin={() => setWinStatusForSelected("Y")}
+          onMarkSelectedLoss={() => setWinStatusForSelected("N")}
+          onClearAll={clearAll}
+          nextBestReviewRow={nextBestReviewRow}
+          jumpToNextBestReviewRow={() => {
+            if (nextBestReviewRow) setSelectedRowId(nextBestReviewRow.id);
+          }}
+        />
+
+                <FilterBar
+          tableMode={tableMode}
+          setTableMode={setTableMode}
+          showReviewLaterOnly={showReviewLaterOnly}
+          setShowReviewLaterOnly={setShowReviewLaterOnly}
+          showLowConfidenceOnly={showLowConfidenceOnly}
+          setShowLowConfidenceOnly={setShowLowConfidenceOnly}
+          showLikelyParserIssuesOnly={showLikelyParserIssuesOnly}
+          setShowLikelyParserIssuesOnly={setShowLikelyParserIssuesOnly}
+          showNeedsReviewOnly={showNeedsReviewOnly}
+          setShowNeedsReviewOnly={setShowNeedsReviewOnly}
+          showHedgesOnly={showHedgesOnly}
+          setShowHedgesOnly={setShowHedgesOnly}
+          showGuaranteedProfitOnly={showGuaranteedProfitOnly}
+          setShowGuaranteedProfitOnly={setShowGuaranteedProfitOnly}
+          showHedgeCriticalOnly={showHedgeCriticalOnly}
+          setShowHedgeCriticalOnly={setShowHedgeCriticalOnly}
+          showArchivedRows={showArchivedRows}
+          setShowArchivedRows={setShowArchivedRows}
+          reviewMode={reviewMode}
+          setReviewMode={setReviewMode}
+          smartReviewMode={smartReviewMode}
+          setSmartReviewMode={setSmartReviewMode}
+          counts={counts}
+        />
+      </div>
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "minmax(420px, 1fr) 320px",
+    gap: 16,
+    alignItems: "stretch",
+    marginBottom: 12,
+  }}
+>
+  <UploadDropZone onFiles={handleUpload} />
+  <ReviewLegend />
+</div>
+
+<UploadBatchStatus
+  batches={uploadBatches}
+  onClearHistory={clearUploadHistory}
+/>
+
+<div
+  style={{
+    marginTop: 10,
+    marginBottom: 10,
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  }}
+>
+  <button
+    type="button"
+    onClick={() => {
+      setShowArchivedRows(true);
+      setReviewMode(false);
+      setSmartReviewMode(false);
+      setSavedFilterView("archived");
+      showNotice("Showing archived rows");
+    }}
+    style={smallButtonStyle}
+  >
+    Show Archived Rows
+  </button>
+
+  <button
+    type="button"
+    onClick={clearArchiveFlags}
+    style={smallButtonStyle}
+  >
+    Clear Archive Flags
+  </button>
+  <button
+    type="button"
+    onClick={confirmDatesForVisibleRows}
+    style={smallButtonStyle}
+  >
+    Confirm Visible Dates
+  </button>
+
+  <button
+    type="button"
+    onClick={runPreExportChecklist}
+    style={smallButtonStyle}
+  >
+    Pre-Export Checklist
+  </button>
+
+  <button
+    type="button"
+    onClick={exportReviewedRowsOnly}
+    style={smallButtonStyle}
+  >
+    Export Reviewed Only
+  </button>
+
+  <button
+    type="button"
+    onClick={archiveExportedReviewedRows}
+    style={smallButtonStyle}
+  >
+    Archive Exported Reviewed
+  </button>
+
+</div>
+
+      {saveNotice && <div style={noticeStyle}>{saveNotice}</div>}
+      {processing && <div style={noticeStyle}>{processingMessage || "Reading images..."}</div>}
+
+         {selectedIds.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 12,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: 12,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <strong style={{ alignSelf: "center" }}>
+            {selectedIds.length} selected
+          </strong>
+
+          <button onClick={exportSelectedRowsToCsv} style={smallButtonStyle}>
+            Export Current Batch
+          </button>
+
+          <button onClick={markSelectedRowsExported} style={smallButtonStyle}>
+            Mark Exported
+          </button>
+
+          <button onClick={archiveSelectedRows} style={smallButtonStyle}>
+            Archive Selected
+          </button>
+
+          <button onClick={unarchiveSelectedRows} style={smallButtonStyle}>
+            Unarchive Selected
+          </button>
+
+          <button onClick={clearArchiveFlags} style={smallButtonStyle}>
+            Clear Archive Flags
+          </button>
+
+          <button
+            onClick={() => {
+              const currentSelectedRowId = selectedRowId;
+
+              setRows((prev) =>
+                prev.map((row) =>
+                  selectedIds.includes(row.id)
+                    ? enrichRow({ ...row, reviewResolved: "Y", reviewLater: "N" })
+                    : row
+                )
+              );
+
+              showNotice("Selected rows marked reviewed");
+
+              if (currentSelectedRowId) {
+                setTimeout(() => selectNextNeedsReviewAfter(currentSelectedRowId), 0);
+              }
+            }}
+            style={smallButtonStyle}
+          >
+            Mark Reviewed
+          </button>
+
+        </div>
+      )}
+
+      {selectedRow && (
+        <div style={{ marginTop: 12, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setShowLegacySelectedRowEditor((prev) => !prev)}
+            style={smallButtonStyle}
+          >
+            {showLegacySelectedRowEditor
+              ? "Hide Legacy Bottom Editor"
+              : "Show Legacy Bottom Editor"}
+          </button>
+        </div>
+      )}
+
+      {visibleRows.length > 0 && (
+        <ReviewTable
+          rows={visibleRows}
+          selectedRowId={selectedRowId}
+          setSelectedRowId={setSelectedRowId}
+          selectedIds={selectedIds}
+          toggleSelected={toggleSelected}
+          toggleSelectAllVisible={toggleSelectAllVisible}
+          allVisibleSelected={allVisibleSelected}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+          columnWidths={columnWidths}
+          startResize={startResize}
+          setWinStatusForRow={setWinStatusForRow}
+          deleteRow={deleteRow}
+          handleRowFieldChange={handleRowFieldChange}
+          tableMode={tableMode}
+          getRowAttentionLevel={getRowAttentionLevel}
+          rowNeedsReview={rowNeedsReview}
+        />
+      )}
+
+            {showLegacySelectedRowEditor && selectedRow && (
+        <div
+          style={{
+            marginTop: 24,
+            marginBottom: 0,
+            padding: 16,
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+          }}
+        >
+          <h3 style={{ color: "#000", marginTop: 0 }}>Selected Row Editor</h3>
+
+          {selectedRow.parseWarning && <div style={warningStyle}>{selectedRow.parseWarning}</div>}
+          {selectedRow.duplicateWarning && <div style={duplicateStyle}>{selectedRow.duplicateWarning}</div>}
+
+          <div
+            style={{
+              marginTop: 10,
+              marginBottom: 10,
+              padding: 12,
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              background: "#ffffff",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div>
+              <strong>Fixture / Event:</strong> {selectedRow.fixtureEvent || "—"}
+            </div>
+            <div>
+              <strong>Selection:</strong> {selectedRow.selection || "—"}
+            </div>
+            <div>
+              <strong>Bet Type:</strong> {selectedRow.betType || "—"}
+            </div>
+            <div>
+  <strong>Likely Hedge:</strong>{" "}
+  {selectedRow.likelyHedge === "Y"
+    ? `Yes (${selectedRow.hedgeQuality || "Basic"})`
+    : "No"}
+</div>
+
+{selectedRow.likelyHedge === "Y" && (
+  <>
+    <div>
+      <strong>Hedge Book:</strong>{" "}
+      {selectedRow.hedgePartnerBookmaker || "—"}
+    </div>
+    <div>
+      <strong>Hedge Stake:</strong>{" "}
+      {selectedRow.hedgeStake ? `$${selectedRow.hedgeStake}` : "—"}
+    </div>
+    <div>
+      <strong>Profit Range:</strong>{" "}
+      {selectedRow.hedgeProfitLow && selectedRow.hedgeProfitHigh
+        ? `$${selectedRow.hedgeProfitLow} → $${selectedRow.hedgeProfitHigh}`
+        : "—"}
+    </div>
+  </>
+)}
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                const nextValue = selectedRow.reviewResolved === "Y" ? "N" : "Y";
+
+                setRows((prev) =>
+                  prev.map((row) =>
+                    row.id === selectedRow.id
+                      ? enrichRow({
+                          ...row,
+                          reviewResolved: nextValue,
+                          reviewLater: nextValue === "Y" ? "N" : row.reviewLater,
+                        })
+                      : row
+                  )
+                );
+
+                showNotice(
+                  nextValue === "Y" ? "Reviewed ✓ moving to next" : "Marked unresolved"
+                );
+
+                if (nextValue === "Y") {
+                  setTimeout(() => selectNextNeedsReviewAfter(selectedRow.id), 0);
+                }
+              }}
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewResolved === "Y" ? "Mark Unresolved" : "Mark Reviewed / Resolved"}
+            </button>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "Y", true)}
+              style={smallButtonStyle}
+            >
+              Mark Win + Next
+            </button>
+
+            <button
+              onClick={() => setWinStatusForRow(selectedRow.id, "N", true)}
+              style={smallButtonStyle}
+            >
+              Mark Loss + Next
+            </button>
+
+            <button
+              onClick={jumpToNextBestReviewRow}
+              style={buttonStyle}
+              disabled={!nextBestReviewRow}
+            >
+              Next Best Row
+            </button>
+
+            <button
+              onClick={() => {
+                const nextValue = selectedRow.reviewLater === "Y" ? "N" : "Y";
+                handleRowFieldChange(selectedRow.id, "reviewLater", nextValue);
+                showNotice(nextValue === "Y" ? "Marked review later" : "Cleared review later");
+              }}
+              style={smallButtonStyle}
+            >
+              {selectedRow.reviewLater === "Y" ? "Clear Review Later" : "Review Later"}
+            </button>
+
+            <button onClick={() => ignoreDuplicateForRow(selectedRow.id)} style={smallButtonStyle}>
+              {selectedRow.duplicateIgnored === "Y" ? "Unignore Duplicate" : "Ignore Duplicate"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "240px 1fr",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <label style={{ fontWeight: "bold" }}>Account Owner</label>
+            <select
+              value={selectedRow.accountOwner || "Me"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "accountOwner", e.target.value)}
+              style={selectStyle}
+            >
+              {ACCOUNT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Type</label>
+            <select
+              value={selectedRow.betType || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betType", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bet Source Tag</label>
+            <select
+              value={selectedRow.betSourceTag || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "betSourceTag", e.target.value)}
+              style={selectStyle}
+            >
+              {BET_SOURCE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option || "--"}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Win</label>
+            <select
+              value={selectedRow.win || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "win", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">--</option>
+              <option value="Y">Y</option>
+              <option value="N">N</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Bonus Bet</label>
+            <select
+              value={selectedRow.bonusBet || "N"}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "bonusBet", e.target.value)}
+              style={selectStyle}
+            >
+              <option value="N">N</option>
+              <option value="Y">Y</option>
+            </select>
+
+            <label style={{ fontWeight: "bold" }}>Odds Missing Reason (helper)</label>
+            <input type="text" value={selectedRow.oddsMissingReason || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Implied Probability (helper)</label>
+            <input type="text" value={selectedRow.impliedProbability || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Confidence (helper)</label>
+            <input type="text" value={selectedRow.confidenceFlag || ""} readOnly style={inputStyle} />
+
+            <label style={{ fontWeight: "bold" }}>Likely Parser Issue (helper)</label>
+            <input type="text" value={selectedRow.likelyParserIssue || ""} readOnly style={inputStyle} />
+
+            {editorFields.map(([key, label]) => (
+              <div key={key} style={{ display: "contents" }}>
+                <label style={{ fontWeight: "bold" }}>{label}</label>
+                <input
+                  type="text"
+                  value={selectedRow[key] || ""}
+                  onChange={(e) => handleRowFieldChange(selectedRow.id, key, e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+
+            <label style={{ fontWeight: "bold" }}>Image</label>
+            <div>
+              {selectedRow.sourceImageUrl ? (
+                <a href={selectedRow.sourceImageUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={selectedRow.sourceImageUrl}
+                    alt={selectedRow.sourceFileName}
+                    style={{
+                      maxWidth: 260,
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      border: "1px solid #ccc",
+                      borderRadius: 6,
+                    }}
+                  />
+                </a>
+              ) : (
+                <div>No image in session</div>
+              )}
+            </div>
+
+            <label style={{ fontWeight: "bold" }}>Review Notes</label>
+            <textarea
+              value={selectedRow.reviewNotes || ""}
+              onChange={(e) => handleRowFieldChange(selectedRow.id, "reviewNotes", e.target.value)}
+              style={textAreaStyle}
+            />
+
+            <label style={{ fontWeight: "bold" }}>Debug Trace</label>
+            <textarea
+              value={JSON.stringify(selectedRow.debugTrace || [], null, 2)}
+              readOnly
+              style={{ ...textAreaStyle, minHeight: 220, fontFamily: "monospace" }}
+            />
+
+            <label style={{ fontWeight: "bold" }}>OCR Text</label>
+            <div>
+              <button onClick={copySelectedOcr} style={{ ...smallButtonStyle, marginBottom: 8 }}>
+                Copy OCR
+              </button>
+              <textarea
+                value={selectedRow.sourceText || ""}
+                readOnly
+                style={{ ...textAreaStyle, minHeight: 220 }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          marginTop: 28,
+          marginBottom: 8,
+          padding: 12,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: "bold", marginBottom: 8 }}>Changelog</div>
+        <div style={{ display: "grid", gap: 4 }}>
+          {changelog.map((entry, index) => (
+            <div key={`${entry}-${index}`}>{entry}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+  }
+
+
+===== app/utils/parser.js =====
+import { PARSER_REGISTRY } from "./parserRegistry";
+import { canonicalizeTeamsInText } from "./canonicalTeamNames";
+import { canonicalizeFixture, getCanonicalFixtureKey } from "./canonicalFixture";
+import { canonicalizeSelectionFields } from "./canonicalSelection";
+import { detectLeague } from "./detectLeague";
+import {
+  cleanTextLine,
+  normalizeOcrText,
+  formatDateMMDDYYYY,
+  normalizeDateString,
+  nextWeekdayFromDate,
+  getMatch,
+  parsePlacedDate,
+  parseMonthDayEventDate,
+  inferEventDate,
+  detectSportsbook,
+  looksLikeFanDuelText,
+  detectStatus,
+  detectLive,
+  extractBetId,
+  classifyScreenType,
+  extractReceiptWindow,
+} from "./parserShared";
+
+import {
+  singularizeStat,
+  buildPlayerPropSelection,
+  normalizeTeamNames,
+  extractParlayInfo,
+} from "./parserSelectionHelpers";
+const emptyParsed = {
+    eventDate: "",
+    betDate: "",
+    bookmaker: "",
+    sportLeague: "",
+    selection: "",
+    betType: "",
+    fixtureEvent: "",
+    stake: "",
+    oddsUS: "",
+    oddsSource: "",
+    oddsMissingReason: "",
+    live: "",
+    bonusBet: "",
+    win: "",
+    marketDetail: "",
+    payout: "",
+    toWin: "",
+    rawPlacedDate: "",
+    status: "",
+    parseWarning: "",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText: "",
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId: "",
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: "",
+    likelyParserIssue: "N",
+    reviewLater: "N",
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+    canonicalBookmaker: "",
+    canonicalFixture: "",
+    canonicalFixtureKey: "",
+    canonicalSelection: "",
+    canonicalBetType: "",
+    canonicalMarket: "",
+    canonicalSide: "",
+    canonicalLine: "",
+    canonicalPlayer: "",
+    canonicalTeam: "",
+    canonicalPeriod: "",
+    canonicalMarketFamily: "",
+    canonicalSubjectType: "",
+    canonicalResultTarget: "",
+    canonicalSelectionKey: "",
+    canonicalHedgeKey: "",
+    canonicalOppositeKey: "",
+    participantA: "",
+    participantB: "",
+    participantANormalized: "",
+    participantBNormalized: "",
+    canonicalSubject: "",
+    canonicalMarketContext: "",
+    contextReviewed: "N",
+    playerLastName: "",
+    propMarket: "",
+    betDateInferred: "N",
+    betDateNeedsConfirm: "N",
+    betDateConfirmed: "N",
+    reviewPassStatus: ""};
+
+function normalizeSportLeagueValue(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+
+  if (/^mlb$/i.test(text)) return "Baseball";
+  if (/^baseball$/i.test(text)) return "Baseball";
+
+  if (/^nba$/i.test(text)) return "NBA";
+  if (/^wnba$/i.test(text)) return "WNBA";
+  if (/^nhl$/i.test(text)) return "NHL";
+  if (/^ncaam$/i.test(text)) return "NCAAM";
+  if (/^ncaaw$/i.test(text)) return "NCAAW";
+  if (/^nfl$/i.test(text)) return "NFL";
+  if (/^mma$/i.test(text)) return "MMA";
+  if (/^soccer$/i.test(text)) return "Soccer";
+  if (/^tennis$/i.test(text)) return "Tennis";
+  if (/^multi$/i.test(text)) return "Multi";
+
+  return text;
+}
+
+function cleanLeadingOcrTokens(value = "") {
+  let text = String(value || "").replace(/\s+/g, " ").trim();
+
+  // Drop noisy short OCR prefixes:
+  // "S&S Shohei", "1p Andre", "a CLE", "Zc CLE", "fg Alex", "Lo Over", "Ww Kevin", "Qe Paul"
+  text = text.replace(
+    /^[^A-Za-z0-9]*[A-Za-z0-9&.,:;!?)'"`-]{1,4}\s+(?=[A-Z][a-z]|[A-Z][A-Za-z]+\s+[A-Z][A-Za-z]|Over\b|Under\b|Yes\b|No\b|Draw\b|\d\+\b)/,
+    ""
+  );
+
+  // Drop leading OCR score/index junk:
+  // "43 1+", "5 Michael Harris", "7 Cody Bellinger", "2, Michael Harris"
+  text = text.replace(/^\d+[,.]?\s+(?=\d\+\b|[A-Z][a-z])/, "");
+
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function normalizeOcrLineNumber(value = "") {
+  return String(value || "")
+    .replace(/Under\s*3s5/gi, "Under 3.5")
+    .replace(/Under\s*3\.s5/gi, "Under 3.5")
+    .replace(/Under\s*6s5/gi, "Under 6.5")
+    .replace(/Under\s*(\d+)(?=\d)/gi, "Under $1")
+    .replace(/Over\s*(\d+)(?=\d)/gi, "Over $1")
+    .replace(/\b(Over|Under)(\d+(?:\.\d+)?)\b/gi, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPlusMilestone(value = "") {
+  const m = String(value || "").match(/(?:^|\s)(\d+)\+(?:\s|$)/);
+  return m ? m[1] : "";
+}
+
+function extractPlayerAndStatFromMarket(marketDetail = "") {
+  let market = normalizeOcrLineNumber(cleanLeadingOcrTokens(marketDetail))
+    .replace(/[|:]+/g, " ")
+    .replace(/\bO\/U\b/gi, "")
+    .replace(/\bi\b$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const patterns = [
+    /^(.*?)\s+(Assists|Rebounds|Points|Total Bases|Strikeouts(?: Thrown)?|Home Runs?|RBIs?|Hits|Shots on Goal|Saves|Goals|Double-Double|Triple-Double)\b/i,
+    /^(.*?)\s+(Anytime Goalscorer|Anytime Goal Scorer|Goalscorer)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const m = market.match(pattern);
+    if (!m) continue;
+
+    let player = cleanLeadingOcrTokens(m[1] || "")
+      .replace(/^[^A-Za-z0-9]+/, "")
+      .replace(/^\d+\s+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const stat = String(m[2] || "").replace(/\s+/g, " ").trim();
+
+    if (player && stat) {
+      return { player, stat };
+    }
+  }
+
+  return { player: "", stat: "" };
+}
+
+function cleanSelectionDisplay(value = "", marketDetail = "") {
+  let text = normalizeOcrLineNumber(cleanLeadingOcrTokens(value));
+  const market = String(marketDetail || "").replace(/\s+/g, " ").trim();
+  const { player, stat } = extractPlayerAndStatFromMarket(market);
+
+  const sideLine = text.match(/\b(Over|Under)\s*(\d+(?:\.\d+)?)/i);
+
+  if (player && stat && sideLine) {
+    return `${player} ${sideLine[1]} ${sideLine[2]} ${stat}`.trim();
+  }
+
+  if (player && /Home Runs?/i.test(stat) && extractPlusMilestone(text)) {
+    return `${player} ${extractPlusMilestone(text)}+ Home Runs`;
+  }
+
+  if (player && /Strikeouts/i.test(stat) && extractPlusMilestone(text)) {
+    return `${player} ${extractPlusMilestone(text)}+ Strikeouts`;
+  }
+
+  // If selection OCR only found "1" or "1+" but market has the player/stat,
+  // use marketDetail to rebuild the home-run milestone.
+  if (player && /Home Runs?/i.test(stat) && /^(?:\d+[,.]?\s*)?1\+?$/.test(text)) {
+    return `${player} 1+ Home Runs`;
+  }
+
+  if (player && /Anytime Goal/i.test(stat)) {
+    return `${player} Anytime Goalscorer`;
+  }
+
+  if (player && /Double-Double/i.test(stat) && /\bYes\b/i.test(text)) {
+    return `${player} Yes Double-Double`;
+  }
+
+  if (player && /Triple-Double/i.test(stat) && /\bYes\b/i.test(text)) {
+    return `${player} Yes Triple-Double`;
+  }
+
+  // Generic DraftKings home-run OCR:
+  // "1+ 7 Cody Bellinger Home Runs" -> "Cody Bellinger 1+ Home Runs"
+  const homeRunInline = text.match(/^1\+\s+(.+?)\s+Home Runs?$/i);
+  if (homeRunInline) {
+    const tokens = String(homeRunInline[1] || "")
+      .split(/\s+/)
+      .filter(Boolean);
+
+    while (
+      tokens.length &&
+      (
+        /^\d+$/.test(tokens[0]) ||
+        /^[+-]?\d{2,5}$/.test(tokens[0]) ||
+        /^(ab|a|al|ml|nl|to|hit)$/i.test(tokens[0])
+      )
+    ) {
+      tokens.shift();
+    }
+
+    const playerName = tokens.join(" ").trim();
+
+    if (playerName.split(/\s+/).length >= 2) {
+      return `${playerName} 1+ Home Runs`;
+    }
+  }
+
+  text = text
+    .replace(/^\s*[A-Za-z]{1,3}\s+(?=CLE\b|BOS\b|DET\b|MEM\b|OKC\b|NY\b|LA\b|North Carolina\b)/, "")
+    .replace(/^\s*[#&~@®©»>"'`]+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text;
+}
+
+function normalizeScoreboardTeamName(value = "") {
+  let text = String(value || "")
+    .replace(/[|()[\]{}<>]/g, " ")
+    .replace(/[®©@~*]+/g, " ")
+    .replace(/[.]{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove leading seeds/ranks, but keep sports team abbreviations like ARI / CHI / EDM.
+  text = text.replace(/^\d+\s+/, "").trim();
+
+  // Remove trailing scoreboard columns/scores.
+  text = text
+    .replace(/\s+(?:\d+\s*){2,}$/g, "")
+    .replace(/\s+\d+$/g, "")
+    .trim();
+
+  // Clean OCR fragments without trying to know every team.
+  // These are OCR-shape fixes, not a team database.
+  text = text
+    .replace(/\bDiamond\b$/i, "Diamondbacks")
+    .replace(/\bDback\b$/i, "Diamondbacks")
+    .replace(/\bDbacks\b$/i, "Diamondbacks")
+    .replace(/\bNvv?yankees\b/i, "NYY Yankees")
+    .replace(/\bepM\s+oilers\b/i, "EDM Oilers")
+    .replace(/\bcHicubs\b/i, "CHI Cubs")
+    .replace(/\bARIDiamondbacks\b/i, "ARI Diamondbacks")
+    .replace(/\bCHICubs\b/i, "CHI Cubs")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove remaining obvious OCR leading junk if a real word follows,
+  // but do NOT remove all-caps sports abbreviations.
+  text = text.replace(/^[^A-Za-z0-9]*[a-z0-9]{1,3}\s+(?=[A-Z][a-z])/, "").trim();
+
+  // Reject non-team lines.
+  if (!/[A-Za-z]{3,}/.test(text)) return "";
+
+  if (
+    /^(Final|Wager|Paid|Share|Placed|Bet ID|Market|The reward|Bonus|Live|My Bets|FOOTER OCR)$/i.test(text)
+  ) {
+    return "";
+  }
+
+  if (/\b(Wager|Paid|Share|Placed|Bet ID|Market|Boost|Payout|Reward)\b/i.test(text)) {
+    return "";
+  }
+
+  // Reject lines that are mostly numeric.
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  const digits = (text.match(/\d/g) || []).length;
+  if (digits > letters) return "";
+
+  return text;
+}
+
+
+function extractFixtureFromScoreboardText(sourceText = "", betType = "") {
+  const text = String(sourceText || "")
+    .split(/---\s*(FOOTER OCR|DATE OCR)\s*---/i)[0]
+    .replace(/\r/g, "\n");  
+    
+    const lines = text
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (!lines.length) return "";
+
+  // Avoid assigning a single scoreboard fixture to parlays with multiple legs.
+  if (/parlay/i.test(String(betType || ""))) {
+    return "";
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    const isScoreboardHeader =
+      /^Final\b/i.test(line) ||
+      /^Live\b/i.test(line) ||
+      /\b(Q1|Q2|Q3|Q4|H1|H2|P1|P2|P3|OT|HT|T)\b.*\bT\b/i.test(line);
+
+    if (!isScoreboardHeader) continue;
+
+    const candidates = [];
+
+    for (let j = i + 1; j < Math.min(lines.length, i + 10); j += 1) {
+      const nextLine = lines[j];
+
+      if (/^--- FOOTER OCR ---$/i.test(nextLine)) break;
+      if (/^<\s*Share/i.test(nextLine)) break;
+      if (/^Bet ID\b/i.test(nextLine)) break;
+      if (/^Placed:/i.test(nextLine)) break;
+
+      const team = normalizeScoreboardTeamName(nextLine);
+
+      if (!team) continue;
+
+      // Avoid duplicate accidental reads.
+      if (!candidates.includes(team)) {
+        candidates.push(team);
+      }
+
+      if (candidates.length >= 2) {
+        return `${candidates[0]} @ ${candidates[1]}`;
+      }
+    }
+  }
+
+  return "";
+}
+
+
+function cleanFixtureDisplay(value = "") {
+  let text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+  if (/---\s*(FOOTER OCR|DATE OCR)\s*---/i.test(text)) return "";
+
+
+  if (/^@+$/.test(text)) return "";
+  if (/^(share|cash out|betslip|my bets)\b/i.test(text)) return "";
+
+  const alphaCount = (text.match(/[A-Za-z]/g) || []).length;
+  if (alphaCount < 4) return "";
+
+  const hasFixtureSeparator =
+    /\s@\s/.test(text) ||
+    /\bvs\.?\b/i.test(text) ||
+    /\bv\.?\b/i.test(text) ||
+    /\bat\b/i.test(text);
+
+  if (hasFixtureSeparator) {
+    const parts = text
+      .split(/\s+@\s+|\s+vs\.?\s+|\s+v\.?\s+|\s+at\s+/i)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length >= 2) {
+      const hasBadSide = parts.some((part) => !/[A-Za-z]{2,}/.test(part));
+      if (hasBadSide) return "";
+    }
+  }
+
+  // Blank common OCR junk fixtures like "57 wl - @" or "00 al T @"
+  if (/@/.test(text) && !/[A-Za-z]{3,}.*@.*[A-Za-z]{3,}/.test(text)) {
+    return "";
+  }
+
+  return text;
+}
+
+function isWeakGenericLeagueSelection(selection = "", marketDetail = "", betType = "") {
+  const text = `${selection} ${marketDetail}`.toLowerCase().trim();
+
+  if (!text) return true;
+
+  if (/^(over|under)\s+\d+(\.\d+)?$/.test(String(selection || "").toLowerCase().trim())) {
+    return true;
+  }
+
+  if (/^draw$/i.test(String(selection || "").trim())) return false;
+
+  if (/^\d+\s+pick parlay$/i.test(String(selection || "").trim())) return false;
+
+  return false;
+}
+
+function inferBasketballLeagueFromCore({
+  selection = "",
+  marketDetail = "",
+  fixtureEvent = "",
+  participantA = "",
+  participantB = "",
+  participantANormalized = "",
+  participantBNormalized = "",
+  betType = "",
+} = {}) {
+  const text = [
+    selection,
+    marketDetail,
+    fixtureEvent,
+    participantA,
+    participantB,
+    participantANormalized,
+    participantBNormalized,
+    betType,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!text) return "";
+
+  const hasNbaTeam =
+    /\bcavaliers\b|\bcavs\b|\bcle\b|\braptors\b|\btor\b|\bpistons\b|\bdet\b|\bknicks\b|\bnyk\b|\bspurs\b|\bsas\b|\bthunder\b|\bokc\b|\blakers\b|\blal\b|\btimberwolves\b|\bwolves\b|\bmin\b|\bceltics\b|\bbos\b|\bbulls\b|\bchi\b|\bbucks\b|\bmil\b|\bclippers\b|\blac\b|\bpacers\b|\bind\b|\brockets\b|\bhou\b|\btrail blazers\b|\bblazers\b|\bpor\b|\bwarriors\b|\bgsw\b|\bkings\b|\bsac\b|\bsuns\b|\bphx\b|\bmavericks\b|\bmavs\b|\bdal\b|\bnuggets\b|\bden\b|\bgrizzlies\b|\bmem\b|\bpelicans\b|\bnop\b|\bjazz\b|\buta\b|\bheat\b|\bmia\b|\bnets\b|\bbkn\b|\bhornets\b|\bcha\b|\bmagic\b|\borl\b|\bwizards\b|\bwas\b|\b76ers\b|\bsixers\b|\bphi\b/.test(text);
+
+  const hasBasketballMarket =
+    /\bpoints\b|\brebounds\b|\bassists\b|\bpra\b|\bpts\b|\brebs\b|\basts\b|\bdouble-double\b|\btriple-double\b|\bthrees\b|\bthree pointers\b|\b3-pointers\b/.test(text);
+
+  if (hasNbaTeam || hasBasketballMarket) return "NBA";
+
+  return "";
+}
+
+function shouldClearSuspiciousParsedLeague({ parsedLeague, coreDetectedLeague, selection, marketDetail, fixtureEvent, betType }) {
+  if (coreDetectedLeague) return false;
+  if (!parsedLeague) return false;
+  if (fixtureEvent) return false;
+
+  return isWeakGenericLeagueSelection(selection, marketDetail, betType);
+}
+
+function extractTopVisibleOutcomeStatus(sourceText = "") {
+  const lines = String(sourceText || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    // Ignore navigation/header/rules lines that can contain misleading words like Won.
+    if (
+      /\b(My Bets|Horse Bets|Betting Groups|My Pools|Live Settled|Live Won|Live Los|THE CROWN IS YOURS|DRAFTKINGS|BRAFTKINGS)\b/i.test(line) ||
+      /\b(will be settled as won|will be settled as lost|all other selections will be voided)\b/i.test(line)
+    ) {
+      continue;
+    }
+
+    // Prefer result-bearing selection lines.
+    const looksLikeSelectionResult =
+      /[|]/.test(line) ||
+      /[+-]\d{3,5}/.test(line) ||
+      /\bVoid(?:ed)?\b/i.test(line);
+
+    if (!looksLikeSelectionResult) continue;
+
+    if (/\bCashed Out\b/i.test(line)) return "Cashed Out";
+    if (/\bVoid(?:ed)?\b/i.test(line)) return "Voided";
+    if (/\bLos(?:t|!|:)?\b/i.test(line)) return "Lost";
+    if (/\bLost\b/i.test(line)) return "Lost";
+    if (/\bWon\b/i.test(line)) return "Won";
+    if (/\bOpen\b/i.test(line)) return "Open";
+  }
+
+  return "";
+}
+
+function extractTopVisibleDraftKingsResultFields(sourceText = "") {
+  const lines = String(sourceText || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  let result = {
+    selection: "",
+    oddsUS: "",
+    status: "",
+    stake: "",
+    betDate: "",
+    rawPlacedDate: "",
+  };
+
+  for (const line of lines) {
+    if (
+      /\b(My Bets|Horse Bets|Betting Groups|My Pools|Live Settled|Live Won|Live Los|THE CROWN IS YOURS|DRAFTKINGS|BRAFTKINGS)\b/i.test(line) ||
+      /\b(will be settled as won|will be settled as lost|all other selections will be voided)\b/i.test(line)
+    ) {
+      continue;
+    }
+
+    const hasPipeSelectionShape = /\|/.test(line);
+    const hasMilestoneSelectionShape = /\b\d+\+\b/.test(line) && /[+-]\d{3,5}\b|Even\b/i.test(line);
+    const hasResultShape = /\b(Won|Lost|Los!|Los:|Los|loc|l0c|Void(?:ed)?|Cashed Out|Open)\b/i.test(line);
+    const hasOddsShape = /[+-]\d{3,5}\b|Even\b/i.test(line);
+
+    if ((!hasPipeSelectionShape && !hasMilestoneSelectionShape) || (!hasResultShape && !hasOddsShape)) continue;
+
+    const left = hasPipeSelectionShape
+      ? line.split("|")[0] || ""
+      : line.replace(/[+-]\d{3,5}\b.*$/i, "");
+
+    const selection = cleanLeadingOcrTokens(left)
+      .replace(/^[^A-Za-z0-9]+/, "")
+      .trim();
+
+    const oddsTokens = line.match(/[+-]\d{3,5}\b|Even\b/gi) || [];
+    let oddsUS = oddsTokens.length ? oddsTokens[oddsTokens.length - 1] : "";
+    if (/^even$/i.test(oddsUS)) oddsUS = "+100";
+
+    let status = "";
+    if (/\bCashed Out\b/i.test(line)) status = "Cashed Out";
+    else if (/\bVoid(?:ed)?\b/i.test(line)) status = "Voided";
+    else if (/\b(loc|l0c)\b/i.test(line)) status = "Lost";
+    else if (/\bLos(?:t|!|:)?\b/i.test(line)) status = "Lost";
+    else if (/\bLost\b/i.test(line)) status = "Lost";
+    else if (/\bWon\b/i.test(line)) status = "Won";
+    else if (/\bOpen\b/i.test(line)) status = "Open";
+
+    if (selection || oddsUS || status) {
+      result = {
+        ...result,
+        selection,
+        oddsUS,
+        status,
+      };
+      break;
+    }
+  }
+
+  const stake =
+    String(sourceText || "").match(/\bWager:\s*\$?([\d,]+(?:\.\d{1,2})?)/i)?.[1] ||
+    String(sourceText || "").match(/\$([\d,]+(?:\.\d{1,2})?)\s+BONUS BET\b/i)?.[1] ||
+    "";
+
+  if (stake) {
+    result.stake = String(stake).replace(/,/g, "");
+  }
+
+  const placed = parsePlacedDate(sourceText);
+  if (placed?.dateOnly) {
+    result.betDate = placed.dateOnly;
+    result.rawPlacedDate = placed.raw || "";
+  }
+
+  return result;
+}
+
+function applySettlementMoneySafety(row = {}) {
+  const bookmaker = String(row.bookmaker || "").toLowerCase();
+
+  const dkFields =
+    bookmaker.includes("draftkings") || bookmaker.includes("dk")
+      ? extractTopVisibleDraftKingsResultFields(row.sourceText || "")
+      : {};
+
+  if (dkFields.selection && !row.selection) {
+    row = {
+      ...row,
+      selection: dkFields.selection,
+    };
+  }
+
+  if (dkFields.oddsUS && !row.oddsUS) {
+    row = {
+      ...row,
+      oddsUS: dkFields.oddsUS,
+      oddsSource: row.oddsSource || "OCR",
+    };
+  }
+
+  if (dkFields.stake && !row.stake) {
+    row = {
+      ...row,
+      stake: dkFields.stake,
+    };
+  }
+
+  if (dkFields.betDate && !row.betDate) {
+    row = {
+      ...row,
+      betDate: dkFields.betDate,
+      eventDate: row.eventDate || dkFields.betDate,
+      rawPlacedDate: row.rawPlacedDate || dkFields.rawPlacedDate,
+    };
+  }
+
+  if (dkFields.status) {
+    row = {
+      ...row,
+      status: dkFields.status,
+      win:
+        dkFields.status === "Won"
+          ? "Y"
+          : dkFields.status === "Lost"
+          ? "N"
+          : ["Voided", "Void", "Push", "Cashed Out", "Open"].includes(dkFields.status)
+          ? ""
+          : row.win || "",
+    };
+  }
+
+  const status = String(row.status || "").trim().toLowerCase();
+
+  // If a settled bet is explicitly lost, payout/toWin should be zero.
+  // This prevents lower visible cards from leaking their payout into the top lost bet.
+  if (status === "lost") {
+    return {
+      ...row,
+      payout: "0.00",
+      toWin: "0.00",
+    };
+  }
+
+  // Voided/pushed bets should not be marked win/loss.
+  if (status === "voided" || status === "void" || status === "push") {
+    return {
+      ...row,
+      win: "",
+      payout: row.payout || "0.00",
+      toWin: row.toWin || "0.00",
+    };
+  }
+
+  return row;
+}
+
+function fillMissingDatesFromSourceText(row = {}) {
+  if (row.betDate || !row.sourceText) return row;
+
+  const placed = parsePlacedDate(row.sourceText);
+
+  if (!placed?.dateOnly) return row;
+
+  return {
+    ...row,
+    betDate: placed.dateOnly,
+    eventDate: row.eventDate || placed.dateOnly,
+    rawPlacedDate: row.rawPlacedDate || placed.raw || "",
+  };
+}
+
+function cleanStaleParseWarnings(row = {}) {
+  const warnings = String(row.parseWarning || "")
+    .split("|")
+    .map((warning) => warning.trim())
+    .filter(Boolean);
+
+  if (!warnings.length) return row;
+
+  const kept = warnings.filter((warning) => {
+    const lower = warning.toLowerCase();
+
+    if (lower.includes("stake_missing") && row.stake) return false;
+    if (lower.includes("selection_missing") && row.selection) return false;
+    if (lower.includes("fixture_missing") && row.fixtureEvent) return false;
+    if (lower.includes("odds_missing") && row.oddsUS) return false;
+    if (lower.includes("receipt_detected_but_odds_missing") && row.oddsUS) return false;
+    if (lower.includes("receipt_detected_but_payout_missing") && (row.payout || row.toWin)) return false;
+    if (lower.includes("payout_missing") && (row.payout || row.toWin)) return false;
+    if (lower.includes("no_bet_date_detected") && row.betDate) return false;
+    if (lower.includes("no_league_detected") && row.sportLeague) return false;
+
+    return true;
+  });
+
+  return {
+    ...row,
+    parseWarning: kept.join(" | "),
+  };
+}
+
+function buildManualParticipantFixture(row = {}) {
+  const a =
+    String(row.participantANormalized || "").trim() ||
+    String(row.participantA || "").trim();
+
+  const b =
+    String(row.participantBNormalized || "").trim() ||
+    String(row.participantB || "").trim();
+
+  if (a && b) return `${a} @ ${b}`;
+  return "";
+}
+
+function computeConfidenceFlag(row) {
+  let score = 0;
+
+  // positive signals
+  if (row.selection) score += 3;
+  if (row.fixtureEvent) score += 2;
+  if (row.betType) score += 1;
+  if (row.sportLeague) score += 1;
+  if (row.oddsUS) score += 2;
+
+  // negative signals
+  if (!row.selection) score -= 4;
+  if (!row.fixtureEvent) score -= 3;
+  if (!row.sportLeague) score -= 2;
+
+  if (row.parseWarning && String(row.parseWarning).trim()) score -= 2;
+
+  // noisy OCR / UI junk
+  const badText = /today|share|betslip|my bets|quick deposit|reward available/i;
+
+  if (badText.test(String(row.selection || ""))) score -= 3;
+  if (badText.test(String(row.fixtureEvent || ""))) score -= 3;
+
+  // weak / short values
+  if (String(row.selection || "").length < 4) score -= 2;
+
+  // classification
+  if (score >= 6) return "High";
+  if (score >= 3) return "Medium";
+  return "Low";
+}
+
+function computeLikelyParserIssue(row) {
+  const bookmaker = String(row.bookmaker || "").toLowerCase();
+
+  if (!row.selection) return "Y";
+  if (!row.fixtureEvent && !bookmaker.includes("kalshi")) return "Y";
+  if (!row.sportLeague) return "Y";
+  if (!row.oddsUS && !bookmaker.includes("kalshi")) return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.selection || ""))) return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.fixtureEvent || ""))) return "Y";
+  if (String(row.parseWarning || "").trim()) return "Y";
+  return "N";
+}
+
+function computeReviewPriority(row) {
+  let score = 0;
+  const warnings = String(row.parseWarning || "").trim();
+
+  if (row.likelyParserIssue === "Y") score += 5;
+  if (row.confidenceFlag === "Low") score += 4;
+  if (row.confidenceFlag === "Medium") score += 2;
+
+  if (!row.selection) score += 4;
+  if (!row.fixtureEvent) score += 3;
+  if (!row.oddsUS) score += 3;
+  if (!row.sportLeague) score += 2;
+
+  if (warnings) score += 2;
+  if (row.duplicateWarning) score += 2;
+
+  if (row.hedgeGroupId) score += 4;
+if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) score += 6;
+
+  if (row.reviewed === "Y" || row.reviewStatus === "Reviewed") score -= 4;
+  if (row.archived === "Y") score -= 10;
+
+  return score;
+}
+
+function computeReviewBucket(row) {
+  const score = Number(row.reviewPriority || 0);
+
+  if (score >= 10) return "Critical";
+  if (score >= 6) return "High";
+  if (score >= 3) return "Standard";
+  return "Later";
+}
+
+function computeReviewReasons(row) {
+  const reasons = [];
+
+  if (row.likelyParserIssue === "Y") reasons.push("Parser issue");
+  if (row.confidenceFlag === "Low") reasons.push("Low confidence");
+  else if (row.confidenceFlag === "Medium") reasons.push("Medium confidence");
+
+  if (!row.selection) reasons.push("Missing selection");
+  if (!row.fixtureEvent) reasons.push("Missing fixture");
+  if (!row.oddsUS) reasons.push("Missing odds");
+  if (!row.sportLeague) reasons.push("Missing league");
+
+  if (row.duplicateWarning) reasons.push("Possible duplicate");
+  if (row.hedgeGroupId) reasons.push("In hedge group");
+  if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) reasons.push("Guaranteed profit");
+
+  return reasons.slice(0, 4).join(" â€¢ ");
+}
+
+export function enrichRow(row) {
+  row = applySettlementMoneySafety(row);
+  row = fillMissingDatesFromSourceText(row);
+
+  const cleanedFixture = cleanFixtureDisplay(row.fixtureEvent);
+  const scoreboardFixture =
+    cleanedFixture ? "" : extractFixtureFromScoreboardText(row.sourceText || "", row.betType || "");
+  const cleanedSelection = cleanSelectionDisplay(row.selection, row.marketDetail || "");
+
+  const normalizedFixture = normalizeTeamNames(cleanedFixture || scoreboardFixture);
+  const normalizedSelection = normalizeTeamNames(cleanedSelection);
+  const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
+
+  const normalizedInputRow = {
+    ...row,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+    sportLeague: normalizeSportLeagueValue(row.sportLeague),
+  };
+
+  const isParlayRow = String(row.betType || "").toLowerCase() === "parlay";
+
+  const coreDetectedLeague = normalizeSportLeagueValue(
+    detectLeague({
+      cleaned: [normalizedSelection, row.marketDetail || "", normalizedFixture]
+        .filter(Boolean)
+        .join(" "),
+      selection: normalizedSelection,
+      marketDetail: row.marketDetail || "",
+      fixtureEvent: normalizedFixture,
+      isParlay: isParlayRow,
+    })
+  );
+
+  const parsedLeague = normalizeSportLeagueValue(row.sportLeague);
+
+  const manualLeague = row.sportLeagueManual === "Y" && parsedLeague;
+
+const basketballCoreLeague = inferBasketballLeagueFromCore({
+  selection: normalizedSelection,
+  marketDetail: row.marketDetail || "",
+  fixtureEvent: normalizedFixture,
+  participantA: row.participantA || "",
+  participantB: row.participantB || "",
+  participantANormalized: row.participantANormalized || "",
+  participantBNormalized: row.participantBNormalized || "",
+  betType: row.betType || "",
+});
+
+const parsedLeagueLooksSuspicious =
+  parsedLeague === "Soccer" &&
+  basketballCoreLeague === "NBA";
+
+const resolvedSportLeague =
+  manualLeague
+    ? manualLeague
+    : parsedLeagueLooksSuspicious
+    ? basketballCoreLeague
+    : isParlayRow && parsedLeague === "Multi"
+    ? parsedLeague
+    : shouldClearSuspiciousParsedLeague({
+        parsedLeague,
+        coreDetectedLeague,
+        selection: normalizedSelection,
+        marketDetail: row.marketDetail || "",
+        fixtureEvent: normalizedFixture,
+        betType: row.betType || "",
+      })
+    ? ""
+    : coreDetectedLeague || basketballCoreLeague || parsedLeague;
+
+  let rowForScoring = {
+    ...normalizedInputRow,
+    sportLeague: resolvedSportLeague,
+  };
+
+  // Tennis rows with only a player name are usually moneyline/match winner,
+  // not player props.
+  if (
+    rowForScoring.sportLeague === "Tennis" &&
+    (!rowForScoring.betType || rowForScoring.betType === "player prop" || rowForScoring.betType === "straight") &&
+    rowForScoring.selection &&
+    !/\b(over|under|games|spread|total)\b/i.test(`${rowForScoring.selection} ${rowForScoring.marketDetail || ""}`)
+  ) {
+    rowForScoring = {
+      ...rowForScoring,
+      betType: "moneyline",
+      marketDetail: rowForScoring.marketDetail || "Moneyline",
+    };
+  }
+
+  rowForScoring = cleanStaleParseWarnings(rowForScoring);
+
+  const participantFixture = buildManualParticipantFixture(rowForScoring);
+  const fixtureForCanonical = participantFixture || normalizedFixture;
+
+  const canonical = canonicalizeSelectionFields({
+    ...rowForScoring,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: fixtureForCanonical,
+    selection: normalizedSelection,
+  });
+
+  const confidenceFlag = computeConfidenceFlag(rowForScoring);
+  const likelyParserIssue = computeLikelyParserIssue(rowForScoring);
+
+  const needsReview =
+    rowForScoring.reviewResolved !== "Y" &&
+    (
+      rowForScoring.likelyParserIssue === "Y" ||
+      likelyParserIssue === "Y" ||
+      !resolvedSportLeague ||
+      (!rowForScoring.oddsUS && String(normalizedBookmaker || "") !== "Kalshi") ||
+      rowForScoring.oddsSource === "Calculated" ||
+      !!rowForScoring.parseWarning
+    );
+
+
+  const finalReviewLater =
+    needsReview || confidenceFlag !== "High" ? "Y" : (row.reviewLater || "N");
+
+  const scoredRow = {
+    ...rowForScoring,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+    sportLeague: resolvedSportLeague,
+    confidenceFlag,
+    likelyParserIssue,
+    reviewLater: finalReviewLater,
+    canonicalBookmaker: canonical.canonicalBookmaker || normalizedBookmaker,
+    participantA: rowForScoring.participantA || "",
+    participantB: rowForScoring.participantB || "",
+    participantANormalized: rowForScoring.participantANormalized || "",
+    participantBNormalized: rowForScoring.participantBNormalized || "",
+    canonicalSubject: rowForScoring.canonicalSubject || "",
+    canonicalMarketContext: rowForScoring.canonicalMarketContext || "",
+    contextReviewed: rowForScoring.contextReviewed || "N",
+    playerLastName: rowForScoring.playerLastName || "",
+    propMarket: rowForScoring.propMarket || "",
+    betDateInferred: rowForScoring.betDateInferred || "N",
+    betDateNeedsConfirm: rowForScoring.betDateNeedsConfirm || "N",
+    betDateConfirmed: rowForScoring.betDateConfirmed || "N",
+    reviewPassStatus: rowForScoring.reviewPassStatus || "",    canonicalFixture: canonical.canonicalFixture || canonicalizeFixture(fixtureForCanonical),
+    canonicalFixtureKey: getCanonicalFixtureKey(fixtureForCanonical),
+    canonicalSelection: canonical.canonicalSelection || canonicalizeTeamsInText(normalizedSelection),
+    canonicalBetType: canonical.canonicalBetType || row.betType || "",
+    canonicalMarket: canonical.canonicalMarket || "",
+    canonicalSide: canonical.canonicalSide || "",
+    canonicalLine: canonical.canonicalLine || "",
+    canonicalPlayer: canonical.canonicalPlayer || "",
+    canonicalTeam: canonical.canonicalTeam || "",
+    canonicalPeriod: canonical.canonicalPeriod || "",
+    canonicalMarketFamily: canonical.canonicalMarketFamily || "",
+    canonicalSubjectType: canonical.canonicalSubjectType || "",
+    canonicalResultTarget: canonical.canonicalResultTarget || "",
+    canonicalSelectionKey: canonical.canonicalSelectionKey || "",
+    canonicalHedgeKey: canonical.canonicalHedgeKey || "",
+    canonicalOppositeKey: canonical.canonicalOppositeKey || "",
+  };
+
+  const reviewPriority = computeReviewPriority(scoredRow);
+  const reviewBucket = computeReviewBucket({ ...scoredRow, reviewPriority });
+  const reviewReasons = computeReviewReasons({ ...scoredRow, reviewPriority });
+
+  return {
+    ...scoredRow,
+    reviewPriority,
+    reviewBucket,
+    reviewReasons,
+    reviewLater: finalReviewLater,
+    exported: row.exported || "N",
+    archived: row.archived || "N",
+  };
+}
+
+const shared = {
+  emptyParsed,
+  cleanTextLine,
+  normalizeOcrText,
+  formatDateMMDDYYYY,
+  normalizeDateString,
+  nextWeekdayFromDate,
+  getMatch,
+  parsePlacedDate,
+  parseMonthDayEventDate,
+  inferEventDate,
+  detectSportsbook,
+  singularizeStat,
+  buildPlayerPropSelection,
+  detectStatus,
+  detectLive,
+  extractBetId,
+  classifyScreenType,
+  extractReceiptWindow,
+  normalizeTeamNames,
+  extractParlayInfo,
+  enrichRow,
+};
+
+function stripBookPrefixes(bookmaker = "") {
+  return String(bookmaker || "")
+    .replace(/^C-/i, "")
+    .replace(/^(IL|IN|OH|KY|MI)-/i, "")
+    .trim();
+}
+
+function normalizeParserBookName(bookmaker = "") {
+  const base = stripBookPrefixes(bookmaker);
+  const key = base.toLowerCase();
+
+  const aliases = {
+    draftkings: "DraftKings",
+    dk: "DraftKings",
+
+    fanduel: "FanDuel",
+    fanatics: "Fanatics",
+
+    betmgm: "BetMGM",
+    caesars: "Caesars",
+    thescore: "theScore",
+    "the score": "theScore",
+    "score bet": "theScore",
+
+    bet365: "bet365",
+    circa: "Circa",
+    kalshi: "Kalshi",
+
+    "my bookie": "GenericTextTicket",
+    mybookie: "GenericTextTicket",
+    "sportsbetting.ag": "GenericTextTicket",
+    "lucky rebel": "GenericTextTicket",
+    bet105: "GenericTextTicket",
+    bovada: "GenericTextTicket",
+    betonline: "GenericTextTicket",
+    betus: "GenericTextTicket",
+    lowvig: "GenericTextTicket",
+    novig: "GenericTextTicket",
+    "prophet x": "GenericTextTicket",
+    fliff: "GenericTextTicket",
+
+    "hard rock": "GenericTextTicket",
+    betrivers: "GenericTextTicket",
+    bally: "GenericTextTicket",
+    sbk: "GenericTextTicket",
+    betr: "GenericTextTicket",
+    "prime sports": "GenericTextTicket",
+    betjack: "GenericTextTicket",
+    betly: "GenericTextTicket",
+    "golden nugget": "GenericTextTicket",
+    "four winds": "GenericTextTicket",
+    firekeepers: "GenericTextTicket",
+    "play gun lake": "GenericTextTicket",
+    playeagle: "GenericTextTicket",
+  };
+
+  return aliases[key] || base;
+}
+
+function isGenericTextTicketBook(bookmaker = "") {
+  return normalizeParserBookName(bookmaker) === "GenericTextTicket";
+}
+
+
+
+export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto") {
+  const cleaned = normalizeOcrText(text);
+  const lowerCleaned = String(cleaned || "").toLowerCase();
+
+  const detectedSportsbook = detectSportsbook(cleaned);
+
+  const sportsbook =
+    uploadBookmaker && uploadBookmaker !== "Auto"
+      ? uploadBookmaker
+      : detectedSportsbook;
+
+  const routeBook =
+    uploadBookmaker && uploadBookmaker !== "Auto"
+      ? normalizeParserBookName(uploadBookmaker)
+      : normalizeParserBookName(detectedSportsbook);
+
+  const forcedBook = String(routeBook || "").trim().toLowerCase();
+
+  let parserName = "DraftKingsLike";
+
+  if (
+    forcedBook === "fanduel" ||
+    forcedBook === "fanatics" ||
+    /\bfanduel\b/.test(lowerCleaned) ||
+    looksLikeFanDuelText(cleaned)
+  ) {
+    parserName = "FanDuel";
+  } else if (
+    forcedBook === "kalshi" ||
+    /kalshi/i.test(lowerCleaned) ||
+    /\bmarkets?\s+pay\b/i.test(lowerCleaned) ||
+    /\bcost\b/i.test(lowerCleaned) ||
+    /\bmax payout\b/i.test(lowerCleaned) ||
+    /\bodds\s+\d+% chance\b/i.test(lowerCleaned) ||
+    /\bslide to buy\b/i.test(lowerCleaned) ||
+    /\border completed\b/i.test(lowerCleaned) ||
+    /\bpro basketball\b/i.test(lowerCleaned) ||
+    /\bxx dollars\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Kalshi";
+  } else if (
+    forcedBook === "circa" ||
+    /circa/i.test(lowerCleaned) ||
+    /\bwager placed\b/i.test(lowerCleaned) ||
+    /\bthank you for playing with circa sports\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Circa";
+  } else if (
+    forcedBook === "bet365" ||
+    normalizeParserBookName(sportsbook) === "bet365" ||
+    /bet365/i.test(lowerCleaned) ||
+    (
+      /\bbet placed\b/i.test(cleaned) &&
+      /\bbet ref\b/i.test(cleaned) &&
+      /\breuse selections\b/i.test(cleaned) &&
+      /\bwager to return\b/i.test(cleaned) &&
+      /\ball sports live my bets search\b/i.test(cleaned)
+    )
+  ) {
+    parserName = "bet365";
+  } else if (
+    forcedBook === "thescore" ||
+    normalizeParserBookName(sportsbook) === "theScore" ||
+    /thescore/i.test(lowerCleaned) ||
+    /score bet/i.test(lowerCleaned)
+  ) {
+    parserName = "theScore";
+  } else if (
+    forcedBook === "caesars" ||
+    /\bcaesars\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Caesars";
+  } else if (
+    forcedBook === "betmgm" ||
+    normalizeParserBookName(sportsbook) === "BetMGM"
+  ) {
+    parserName = "BetMGM";
+  } else if (
+    isGenericTextTicketBook(uploadBookmaker) ||
+    isGenericTextTicketBook(detectedSportsbook)
+  ) {
+    parserName = "GenericTextTicket";
+  }
+
+  const parser = PARSER_REGISTRY.find((entry) => entry.name === parserName);
+
+  if (!parser) {
+    const fallback = PARSER_REGISTRY.find((entry) => entry.name === "DraftKingsLike");
+
+    return fallback.run({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook,
+      shared,
+    });
+  }
+
+  return parser.run({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook,
+    shared,
+  });
+}
+

@@ -8,8 +8,21 @@ import { parseKalshiSlip } from "./parseKalshi";
 import { parseCircaSlip } from "./parseCirca";
 import { parseBet365Slip } from "./parseBet365";
 import { parseTheScoreSlip } from "./parseTheScore";
+import { parseGenericTextTicketSlip } from "./parseGenericTextTicket";
 
 export const PARSER_REGISTRY = [
+    {
+    name: "GenericTextTicket",
+    run: ({ cleaned, originalText, sourceFileName, sportsbook, shared }) =>
+      parseGenericTextTicketSlip({
+        cleaned,
+        originalText,
+        sourceFileName,
+        sportsbook,
+        shared,
+      }),
+  },
+
   {
     name: "FanDuel",
     run: ({ cleaned, originalText, sourceFileName, shared }) =>
@@ -24,11 +37,13 @@ export const PARSER_REGISTRY = [
   },
   {
     name: "Kalshi",
-    run: ({ cleaned, shared }) => parseKalshiSlip(cleaned, shared),
+    run: ({ cleaned, originalText, sourceFileName, shared }) =>
+      parseKalshiSlip(cleaned, shared, sourceFileName, originalText),
   },
   {
     name: "Circa",
-    run: ({ cleaned, shared }) => parseCircaSlip(cleaned, shared),
+    run: ({ cleaned, originalText, sourceFileName, shared }) =>
+      parseCircaSlip(cleaned, shared, sourceFileName, originalText),
   },
   {
     name: "bet365",
@@ -66,6 +81,17 @@ export const PARSER_REGISTRY = [
         originalText,
         sourceFileName,
         sportsbook: sportsbook || "BetMGM",
+        shared,
+      }),
+  },
+  {
+    name: "GenericTextTicket",
+    run: ({ cleaned, originalText, sourceFileName, sportsbook, shared }) =>
+      parseGenericTextTicketSlip({
+        cleaned,
+        originalText,
+        sourceFileName,
+        sportsbook,
         shared,
       }),
   },

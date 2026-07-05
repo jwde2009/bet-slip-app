@@ -1,0 +1,222 @@
+import { detectLeague } from "./detectLeague";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+  detectOddsMissingReason,
+} from "./oddsHelpers";
+
+function clean(value = "") {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getMatch(text, regex, group = 1) {
+  const m = String(text || "").match(regex);
+  return m ? String(m[group] || "").trim() : "";
+}
+
+function normalizeMoney(value = "") {
+  const n = Number(String(value || "").replace(/,/g, "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n.toFixed(2) : "";
+}
+
+function extractDate(text = "") {
+  const m =
+    String(text || "").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/) ||
+    String(text || "").match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+
+  if (!m) return "";
+
+  if (m[1].length === 4) {
+    return `${m[2].padStart(2, "0")}/${m[3].padStart(2, "0")}/${m[1]}`;
+  }
+
+  const mm = m[1].padStart(2, "0");
+  const dd = m[2].padStart(2, "0");
+  const yyyy = m[3].length === 2 ? `20${m[3]}` : m[3];
+
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function extractFixture(text = "") {
+  const m =
+    String(text || "").match(/\b([A-Za-z0-9 .&'()-]+?)\s+(?:vs\.?|v\.?|@|at)\s+([A-Za-z0-9 .&'()-]+?)(?:\s+\d{1,2}\/\d{1,2}\/\d{2,4}|\s+[+-]\d{3,5}|\s+Over|\s+Under|,|$)/i);
+
+  if (!m) return "";
+
+  return `${clean(m[1])} @ ${clean(m[2])}`;
+}
+
+function extractSelection(text = "") {
+  const playerProp =
+    String(text || "").match(
+      /\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\s+(Over|Under)\s+(\d+(?:\.\d+)?)\s+([A-Za-z +/.-]+?)(?:\s+[+-]\d{3,5}|,|$)/i
+    );
+
+  if (playerProp) {
+    return clean(`${playerProp[1]} ${playerProp[2]} ${playerProp[3]} ${playerProp[4]}`);
+  }
+
+  const ou =
+    String(text || "").match(/\b(Over|Under)\s+(\d+(?:\.\d+)?)(?:\s+[A-Za-z +/.-]+)?(?:\s+[+-]\d{3,5}|,|$)/i);
+
+  if (ou) {
+    return clean(ou[0].replace(/[+-]\d{3,5}.*$/, ""));
+  }
+
+  const beforeOdds = String(text || "").match(/\b(.+?)\s+([+-]\d{3,5})\b/);
+  if (beforeOdds) {
+    const candidate = clean(beforeOdds[1])
+      .replace(/^.*?\b(?:vs\.?|v\.?|@|at)\b\s+[A-Za-z0-9 .&'()-]+?\s+/i, "")
+      .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, "")
+      .trim();
+
+    if (candidate.length >= 3) return candidate;
+  }
+
+  return "";
+}
+
+function inferBetType(selection = "", fixture = "") {
+  const text = `${selection} ${fixture}`.toLowerCase();
+
+  if (/\b(over|under)\b/.test(text)) {
+    if (/\b(points|rebounds|assists|hits|rbis|home runs|strikeouts|shots|goals|saves|threes)\b/.test(text)) {
+      return "player prop";
+    }
+
+    return "total";
+  }
+
+  if (/[+-]\d+(\.\d+)?/.test(selection)) return "spread";
+  if (selection) return "moneyline";
+  return "";
+}
+
+export function parseGenericTextTicketSlip({
+  cleaned,
+  originalText,
+  sourceFileName = "",
+  sportsbook = "",
+  shared,
+}) {
+  const {
+    emptyParsed,
+    detectStatus,
+    detectLive,
+    enrichRow,
+  } = shared || {};
+
+  const text = clean(cleaned || originalText || "");
+
+  const stake =
+    normalizeMoney(getMatch(text, /\b(?:stake|risk|wager|bet)\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i)) ||
+    "";
+
+  const payout =
+    normalizeMoney(getMatch(text, /\b(?:payout|paid|return|returns|to pay)\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i)) ||
+    "";
+
+  const toWinDirect =
+    normalizeMoney(getMatch(text, /\b(?:to win|win|profit)\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i)) ||
+    "";
+
+  const oddsUS =
+    getMatch(text, /\b([+-]\d{3,5})\b/) ||
+    "";
+
+  let toWin = toWinDirect;
+
+  if (!toWin && stake && payout) {
+    const s = Number(stake);
+    const p = Number(payout);
+    if (Number.isFinite(s) && Number.isFinite(p) && p >= s) {
+      toWin = (p - s).toFixed(2);
+    }
+  }
+
+  let finalOdds = oddsUS;
+  let oddsSource = finalOdds ? "OCR" : "";
+
+  if (!finalOdds && stake && payout) {
+    finalOdds = americanOddsFromStakeAndReturn(stake, payout);
+    oddsSource = finalOdds ? "Calculated" : "";
+  }
+
+  if (!finalOdds && stake && toWin) {
+    finalOdds = americanOddsFromStakeAndProfit(stake, toWin);
+    oddsSource = finalOdds ? "Calculated" : "";
+  }
+
+  const fixtureEvent = extractFixture(text);
+  const selection = extractSelection(text);
+  const betType = inferBetType(selection, fixtureEvent);
+  const betDate = extractDate(text);
+
+  const sportLeague = detectLeague({
+    cleaned: text,
+    selection,
+    fixtureEvent,
+    marketDetail: "",
+    isParlay: /\bparlay\b/i.test(text),
+  });
+
+  const status =
+    typeof detectStatus === "function"
+      ? detectStatus(text, text)
+      : "";
+
+  const win =
+    status === "Won" ? "Y" :
+    status === "Lost" ? "N" :
+    "";
+
+  const warnings = [];
+  warnings.push("generic_text_ticket_parser_review");
+  if (!selection) warnings.push("selection_missing");
+  if (!stake) warnings.push("stake_missing");
+  if (!finalOdds) warnings.push("odds_missing");
+  if (!payout && !toWin) warnings.push("payout_missing");
+
+  const oddsMissingReason = detectOddsMissingReason({
+    oddsUS: finalOdds,
+    stake,
+    payout,
+    toWin,
+    screenType: "generic_text_ticket",
+  });
+
+  const row = {
+    ...(emptyParsed || {}),
+    eventDate: betDate,
+    betDate,
+    bookmaker: sportsbook,
+    sportLeague,
+    selection,
+    betType,
+    fixtureEvent,
+    stake,
+    oddsUS: finalOdds,
+    oddsSource,
+    oddsMissingReason,
+    live: typeof detectLive === "function" ? detectLive(text) : "N",
+    bonusBet: /\bbonus|free bet|credit\b/i.test(text) ? "Y" : "N",
+    win,
+    marketDetail: "",
+    payout,
+    toWin,
+    rawPlacedDate: "",
+    status,
+    parseWarning: warnings.join(" | "),
+    sourceFileName,
+    sourceText: originalText || cleaned,
+    reviewLater: "Y",
+  };
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}

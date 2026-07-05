@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
-  const [collapsedBooks, setCollapsedBooks] = useState({});
+export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows, onUpdateCoverageRows }) {  const [collapsedBooks, setCollapsedBooks] = useState({});
   const [collapsedSports, setCollapsedSports] = useState({});
   const [collapsedEvents, setCollapsedEvents] = useState({});
   const [showOnlyThin, setShowOnlyThin] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const coverage = useMemo(() => buildCoverage(rows), [rows]);
-
+  useEffect(() => {
+    writeEvLoadedCoverageSnapshot(coverage);
+  }, [coverage]);
   const visibleBooks = showOnlyThin
     ? coverage.books
         .map((book) => ({
@@ -24,6 +25,56 @@ export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
         }))
         .filter((book) => book.sports.length > 0)
     : coverage.books;
+
+  function updateCoverageEventSport({ bookmaker, sport, eventName, nextSport }) {
+    if (typeof onUpdateCoverageRows !== "function") return;
+
+    const resolvedSport = String(nextSport || "").trim().toUpperCase();
+    if (!resolvedSport) return;
+    if (resolvedSport === String(sport || "").trim().toUpperCase()) return;
+
+    onUpdateCoverageRows({
+      bookmaker,
+      sport,
+      eventName,
+      patch: {
+        sport: resolvedSport,
+        league: resolvedSport,
+        coverageSportEdited: true,
+        manuallyEdited: true,
+      },
+    });
+  }
+
+  function markCoverageEventComplete({ bookmaker, sport, eventName }) {
+    if (typeof onUpdateCoverageRows !== "function") return;
+
+    onUpdateCoverageRows({
+      bookmaker,
+      sport,
+      eventName,
+      patch: {
+        coverageMarkedComplete: true,
+        coverageMarkedCompleteAt: new Date().toISOString(),
+        manuallyEdited: true,
+      },
+    });
+  }
+
+  function unmarkCoverageEventComplete({ bookmaker, sport, eventName }) {
+    if (typeof onUpdateCoverageRows !== "function") return;
+
+    onUpdateCoverageRows({
+      bookmaker,
+      sport,
+      eventName,
+      patch: {
+        coverageMarkedComplete: false,
+        coverageMarkedCompleteAt: "",
+        manuallyEdited: true,
+      },
+    });
+  }
 
   function confirmDeleteCoverage({ bookmaker, sport, eventName, label }) {
     if (typeof onDeleteCoverageRows !== "function") return;
@@ -231,7 +282,11 @@ export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
                                         </span>
 
                                         <span style={eventMetaWrapStyle}>
-                                          {event.isThin ? (
+                                          {event.coverageMarkedComplete ? (
+                                            <span style={completeBadgeStyle}>
+                                              Marked complete
+                                            </span>
+                                          ) : event.isThin ? (
                                             <span style={thinBadgeStyle}>
                                               Possibly incomplete
                                             </span>
@@ -248,6 +303,62 @@ export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
                                           </span>
                                         </span>
                                       </button>
+
+                                      <label style={coverageSportSelectWrapStyle}>
+                                        League
+                                        <select
+                                          value={sport.sport || "UNKNOWN"}
+                                          onChange={(selectEvent) =>
+                                            updateCoverageEventSport({
+                                              bookmaker: book.bookmaker,
+                                              sport: sport.sport,
+                                              eventName: event.eventName,
+                                              nextSport: selectEvent.target.value,
+                                            })
+                                          }
+                                          style={coverageSportSelectStyle}
+                                        >
+                                          <option value="NBA">NBA</option>
+                                          <option value="WNBA">WNBA</option>
+                                          <option value="NHL">NHL</option>
+                                          <option value="MLB">MLB</option>
+                                          <option value="UFC">UFC</option>
+                                          <option value="GOLF">GOLF</option>
+                                          <option value="TENNIS">TENNIS</option>
+                                          <option value="SOCCER">SOCCER</option>
+                                          <option value="UNKNOWN">UNKNOWN</option>
+                                        </select>
+                                      </label>
+
+                                      {event.coverageMarkedComplete ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            unmarkCoverageEventComplete({
+                                              bookmaker: book.bookmaker,
+                                              sport: sport.sport,
+                                              eventName: event.eventName,
+                                            })
+                                          }
+                                          style={markCompleteButtonStyle}
+                                        >
+                                          Unmark Complete
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            markCoverageEventComplete({
+                                              bookmaker: book.bookmaker,
+                                              sport: sport.sport,
+                                              eventName: event.eventName,
+                                            })
+                                          }
+                                          style={markCompleteButtonStyle}
+                                        >
+                                          Mark Complete
+                                        </button>
+                                      )}
 
                                       <button
                                         type="button"
@@ -328,17 +439,61 @@ export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows }) {
     </section>
   );
 }
+const EV_LOADED_COVERAGE_SNAPSHOT_KEY = "EV_LOADED_COVERAGE_SNAPSHOT";
+
+function writeEvLoadedCoverageSnapshot(coverage = {}) {
+  if (typeof window === "undefined") return;
+
+  try {
+    const snapshot = {
+      version: 1,
+      writtenAt: new Date().toISOString(),
+      bookCount: coverage.bookCount || 0,
+      eventCount: coverage.eventCount || 0,
+      marketCount: coverage.marketCount || 0,
+      rowCount: coverage.rowCount || 0,
+      books: (coverage.books || []).map((book) => ({
+        bookmaker: book.bookmaker,
+        rowCount: book.rowCount,
+        sports: (book.sports || []).map((sport) => ({
+          sport: sport.sport,
+          rowCount: sport.rowCount,
+          events: (sport.events || []).map((event) => ({
+            eventName: event.eventName,
+            rowCount: event.rowCount,
+            marketTypes: (event.markets || []).map((market) => market.marketType),
+            missingSharpMarkets: (event.missingSharpMarkets || []).map((missing) => ({
+              marketType: missing.marketType,
+              sharpBooks: missing.sharpBooks || [],
+            })),
+            missingExpectedMarkets: (event.missingExpectedMarkets || []).map((missing) => ({
+              marketType: missing.marketType,
+              reason: missing.reason || "expected_core_market",
+            })),
+            coverageMarkedComplete: event.coverageMarkedComplete === true,
+            isThin: event.isThin === true,
+          })),
+        })),
+      })),
+    };
+
+    localStorage.setItem(EV_LOADED_COVERAGE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch (err) {
+    // ignore coverage snapshot write failures
+  }
+}
 
 function buildCoverage(rows = []) {
   const bookMap = new Map();
   const uniqueEvents = new Set();
   const uniqueMarkets = new Set();
   const sharpMarketMap = buildSharpMarketMap(rows);
+  const bookEventMarketMap = buildBookEventMarketMap(rows);
 
   for (const row of rows || []) {
     const bookmaker = clean(row.sportsbook || row.bookmaker || "Unknown Book");
-    const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
     const eventName = getCoverageEventName(row);
+    const sport = getCoverageSport(row, eventName);
     const marketType = clean(row.marketType || row.betType || "unknown_market");
     const isSharp = isCoverageSharpRow(row);
     const isTarget = !isSharp;
@@ -372,11 +527,19 @@ function buildCoverage(rows = []) {
         rowCount: 0,
         targetRowCount: 0,
         sharpRowCount: 0,
+        coverageMarkedComplete: false,
+        coverageMarkedCompleteAt: "",
       });
     }
 
     const event = sportBucket.eventsMap.get(eventName);
     event.rowCount += 1;
+
+    if (row.coverageMarkedComplete === true) {
+      event.coverageMarkedComplete = true;
+      event.coverageMarkedCompleteAt =
+        row.coverageMarkedCompleteAt || event.coverageMarkedCompleteAt || "";
+    }
 
     if (isTarget) event.targetRowCount += 1;
     if (isSharp) event.sharpRowCount += 1;
@@ -435,24 +598,43 @@ function buildCoverage(rows = []) {
 
               const marketCount = markets.length;
               const currentMarketTypes = new Set(markets.map((market) => market.marketType));
+              const crossSportMarketTypes = getBookEventMarketsAcrossSports(
+                bookEventMarketMap,
+                book.bookmaker,
+                event.eventName
+              );
+
+              const missingExpectedMarkets =
+                event.coverageMarkedComplete
+                  ? []
+                  : buildExpectedMissingMarketsForCoverageEvent({
+                      bookmaker: book.bookmaker,
+                      sport: sport.sport,
+                      markets,
+                    });
 
               const missingSharpMarkets =
-                event.targetRowCount > 0
-                  ? Array.from(eventSharpMarkets.entries())
-                      .filter(([marketType]) => !currentMarketTypes.has(marketType))
-                      .map(([marketType, sharpBooksSet]) => {
-                        const sharpBooks = Array.from(sharpBooksSet).sort();
+                event.coverageMarkedComplete
+                  ? []
+                  : event.targetRowCount > 0
+                    ? Array.from(eventSharpMarkets.entries())
+                        .filter(([marketType]) =>
+                          !currentMarketTypes.has(marketType) &&
+                          !crossSportMarketTypes.has(marketType)
+                        )
+                        .map(([marketType, sharpBooksSet]) => {
+                          const sharpBooks = Array.from(sharpBooksSet).sort();
 
-                        return {
-                          marketType,
-                          sharpBooks,
-                          sharpBooksLabel: formatSharpBooksLabel(sharpBooks),
-                        };
-                      })
-                      .sort((a, b) =>
-                        formatMarketLabel(a.marketType).localeCompare(formatMarketLabel(b.marketType))
-                      )
-                  : [];
+                          return {
+                            marketType,
+                            sharpBooks,
+                            sharpBooksLabel: formatSharpBooksLabel(sharpBooks),
+                          };
+                        })
+                        .sort((a, b) =>
+                          formatMarketLabel(a.marketType).localeCompare(formatMarketLabel(b.marketType))
+                        )
+                    : [];
 
               return {
                 eventName: event.eventName,
@@ -460,7 +642,12 @@ function buildCoverage(rows = []) {
                 markets,
                 marketCount,
                 missingSharpMarkets,
-                isThin: isThinEvent({ marketCount, rowCount: event.rowCount, markets }),
+                missingExpectedMarkets,
+                coverageMarkedComplete: event.coverageMarkedComplete === true,
+                coverageMarkedCompleteAt: event.coverageMarkedCompleteAt || "",
+                isThin: event.coverageMarkedComplete
+                  ? false
+                  : isThinEvent({ marketCount, rowCount: event.rowCount, markets }),
               };
             })
             .sort((a, b) => {
@@ -523,6 +710,151 @@ function isCoverageSharpRow(row = {}) {
   );
 }
 
+function buildBookEventMarketMap(rows = []) {
+  const map = new Map();
+
+  for (const row of rows || []) {
+    const bookmaker = clean(row.sportsbook || row.bookmaker || "Unknown Book");
+    const eventName = getCoverageEventName(row);
+    const marketType = clean(row.marketType || row.betType || "unknown_market");
+
+    if (!bookmaker || !eventName || !marketType) continue;
+
+    const key = `${bookmaker}::${normalizeCoverageEventName(eventName).toLowerCase()}`;
+
+    if (!map.has(key)) {
+      map.set(key, new Set());
+    }
+
+    map.get(key).add(marketType);
+  }
+
+  return map;
+}
+
+function getBookEventMarketsAcrossSports(bookEventMarketMap, bookmaker, eventName) {
+  const key = `${clean(bookmaker || "Unknown Book")}::${normalizeCoverageEventName(eventName).toLowerCase()}`;
+  return bookEventMarketMap.get(key) || new Set();
+}
+
+function buildExpectedMissingMarketsForCoverageEvent({ bookmaker = "", sport, markets = [] } = {}) {
+  const bookKey = String(bookmaker || "").trim().toLowerCase();
+  const sportKey = String(sport || "").trim().toUpperCase();
+  const marketTypes = new Set((markets || []).map((market) => String(market.marketType || "").trim()));
+
+  function missingFromProfile(profile = [], reason = "expected_market") {
+    return profile
+      .filter((marketType) => !marketTypes.has(marketType))
+      .map((marketType) => ({
+        marketType,
+        reason,
+      }));
+  }
+
+  if (sportKey === "WNBA") {
+    const hasAnyWnbaRows = marketTypes.size > 0;
+    const hasAnyWnbaPlayerMarket = [
+      "player_points",
+      "player_rebounds",
+      "player_assists",
+      "player_threes",
+      "player_pra",
+      "player_points_rebounds",
+      "player_points_assists",
+      "player_rebounds_assists",
+      "double_double",
+      "triple_double",
+    ].some((marketType) => marketTypes.has(marketType));
+
+    if (!hasAnyWnbaRows) return [];
+
+    const wnbaMainLines = ["moneyline_2way", "spread", "total"];
+    const wnbaSimpleProps = [
+      "player_points",
+      "player_rebounds",
+      "player_assists",
+      "player_threes",
+    ];
+
+    const wnbaComboProps = [
+      "player_pra",
+      "player_points_rebounds",
+      "player_points_assists",
+      "player_rebounds_assists",
+      "double_double",
+      "triple_double",
+    ];
+
+    // Pinnacle often has main lines + simple prop O/U, but not the same combo menu.
+    // Do not require combo props from Pinnacle by default.
+    if (bookKey.includes("pinnacle")) {
+      const profile = hasAnyWnbaPlayerMarket
+        ? [...wnbaMainLines, ...wnbaSimpleProps]
+        : wnbaMainLines;
+
+      return missingFromProfile(profile, "expected_wnba_pinnacle_market");
+    }
+
+    // DraftKings/FanDuel/TheScore should be targeted toward the full WNBA profile.
+    // If we only have main lines loaded, this asks for player-prop tabs.
+    return missingFromProfile(
+      [...wnbaMainLines, ...wnbaSimpleProps, ...wnbaComboProps],
+      "expected_wnba_book_market"
+    );
+  }
+
+  if (sportKey === "NBA") {
+    const hasAnyBasketballPlayerProp = [
+      "player_points",
+      "player_rebounds",
+      "player_assists",
+      "player_threes",
+      "player_pra",
+      "player_points_rebounds",
+      "player_points_assists",
+      "player_rebounds_assists",
+      "double_double",
+      "triple_double",
+    ].some((marketType) => marketTypes.has(marketType));
+
+    if (!hasAnyBasketballPlayerProp) return [];
+
+    return missingFromProfile(
+      [
+        "player_points",
+        "player_rebounds",
+        "player_assists",
+        "player_threes",
+      ],
+      "expected_core_basketball_player_market"
+    );
+  }
+
+  if (sportKey === "NHL") {
+    const hasAnyNhlPlayerProp = [
+      "player_shots_on_goal",
+      "player_points",
+      "player_assists",
+      "player_goals",
+      "player_saves",
+    ].some((marketType) => marketTypes.has(marketType));
+
+    if (!hasAnyNhlPlayerProp) return [];
+
+    return missingFromProfile(
+      [
+        "player_shots_on_goal",
+        "player_points",
+        "player_assists",
+      ],
+      "expected_core_nhl_player_market"
+    );
+  }
+
+  return [];
+}
+
+
 function buildSharpMarketMap(rows = []) {
   const map = new Map();
 
@@ -530,8 +862,8 @@ function buildSharpMarketMap(rows = []) {
     if (!isCoverageSharpRow(row)) continue;
 
     const bookmaker = clean(row.sportsbook || row.bookmaker || "Sharp");
-    const sport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
     const eventName = getCoverageEventName(row);
+    const sport = getCoverageSport(row, eventName);
     const marketType = clean(row.marketType || row.betType || "unknown_market");
 
     if (!sport || !eventName || !marketType) continue;
@@ -574,6 +906,62 @@ function formatSharpBooksLabel(sharpBooks = []) {
 
   return `${unique.slice(0, -1).join(", ")} & ${unique[unique.length - 1]}`;
 }
+
+function getCoverageSport(row = {}, eventName = "") {
+  const rawSport = clean(row.sport || row.league || "UNKNOWN").toUpperCase();
+  const eventText = normalizeCoverageEventName(eventName || getCoverageEventName(row));
+  const inferred = inferCoverageSportFromEvent(eventText);
+
+  return inferred || rawSport || "UNKNOWN";
+}
+
+function inferCoverageSportFromEvent(eventName = "") {
+  const text = clean(eventName).toLowerCase();
+
+  if (!text) return "";
+
+  const nbaTeams = [
+    "atlanta hawks", "boston celtics", "brooklyn nets", "charlotte hornets", "chicago bulls",
+    "cleveland cavaliers", "dallas mavericks", "denver nuggets", "detroit pistons", "golden state warriors",
+    "houston rockets", "indiana pacers", "los angeles clippers", "los angeles lakers", "memphis grizzlies",
+    "miami heat", "milwaukee bucks", "minnesota timberwolves", "new orleans pelicans", "new york knicks",
+    "oklahoma city thunder", "orlando magic", "philadelphia 76ers", "phoenix suns", "portland trail blazers",
+    "sacramento kings", "san antonio spurs", "toronto raptors", "utah jazz", "washington wizards"
+  ];
+
+  const wnbaTeams = [
+    "atlanta dream", "chicago sky", "connecticut sun", "dallas wings", "golden state valkyries",
+    "indiana fever", "las vegas aces", "los angeles sparks", "minnesota lynx", "new york liberty",
+    "phoenix mercury", "portland fire", "seattle storm", "toronto tempo", "washington mystics"
+  ];
+
+  const nhlTeams = [
+    "anaheim ducks", "boston bruins", "buffalo sabres", "calgary flames", "carolina hurricanes",
+    "chicago blackhawks", "colorado avalanche", "columbus blue jackets", "dallas stars", "detroit red wings",
+    "edmonton oilers", "florida panthers", "los angeles kings", "minnesota wild", "montreal canadiens",
+    "nashville predators", "new jersey devils", "new york islanders", "new york rangers", "ottawa senators",
+    "philadelphia flyers", "pittsburgh penguins", "san jose sharks", "seattle kraken", "st. louis blues",
+    "tampa bay lightning", "toronto maple leafs", "utah hockey club", "utah mammoth", "vancouver canucks",
+    "vegas golden knights", "washington capitals", "winnipeg jets"
+  ];
+
+  const mlbTeams = [
+    "arizona diamondbacks", "atlanta braves", "baltimore orioles", "boston red sox", "chicago cubs",
+    "chicago white sox", "cincinnati reds", "cleveland guardians", "colorado rockies", "detroit tigers",
+    "houston astros", "kansas city royals", "los angeles angels", "los angeles dodgers", "miami marlins",
+    "milwaukee brewers", "minnesota twins", "new york mets", "new york yankees", "athletics",
+    "philadelphia phillies", "pittsburgh pirates", "san diego padres", "san francisco giants", "seattle mariners",
+    "st. louis cardinals", "tampa bay rays", "texas rangers", "toronto blue jays", "washington nationals"
+  ];
+
+  if (nbaTeams.some((team) => text.includes(team))) return "NBA";
+  if (wnbaTeams.some((team) => text.includes(team))) return "WNBA";
+  if (nhlTeams.some((team) => text.includes(team))) return "NHL";
+  if (mlbTeams.some((team) => text.includes(team))) return "MLB";
+
+  return "";
+}
+
 
 function getCoverageEventName(row = {}) {
   const away = clean(row.awayTeam || row.awayTeamRaw || "");
@@ -660,6 +1048,44 @@ function normalizeCoverageTeamName(value) {
     ["rockets", "Houston Rockets"],
     ["hou rockets", "Houston Rockets"],
     ["houston rockets", "Houston Rockets"],
+
+    // WNBA
+    ["atl dream", "Atlanta Dream"],
+    ["atlanta dream", "Atlanta Dream"],
+    ["chi sky", "Chicago Sky"],
+    ["chicago sky", "Chicago Sky"],
+    ["con sun", "Connecticut Sun"],
+    ["ct sun", "Connecticut Sun"],
+    ["connecticut sun", "Connecticut Sun"],
+    ["dal wings", "Dallas Wings"],
+    ["dallas wings", "Dallas Wings"],
+    ["gs valkyries", "Golden State Valkyries"],
+    ["gsv valkyries", "Golden State Valkyries"],
+    ["golden state valkyries", "Golden State Valkyries"],
+    ["ind fever", "Indiana Fever"],
+    ["indiana fever", "Indiana Fever"],
+    ["lv aces", "Las Vegas Aces"],
+    ["lva aces", "Las Vegas Aces"],
+    ["las vegas aces", "Las Vegas Aces"],
+    ["la sparks", "Los Angeles Sparks"],
+    ["los angeles sparks", "Los Angeles Sparks"],
+    ["min lynx", "Minnesota Lynx"],
+    ["minnesota lynx", "Minnesota Lynx"],
+    ["ny liberty", "New York Liberty"],
+    ["nyl liberty", "New York Liberty"],
+    ["new york liberty", "New York Liberty"],
+    ["pho mercury", "Phoenix Mercury"],
+    ["phx mercury", "Phoenix Mercury"],
+    ["phoenix mercury", "Phoenix Mercury"],
+    ["por fire", "Portland Fire"],
+    ["portland fire", "Portland Fire"],
+    ["sea storm", "Seattle Storm"],
+    ["seattle storm", "Seattle Storm"],
+    ["tor tempo", "Toronto Tempo"],
+    ["toronto tempo", "Toronto Tempo"],
+    ["was mystics", "Washington Mystics"],
+    ["wsh mystics", "Washington Mystics"],
+    ["washington mystics", "Washington Mystics"],
 
     // NHL
     ["wild", "Minnesota Wild"],
@@ -962,6 +1388,26 @@ const deleteCoverageButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const coverageSportSelectWrapStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#374151",
+  whiteSpace: "nowrap",
+};
+
+const coverageSportSelectStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 999,
+  padding: "4px 7px",
+  fontSize: 11,
+  fontWeight: 900,
+  background: "#fff",
+  color: "#111827",
+};
+
 const bookMetaStyle = {
   color: "#4b5563",
   fontSize: 12,
@@ -1046,6 +1492,28 @@ const thinBadgeStyle = {
   padding: "2px 7px",
   fontSize: 11,
   fontWeight: 900,
+};
+
+const completeBadgeStyle = {
+  border: "1px solid #86efac",
+  background: "#dcfce7",
+  color: "#166534",
+  borderRadius: 999,
+  padding: "2px 7px",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const markCompleteButtonStyle = {
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "4px 8px",
+  fontSize: 11,
+  fontWeight: 900,
+  background: "#ecfdf5",
+  color: "#166534",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const eventTimestampStyle = {

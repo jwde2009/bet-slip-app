@@ -1,0 +1,13 @@
+ev-parlay-extension\background.js -> ev-parlay-extension__background.js.txt
+ev-parlay-extension\manifest.json -> ev-parlay-extension__manifest.json.txt
+app\ev-parlay-lab\page.js -> app__ev-parlay-lab__page.js.txt
+app\ev-parlay-lab\components\ImportPanel.js -> app__ev-parlay-lab__components__ImportPanel.js.txt
+app\ev-parlay-lab\components\LoadCoveragePanel.js -> app__ev-parlay-lab__components__LoadCoveragePanel.js.txt
+app\ev-parlay-lab\utils\parseOddsText.js -> app__ev-parlay-lab__utils__parseOddsText.js.txt
+app\ev-parlay-lab\utils\marketNormalization.js -> app__ev-parlay-lab__utils__marketNormalization.js.txt
+app\ev-parlay-lab\utils\matchMarkets.js -> app__ev-parlay-lab__utils__matchMarkets.js.txt
+app\ev-parlay-lab\utils\parsers\index.js -> app__ev-parlay-lab__utils__parsers__index.js.txt
+app\ev-parlay-lab\utils\parsers\parseBetMGMText.js -> app__ev-parlay-lab__utils__parsers__parseBetMGMText.js.txt
+app\ev-parlay-lab\utils\parsers\parseTheScoreText.js -> app__ev-parlay-lab__utils__parsers__parseTheScoreText.js.txt
+app\ev-parlay-lab\utils\parsers\parseDraftKingsText.js -> app__ev-parlay-lab__utils__parsers__parseDraftKingsText.js.txt
+app\ev-parlay-lab\utils\parsers\parseFanDuelText.js -> app__ev-parlay-lab__utils__parsers__parseFanDuelText.js.txt

@@ -87,6 +87,7 @@ export default function TopActionGrid({
   onMarkSelectedWin,
   onMarkSelectedLoss,
   onClearAll,
+  onRunHedgeScan,
   nextBestReviewRow,
   jumpToNextBestReviewRow,
 }) {
@@ -136,6 +137,12 @@ export default function TopActionGrid({
         label="Next Best Row"
         onClick={jumpToNextBestReviewRow}
         disabled={!nextBestReviewRow}
+      />
+      <GridButton
+        label="Run Hedge Scan"
+        onClick={onRunHedgeScan}
+        disabled={!hasRows}
+        variant="dark"
       />
       <GridButton
         label="Mark Win"

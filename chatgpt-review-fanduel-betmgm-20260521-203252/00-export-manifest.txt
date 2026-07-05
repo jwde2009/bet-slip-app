@@ -1,0 +1,14 @@
+﻿
+Name                                                        Length
+----                                                        ------
+00-export-manifest.txt                                           0
+app__ev-parlay-lab__data__extractionGuides.js.txt             4299
+app__ev-parlay-lab__utils__marketNormalization.js.txt         6446
+app__ev-parlay-lab__utils__matchMarkets.js.txt                8972
+app__ev-parlay-lab__utils__parseOddsText.js.txt               2991
+app__ev-parlay-lab__utils__parsers__parseBetMGMText.js.txt   50582
+app__ev-parlay-lab__utils__parsers__parseFanDuelText.js.txt  47875
+ev-parlay-extension__background.js.txt                      178458
+
+
+

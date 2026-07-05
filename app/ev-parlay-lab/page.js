@@ -23,11 +23,12 @@ import { buildParlayCandidates } from "./utils/parlayEngine";
 import { normalizeMarketType } from "./utils/marketNormalization";
 
 const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
+const AUTO_PARSE_QUEUED_IMPORTS_KEY = "EV_PARLAY_LAB_AUTO_PARSE_QUEUED_IMPORTS";
 const SAVED_SESSION_KEY = "EV_PARLAY_LAB_SESSION";
 const SAVED_PLACED_PARLAYS_KEY = "EV_PARLAY_LAB_PLACED_PARLAYS";
 const BOOST_WALLET_KEY = "EV_PARLAY_LAB_BOOST_WALLET";
 const BLOCKED_PARLAY_LEGS_KEY = "EV_PARLAY_LAB_BLOCKED_PARLAY_LEGS";
-const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const PLACEABILITY_DECISIONS_KEY = "EV_PARLAY_LAB_PLACEABILITY_DECISIONS";const SAVED_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function withDefaultFilters(filters = {}) {
   return {
@@ -36,6 +37,17 @@ function withDefaultFilters(filters = {}) {
   };
 }
 
+function scrollToEvLabSection(sectionId) {
+  if (typeof document === "undefined") return;
+
+  const el = document.getElementById(sectionId);
+  if (!el) return;
+
+  el.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
 function readImportQueue() {
   if (typeof window === "undefined") return [];
   try {
@@ -49,6 +61,42 @@ function readImportQueue() {
 function writeImportQueue(queue) {
   if (typeof window === "undefined") return;
   localStorage.setItem(IMPORT_QUEUE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
+}
+
+function readAutoParseQueuedImportsSetting() {
+  if (typeof window === "undefined") return true;
+
+  try {
+    return localStorage.getItem(AUTO_PARSE_QUEUED_IMPORTS_KEY) !== "false";
+  } catch (err) {
+    return true;
+  }
+}
+
+function writeAutoParseQueuedImportsSetting(value) {
+  if (typeof window === "undefined") return;
+
+  try {
+    localStorage.setItem(AUTO_PARSE_QUEUED_IMPORTS_KEY, value ? "true" : "false");
+  } catch (err) {
+    // ignore storage failures
+  }
+}
+
+function isBetMgmWnbaLadderImport(sourceName = "", text = "") {
+  const source = String(sourceName || "").trim().toLowerCase();
+  if (source !== "betmgm") return false;
+
+  const compact = String(text || "").replace(/\s+/g, " ");
+
+  if (!/\bWNBA\b/i.test(compact)) return false;
+
+  return (
+    /\bBETMGM_LADDER_THRESHOLDS_START\b/i.test(compact) ||
+    /\bBETMGM_AUTO_LADDER_CAPTURE_START\b/i.test(compact) ||
+    /\bPlayer props\b/i.test(compact) ||
+    /\b(Player assists|Player rebounds|Player three-pointers|Alternate player points)\b/i.test(compact)
+  );
 }
 
 function readSavedPlacedParlays() {
@@ -119,6 +167,26 @@ function writeBlockedParlayLegs(blockedLegs) {
   localStorage.setItem(
     BLOCKED_PARLAY_LEGS_KEY,
     JSON.stringify(Array.isArray(blockedLegs) ? blockedLegs : [])
+  );
+}
+
+function readPlaceabilityDecisions() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PLACEABILITY_DECISIONS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writePlaceabilityDecisions(decisions) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(
+    PLACEABILITY_DECISIONS_KEY,
+    JSON.stringify(Array.isArray(decisions) ? decisions : [])
   );
 }
 
@@ -452,6 +520,28 @@ function makeBlockedLegRecordFromLeg(leg = {}) {
   };
 }
 
+function buildParlayPlaceabilityKey(parlay = {}) {
+  const legKeys = (parlay?.legs || [])
+    .map((leg) =>
+      leg.savedLegDisplayRepeatKey ||
+      leg.savedLegRepeatKey ||
+      leg.savedLegDisplayKey ||
+      leg.savedLegKey ||
+      buildSavedLegDisplayRepeatKeyFromLeg(leg) ||
+      buildSavedLegRepeatKeyFromLeg(leg) ||
+      formatBlockedLegDisplay(leg)
+    )
+    .map((key) => String(key || "").trim().toLowerCase())
+    .filter(Boolean)
+    .sort();
+
+  if (legKeys.length) {
+    return legKeys.join(" || ");
+  }
+
+  return String(parlay?.id || "").trim().toLowerCase();
+}
+
 
 function makePlacedParlayRecord(parlay, options = {}) {
   const savedAt = new Date().toISOString();
@@ -493,10 +583,21 @@ function makePlacedParlayRecord(parlay, options = {}) {
     savedAt,
     placedAt: "",
     settledAt: "",
-    placedDate: "",
+    placedDate: options.placedDate || getLocalTodayKeyForRepeatBlocking(),
 
     placedStake: Number.isFinite(placedStake) ? placedStake : Number(parlay?.stake ?? 0),
     placedOddsAmerican,
+    actualBookSgpOddsAmerican:
+      Number.isFinite(Number(options.actualBookSgpOddsAmerican))
+        ? Number(options.actualBookSgpOddsAmerican)
+        : null,
+    actualBoostedSgpOddsAmerican:
+      Number.isFinite(Number(options.actualBoostedSgpOddsAmerican))
+        ? Number(options.actualBoostedSgpOddsAmerican)
+        : null,
+    placeabilityStatus: String(options.placeabilityStatus || "not_checked"),
+    placeabilityNotes: String(options.placeabilityNotes || ""),
+    sgpOddsSource: options.actualBookSgpOddsAmerican ? "manual_actual_sgp" : "estimated",
     result: "",
     profitLoss: 0,
 
@@ -509,12 +610,26 @@ function makePlacedParlayRecord(parlay, options = {}) {
 
     rawParlayAmerican: parlay?.rawParlayAmerican ?? null,
     boostedParlayAmerican: parlay?.boostedParlayAmerican ?? null,
-    expectedValuePct: parlay?.expectedValuePct ?? null,
+    expectedValuePct:
+      Number.isFinite(Number(options.actualBoostedEvPct))
+        ? Number(options.actualBoostedEvPct)
+        : parlay?.expectedValuePct ?? null,
     fairHitProbability: parlay?.fairHitProbability ?? null,
-    gradeTier: parlay?.gradeTier || "",
-    playLabel: parlay?.playLabel || "",
+    gradeTier: options.actualGradeTier || parlay?.gradeTier || "",
+    playLabel: options.actualPlayLabel || parlay?.playLabel || "",
+    actualRawEvPct: options.actualRawEvPct ?? null,
+    actualBoostedEvPct: options.actualBoostedEvPct ?? null,
+    actualExpectedProfitAtStake: options.actualExpectedProfitAtStake ?? null,
+    actualSuggestedKellyStake: options.actualSuggestedKellyStake ?? null,
+    actualRawSuggestedKellyStake: options.actualRawSuggestedKellyStake ?? null,
+    actualBoostedSuggestedKellyStake: options.actualBoostedSuggestedKellyStake ?? null,
 
-    legs: (parlay?.legs || []).map((leg) => {
+    legs: (parlay?.legs || []).map((leg, legIndex) => {
+      const overrideOdds = parseSavedLegOddsOverride(options.legOddsOverrides?.[legIndex]);
+      const savedOddsAmerican =
+        overrideOdds !== null
+          ? overrideOdds
+          : leg.oddsAmerican ?? null;
       const savedLegKey = leg.savedLegKey || buildSavedLegKeyFromLeg(leg);
       const savedLegFamilyKey =
         leg.savedLegFamilyKey || buildSavedLegFamilyKeyFromLeg(leg);
@@ -540,11 +655,61 @@ function makePlacedParlayRecord(parlay, options = {}) {
         selectionLabel: leg.selectionLabel || "",
         lineValue: leg.lineValue ?? null,
         sportsbook: leg.sportsbook || "",
-        oddsAmerican: leg.oddsAmerican ?? null,
+        oddsAmerican: savedOddsAmerican,
+        originalOddsAmerican: leg.oddsAmerican ?? null,
+        oddsEditedInParlayCard: overrideOdds !== null,
       };
     }),
   };
 }
+
+function parseSavedLegOddsOverride(value) {
+  const text = String(value ?? "").trim();
+
+  if (!text) return null;
+
+  const normalized = text.toUpperCase() === "EVEN"
+    ? "+100"
+    : text.startsWith("+") || text.startsWith("-")
+      ? text
+      : Number(text) > 0
+        ? `+${text}`
+        : text;
+
+  if (!/^[+-]\d+$/.test(normalized)) return null;
+
+  const n = Number(normalized);
+
+  return Number.isFinite(n) && n !== 0 ? n : null;
+}
+
+function parseAmericanOddsInputForParlayCard(value) {
+  const text = String(value ?? "").trim();
+
+  if (!text) return null;
+  if (/^even$/i.test(text)) return 100;
+
+  const normalized =
+    text.startsWith("+") || text.startsWith("-")
+      ? text
+      : Number(text) > 0
+        ? `+${text}`
+        : text;
+
+  if (!/^[+-]\d+$/.test(normalized)) return null;
+
+  const n = Number(normalized);
+  return Number.isFinite(n) && n !== 0 ? n : null;
+}
+
+function americanToDecimalForParlayCard(value) {
+  const odds = Number(value);
+
+  if (!Number.isFinite(odds) || odds === 0) return null;
+  if (odds > 0) return 1 + odds / 100;
+  return 1 + 100 / Math.abs(odds);
+}
+
 
 function calculateAmericanOddsProfit(stake, americanOdds) {
   const s = Number(stake);
@@ -727,6 +892,50 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
   return bets.sort((a, b) => b.evPct - a.evPct).slice(0, 12);
 }
 
+function buildBetMgmLadderHelperEvents(rows = []) {
+  const eventMap = new Map();
+
+  for (const row of rows || []) {
+    if (!row || row.excluded) continue;
+
+    const sport = String(row.sport || row.league || "").trim().toUpperCase();
+    if (sport && sport !== "WNBA") continue;
+
+    const eventName = [
+      row.awayTeam || row.awayTeamRaw || "",
+      row.homeTeam || row.homeTeamRaw || "",
+    ]
+      .filter(Boolean)
+      .join(" @ ") || String(row.eventLabelRaw || "").trim();
+
+    if (!eventName) continue;
+
+    const key = eventName.toLowerCase();
+
+    if (!eventMap.has(key)) {
+      eventMap.set(key, {
+        eventName,
+        rowCount: 0,
+        books: new Set(),
+      });
+    }
+
+    const eventRecord = eventMap.get(key);
+    eventRecord.rowCount += 1;
+
+    const book = String(row.sportsbook || row.bookmaker || "").trim();
+    if (book) eventRecord.books.add(book);
+  }
+
+  return Array.from(eventMap.values())
+    .sort((a, b) => b.rowCount - a.rowCount || a.eventName.localeCompare(b.eventName))
+    .map((eventRecord) => ({
+      eventName: eventRecord.eventName,
+      rowCount: eventRecord.rowCount,
+      books: Array.from(eventRecord.books),
+    }));
+}
+
 function buildCoverageWarnings(rows = []) {
   const warnings = [];
   const grouped = new Map();
@@ -895,8 +1104,11 @@ export default function EVParlayLabPage() {
   const [activeBoostId, setActiveBoostId] = useState("");
   const [importMode, setImportMode] = useState("append");
   const [fanDuelSharpMode, setFanDuelSharpMode] = useState(false);
+  const [autoParseQueuedImports, setAutoParseQueuedImports] = useState(true);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
-    function resolveImportBatchRole(sourceName) {
+  // Auto-parse toggle is session-only and defaults ON every page load.
+  // Do not persist OFF to localStorage, because that makes it too easy to forget auto-parse is disabled.
+  function resolveImportBatchRole(sourceName) {
     const normalizedSource = String(sourceName || "").trim().toLowerCase();
 
     if (normalizedSource === "pinnacle") return "fair_odds";
@@ -1149,6 +1361,19 @@ function handleSavePlacedParlay(parlay, options = {}) {
       selectedBoost,
       placedStake: options.placedStake,
       placedOddsAmerican: options.placedOddsAmerican,
+      actualBookSgpOddsAmerican: options.actualBookSgpOddsAmerican,
+      actualBoostedSgpOddsAmerican: options.actualBoostedSgpOddsAmerican,
+      actualRawEvPct: options.actualRawEvPct,
+      actualBoostedEvPct: options.actualBoostedEvPct,
+      actualExpectedProfitAtStake: options.actualExpectedProfitAtStake,
+      actualSuggestedKellyStake: options.actualSuggestedKellyStake,
+      actualRawSuggestedKellyStake: options.actualRawSuggestedKellyStake,
+      actualBoostedSuggestedKellyStake: options.actualBoostedSuggestedKellyStake,
+      actualGradeTier: options.actualGradeTier,
+      actualPlayLabel: options.actualPlayLabel,
+      legOddsOverrides: options.legOddsOverrides,
+      placeabilityStatus: options.placeabilityStatus,
+      placeabilityNotes: options.placeabilityNotes,
     });
 
     setSavedPlacedParlays((prev) => {
@@ -1175,6 +1400,74 @@ function handleSavePlacedParlay(parlay, options = {}) {
       });
     }
   }
+
+function handleSavePlaceabilityDecision(parlay, options = {}) {
+    if (!parlay || !Array.isArray(parlay.legs) || parlay.legs.length === 0) return;
+
+    const status = String(options.placeabilityStatus || "not_checked").trim();
+    const notes = String(options.placeabilityNotes || "");
+
+    if (status === "not_checked" && !notes.trim()) {
+      return;
+    }
+
+    const selectedBoost = options.boostId
+      ? boostWallet.find((boost) => boost.id === options.boostId)
+      : null;
+
+    const placeabilityKey = buildParlayPlaceabilityKey(parlay);
+    const now = new Date().toISOString();
+
+    const decision = {
+      id: `placeability_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      placeabilityKey,
+      savedAt: now,
+      updatedAt: now,
+      status,
+      notes,
+      bookmaker:
+        selectedBoost?.sportsbook ||
+        parlay?.legs?.[0]?.sportsbook ||
+        "",
+      boostId: selectedBoost?.id || "",
+      boostName: selectedBoost?.name || "",
+      actualBookSgpOddsAmerican:
+        Number.isFinite(Number(options.actualBookSgpOddsAmerican))
+          ? Number(options.actualBookSgpOddsAmerican)
+          : null,
+      actualBoostedSgpOddsAmerican:
+        Number.isFinite(Number(options.actualBoostedSgpOddsAmerican))
+          ? Number(options.actualBoostedSgpOddsAmerican)
+          : null,
+      actualRawEvPct: options.actualRawEvPct ?? null,
+      actualBoostedEvPct: options.actualBoostedEvPct ?? null,
+      actualExpectedProfitAtStake: options.actualExpectedProfitAtStake ?? null,
+      actualSuggestedKellyStake: options.actualSuggestedKellyStake ?? null,
+      actualGradeTier: options.actualGradeTier || "",
+      actualPlayLabel: options.actualPlayLabel || "",
+      legs: (parlay.legs || []).map((leg) => ({
+        eventName: leg.eventName || "",
+        sport: leg.sport || "",
+        marketType: leg.marketType || "",
+        subjectName: leg.subjectName || "",
+        selectionLabel: leg.selectionLabel || "",
+        lineValue: leg.lineValue ?? null,
+        sportsbook: leg.sportsbook || "",
+        oddsAmerican: leg.oddsAmerican ?? null,
+        displayLabel: leg.displayLabel || formatBlockedLegDisplay(leg),
+      })),
+    };
+
+    const next = (() => {
+      const existing = readPlaceabilityDecisions();
+      const withoutCurrent = existing.filter((item) => item.placeabilityKey !== placeabilityKey);
+
+      return [decision, ...withoutCurrent].slice(0, 1000);
+    })();
+
+    writePlaceabilityDecisions(next);
+  }
+
 
   function handleBlockParlayLeg(leg) {
     if (!leg) return;
@@ -1248,6 +1541,18 @@ function handleSavePlacedParlay(parlay, options = {}) {
         : prev.stake,
       forceSameGame: boost.isSgp === true,
       allowSameGame: boost.isSgp === true ? true : prev.allowSameGame,
+
+      // New optional saved-boost constraints.
+      // These are stored now and can be enforced by parlayEngine in a follow-up patch.
+      forcedEventName: boost.forcedEventName || "",
+      requiredLegText: boost.requiredLegText || "",
+      forcedMarketType: boost.forcedMarketType || "",
+      requiredMainLineLegs:
+        boost.requiredMainLineLegs !== null &&
+        boost.requiredMainLineLegs !== undefined &&
+        Number.isFinite(Number(boost.requiredMainLineLegs))
+          ? Number(boost.requiredMainLineLegs)
+          : "",
     }));
   }
 
@@ -1382,6 +1687,129 @@ function handleSavePlacedParlay(parlay, options = {}) {
     );
   }
 
+  function handleUpdateParsedRowOddsFromParlayCard({ parsedRowId, oddsText, source, leg } = {}) {
+    const parsedOdds = parseAmericanOddsInputForParlayCard(oddsText);
+
+    if (parsedOdds === null) return;
+
+    function cleanPart(value) {
+      return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function normalizeLineForCompare(value) {
+      if (value === null || value === undefined || value === "") return "";
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toFixed(1) : "";
+    }
+
+    function rowEventKeys(row = {}) {
+      return new Set(
+        [
+          row.canonicalEventName,
+          row.canonicalEvent,
+          row.eventLabelRaw,
+          row.eventName,
+          row.fixture,
+        ]
+          .map((value) => normalizeCoverageEventName(value || ""))
+          .map((value) => value.toLowerCase())
+          .filter(Boolean)
+      );
+    }
+
+    function rowSelectionText(row = {}) {
+      return cleanPart(
+        [
+          row.selectionNormalized,
+          row.selectionRaw,
+          row.selection,
+          row.subjectName,
+          row.playerName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+    }
+
+    function isFallbackMatch(row = {}) {
+      const targetBook =
+        source === "fair"
+          ? String(leg?.sharpSportsbook || "").trim().toLowerCase()
+          : String(leg?.sportsbook || "").trim().toLowerCase();
+
+      const rowBook = String(row.sportsbook || row.bookmaker || "")
+        .trim()
+        .toLowerCase();
+
+      if (targetBook && rowBook !== targetBook) return false;
+
+      const targetEvent = normalizeCoverageEventName(leg?.eventName || "").toLowerCase();
+      if (targetEvent && !rowEventKeys(row).has(targetEvent)) return false;
+
+      const targetMarket = normalizeMarketType(leg?.marketType || "");
+      const rowMarket = normalizeMarketType(row.marketType || row.betType || "");
+
+      if (targetMarket && rowMarket !== targetMarket) return false;
+
+      const targetLine = normalizeLineForCompare(leg?.lineValue);
+      const rowLine = normalizeLineForCompare(row.lineValue);
+
+      if (targetLine && rowLine && targetLine !== rowLine) return false;
+
+      const rowSelection = rowSelectionText(row);
+      const legSubject = cleanPart(leg?.subjectName || "");
+      const legSelection = cleanPart(leg?.selectionLabel || "");
+
+      if (legSubject && !rowSelection.includes(legSubject)) return false;
+
+      if (legSelection === "over" && !/\bover\b/.test(rowSelection)) return false;
+      if (legSelection === "under" && !/\bunder\b/.test(rowSelection)) return false;
+
+      if (!legSubject && legSelection) {
+        const normalizedLegSelection = cleanPart(normalizeCoverageTeamName(leg?.selectionLabel || ""));
+        const normalizedRowSelection = cleanPart(normalizeCoverageTeamName(row.selectionNormalized || row.selectionRaw || row.selection || ""));
+
+        if (normalizedLegSelection && normalizedRowSelection !== normalizedLegSelection) {
+          return false;
+        }
+      }
+
+      if (source === "fair") {
+        return row.isSharpSource === true || String(row.batchRole || "").toLowerCase() === "fair_odds";
+      }
+
+      return true;
+    }
+
+    setRows((prev) => {
+      const fallbackRow = !parsedRowId
+        ? (prev || []).find((row) => isFallbackMatch(row))
+        : null;
+
+      const targetId = parsedRowId || fallbackRow?.id || "";
+
+      if (!targetId) {
+        alert("Could not find the parsed row for this odds change. The row may not have a parsedRowId or enough matching event/market details.");
+        return prev;
+      }
+
+      return (prev || []).map((row) => {
+        if (row.id !== targetId) return row;
+
+        return {
+          ...row,
+          oddsAmerican: parsedOdds,
+          oddsDecimal: americanToDecimalForParlayCard(parsedOdds),
+          oddsEditedFromParlayCard: true,
+          oddsEditedFromParlayCardSource: source || "",
+          userEdited: true,
+          manuallyEdited: true,
+        };
+      });
+    });
+  }
+
+
   function handleDeleteRow(rowId) {
     setRows((prev) => prev.filter((row) => row.id !== rowId));
 
@@ -1451,6 +1879,42 @@ function handleSavePlacedParlay(parlay, options = {}) {
       ["philadelphia 76ers", "Philadelphia 76ers"],
       ["tor raptors", "Toronto Raptors"],
       ["toronto raptors", "Toronto Raptors"],
+      ["atl dream", "Atlanta Dream"],
+      ["atlanta dream", "Atlanta Dream"],
+      ["chi sky", "Chicago Sky"],
+      ["chicago sky", "Chicago Sky"],
+      ["con sun", "Connecticut Sun"],
+      ["ct sun", "Connecticut Sun"],
+      ["connecticut sun", "Connecticut Sun"],
+      ["dal wings", "Dallas Wings"],
+      ["dallas wings", "Dallas Wings"],
+      ["gs valkyries", "Golden State Valkyries"],
+      ["gsv valkyries", "Golden State Valkyries"],
+      ["golden state valkyries", "Golden State Valkyries"],
+      ["ind fever", "Indiana Fever"],
+      ["indiana fever", "Indiana Fever"],
+      ["lv aces", "Las Vegas Aces"],
+      ["lva aces", "Las Vegas Aces"],
+      ["las vegas aces", "Las Vegas Aces"],
+      ["la sparks", "Los Angeles Sparks"],
+      ["los angeles sparks", "Los Angeles Sparks"],
+      ["min lynx", "Minnesota Lynx"],
+      ["minnesota lynx", "Minnesota Lynx"],
+      ["ny liberty", "New York Liberty"],
+      ["nyl liberty", "New York Liberty"],
+      ["new york liberty", "New York Liberty"],
+      ["pho mercury", "Phoenix Mercury"],
+      ["phx mercury", "Phoenix Mercury"],
+      ["phoenix mercury", "Phoenix Mercury"],
+      ["por fire", "Portland Fire"],
+      ["portland fire", "Portland Fire"],
+      ["sea storm", "Seattle Storm"],
+      ["seattle storm", "Seattle Storm"],
+      ["tor tempo", "Toronto Tempo"],
+      ["toronto tempo", "Toronto Tempo"],
+      ["was mystics", "Washington Mystics"],
+      ["wsh mystics", "Washington Mystics"],
+      ["washington mystics", "Washington Mystics"],
     ]);
 
     return aliases.get(lower) || text;
@@ -1505,13 +1969,27 @@ function handleSavePlacedParlay(parlay, options = {}) {
           .trim()
           .toUpperCase();
 
-        const rowEvent = normalizeCoverageEventName(
-          row.eventLabelRaw || row.eventName || row.fixture || "Unknown Event"
-        ).toLowerCase();
+        const rowEventCandidates = new Set(
+          [
+            row.canonicalEventName,
+            row.canonicalEvent,
+            row.eventLabelRaw,
+            row.eventName,
+            row.fixture,
+          ]
+            .map((value) => normalizeCoverageEventName(value || ""))
+            .map((value) => value.toLowerCase())
+            .filter(Boolean)
+        );
 
         if (normalizedBook && rowBook !== normalizedBook) return false;
-        if (normalizedSport && rowSport !== normalizedSport) return false;
-        if (normalizedEvent && rowEvent !== normalizedEvent) return false;
+        if (normalizedEvent && !rowEventCandidates.has(normalizedEvent)) return false;
+
+        // Sport is intentionally soft. Loaded Coverage can infer/repair a sport
+        // that differs from raw row.sport, so book + event is the reliable match.
+        if (normalizedSport && rowSport !== normalizedSport) {
+          return true;
+        }
 
         return true;
       })
@@ -1524,6 +2002,44 @@ function handleSavePlacedParlay(parlay, options = {}) {
     }
 
     handleDeleteRows(idsToDelete);
+  }
+
+  function handleUpdateCoverageRows({ bookmaker, sport, eventName, patch } = {}) {
+    const normalizedBook = String(bookmaker || "").trim().toLowerCase();
+    const normalizedEvent = normalizeCoverageEventName(eventName).toLowerCase();
+
+    setRows((prev) =>
+      prev.map((row) => {
+        const rowBook = String(row.sportsbook || row.bookmaker || "Unknown Book")
+          .trim()
+          .toLowerCase();
+
+        const rowEventCandidates = new Set(
+          [
+            row.canonicalEventName,
+            row.canonicalEvent,
+            row.eventLabelRaw,
+            row.eventName,
+            row.fixture,
+          ]
+            .map((value) => normalizeCoverageEventName(value || ""))
+            .map((value) => value.toLowerCase())
+            .filter(Boolean)
+        );
+
+        if (normalizedBook && rowBook !== normalizedBook) return row;
+        if (normalizedEvent && !rowEventCandidates.has(normalizedEvent)) return row;
+
+
+        // Sport is intentionally not required here. This lets Loaded Coverage
+        // fix rows that are currently under the wrong league/sport.
+        return {
+          ...row,
+          ...(patch || {}),
+          userEdited: true,
+        };
+      })
+    );
   }
 
     const rowsWithManualMatches = useMemo(
@@ -1739,8 +2255,19 @@ const marketBundle = useMemo(() => {
       writeImportQueue([]);
       setPendingImports([]);
       setSavedPlacedParlays(readSavedPlacedParlays());
-      window.__evParlayAutoParsePending = true;
-    }
+      // Do not auto-parse queued extension imports.
+      // BetMGM WNBA ladder imports need a manual threshold review before parsing.
+      const sourceName = String(newest?.source || "");
+      const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
+
+      window.__evParlayAutoParsePending = Boolean(
+        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
+      );
+
+      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
+        ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
+        : "";
+        }
 
     processQueuedImports();
 
@@ -1749,7 +2276,7 @@ const marketBundle = useMemo(() => {
     return () => {
       window.removeEventListener("ev-parlay-import-queued", processQueuedImports);
     };
-  }, [fanDuelSharpMode]);
+  }, [fanDuelSharpMode, autoParseQueuedImports]);
 
     useEffect(() => {
     const normalizedSportsbook = String(sportsbook || "").trim().toLowerCase();
@@ -1851,8 +2378,16 @@ const marketBundle = useMemo(() => {
       }
 
       if (autoParse === "1") {
-        window.__evParlayAutoParsePending = true;
-      }
+        const sourceName = String(newest?.source || "");
+      const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
+
+      window.__evParlayAutoParsePending = Boolean(
+        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
+      );
+
+      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
+        ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
+        : "";      }
     }
 
     params.delete("import");
@@ -1894,7 +2429,8 @@ const marketBundle = useMemo(() => {
         minHeight: "100vh",
       }}
     >
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+      <EvParlaySideNav />
+      <div id="ev-section-top" style={{ maxWidth: 1400, margin: "0 auto" }}>
         <div
           style={{
             display: "flex",
@@ -1947,7 +2483,7 @@ const marketBundle = useMemo(() => {
       whiteSpace: "nowrap",
     }}
   >
-    â† Back to Bet Slip App
+    &larr; Back to Bet Slip App
   </Link>
 </div>
 </div>
@@ -1991,7 +2527,40 @@ const marketBundle = useMemo(() => {
             Set this before clicking the extension or loading a FanDuel import.
           </div>
         </div>
+      
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: autoParseQueuedImports ? "#f0fdf4" : "#fff7ed",
+            border: autoParseQueuedImports ? "1px solid #86efac" : "1px solid #fdba74",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              fontWeight: 800,
+              color: autoParseQueuedImports ? "#166534" : "#9a3412",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={autoParseQueuedImports}
+              onChange={(event) => setAutoParseQueuedImports(event.target.checked)}
+            />
+            Auto-parse extension imports
+          </label>
 
+          <div style={{ marginTop: 6, fontSize: 12, color: "#666", fontWeight: 700 }}>
+            Default ON. Normal extension imports will parse automatically. BetMGM WNBA ladder/player-prop imports pause even when this is ON so you can confirm thresholds first.
+          </div>
+        </div>
+
+        <div id="ev-section-readiness" style={{ height: 0, scrollMarginTop: 16 }} />
         <SessionReadinessPanel
           rows={rowsForAnalysis}
           filters={filters}
@@ -2000,6 +2569,7 @@ const marketBundle = useMemo(() => {
           onDeleteStaleRows={handleDeleteStaleRows}
         />
 
+        <div id="ev-section-import" style={{ height: 0, scrollMarginTop: 16 }} />
         <ImportPanel
           rawText={rawText}
           setRawText={setRawText}
@@ -2019,18 +2589,23 @@ const marketBundle = useMemo(() => {
           onClearSavedSession={handleClearSavedSession}
           importMode={importMode}
           setImportMode={setImportMode}
+          ladderHelperEvents={buildBetMgmLadderHelperEvents(rows)}
           defaultCollapsed
         />
 
+        <div id="ev-section-extraction-guide" style={{ height: 0, scrollMarginTop: 16 }} />
         <ExtractionGuide sportsbook={sportsbook} defaultCollapsed />
 
+        <div id="ev-section-loaded-coverage" style={{ height: 0, scrollMarginTop: 16 }} />
         <LoadCoveragePanel
           rows={rows}
           onDeleteCoverageRows={handleDeleteCoverageRows}
+          onUpdateCoverageRows={handleUpdateCoverageRows}
         />
 
         <CoverageWarningsPanel warnings={coverageWarnings} />
 
+        <div id="ev-section-parsed-review" style={{ height: 0, scrollMarginTop: 16 }} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <button
             type="button"
@@ -2095,10 +2670,13 @@ const marketBundle = useMemo(() => {
           unmatchedRows={marketBundle.unmatchedRows}
         /> */}
 
+        <div id="ev-section-fair-odds" style={{ height: 0, scrollMarginTop: 16 }} />
         <FairOddsPanel fairOddsResults={fairOddsBundle} />
 
+        <div id="ev-section-top-edges" style={{ height: 0, scrollMarginTop: 16 }} />
         <TopEdgeBetsPanel bets={topSingleEdgeBets} />
 
+        <div id="ev-section-boost-wallet" style={{ height: 0, scrollMarginTop: 16 }} />
         <BoostWalletPanel
           boosts={boostWallet}
           filters={filters}
@@ -2108,16 +2686,20 @@ const marketBundle = useMemo(() => {
           onLoadBoostIntoFilters={handleLoadBoostIntoFilters}
         />
 
+        <div id="ev-section-parlay-filters" style={{ height: 0, scrollMarginTop: 16 }} />
         <ParlayFilters filters={filters} setFilters={setFilters} />
 
+        <div id="ev-section-parlay-results" style={{ height: 0, scrollMarginTop: 16 }} />
         <ParlayResults
           parlays={parlayCandidates}
           counts={parlayCounts}
           savedPlacedParlays={savedPlacedParlays}
           savedLegUsageMap={savedLegUsageMap}
           onSavePlacedParlay={handleSavePlacedParlay}
+          onSavePlaceabilityDecision={handleSavePlaceabilityDecision}
+          onUpdateParsedRowOddsFromParlayCard={handleUpdateParsedRowOddsFromParlayCard}
           onClearSavedParlays={handleClearSavedPlacedParlays}
-          onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
+           onDeleteSavedParlay={handleDeleteSavedPlacedParlay}
           onUpdateSavedParlay={handleUpdateSavedPlacedParlay}
           onConfirmSavedParlayPlaced={handleConfirmSavedParlayPlaced}
           onSetSavedParlayResult={handleSetSavedParlayResult}
@@ -2132,6 +2714,141 @@ const marketBundle = useMemo(() => {
     </div>
   );
 }
+
+function EvParlaySideNav() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const items = [
+    ["Top", "ev-section-top"],
+    ["Checklist", "ev-section-readiness"],
+    ["Import Odds", "ev-section-import"],
+    ["Guide", "ev-section-extraction-guide"],
+    ["Coverage", "ev-section-loaded-coverage"],
+    ["Parsed Review", "ev-section-parsed-review"],
+    ["Fair Odds", "ev-section-fair-odds"],
+    ["Top Edges", "ev-section-top-edges"],
+    ["Boost Wallet", "ev-section-boost-wallet"],
+    ["Filters", "ev-section-parlay-filters"],
+    ["Results", "ev-section-parlay-results"],
+    ["Saved Parlays", "ev-section-saved-parlays"],
+  ];
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        style={sideNavCollapsedButtonStyle}
+        aria-label="Expand EV Parlay Lab table of contents"
+      >
+        Jump
+      </button>
+    );
+  }
+
+  return (
+    <nav style={sideNavStyle} aria-label="EV Parlay Lab table of contents">
+      <div style={sideNavHeaderStyle}>
+        <div style={sideNavTitleStyle}>Jump To</div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          style={sideNavCollapseButtonStyle}
+          aria-label="Collapse EV Parlay Lab table of contents"
+          title="Collapse navigation"
+        >
+          ×
+        </button>
+      </div>
+
+      {items.map(([label, id]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => scrollToEvLabSection(id)}
+          style={sideNavButtonStyle}
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+const sideNavStyle = {
+  position: "fixed",
+  left: 10,
+  top: 88,
+  zIndex: 30,
+  width: 132,
+  maxHeight: "calc(100vh - 110px)",
+  overflowY: "auto",
+  padding: 8,
+  borderRadius: 12,
+  border: "1px solid #bbf7d0",
+  background: "rgba(240, 253, 244, 0.96)",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.12)",
+};
+
+const sideNavHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 6,
+  marginBottom: 6,
+};
+
+const sideNavTitleStyle = {
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#14532d",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
+
+const sideNavCollapseButtonStyle = {
+  width: 24,
+  height: 24,
+  borderRadius: 8,
+  border: "1px solid #bbf7d0",
+  background: "#fff",
+  color: "#166534",
+  cursor: "pointer",
+  fontSize: 16,
+  fontWeight: 900,
+  lineHeight: 1,
+};
+
+const sideNavCollapsedButtonStyle = {
+  position: "fixed",
+  left: 10,
+  top: 88,
+  zIndex: 30,
+  padding: "8px 10px",
+  borderRadius: 999,
+  border: "1px solid #bbf7d0",
+  background: "rgba(240, 253, 244, 0.96)",
+  color: "#166534",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.12)",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const sideNavButtonStyle = {
+  width: "100%",
+  display: "block",
+  textAlign: "left",
+  padding: "6px 7px",
+  marginBottom: 4,
+  borderRadius: 8,
+  border: "1px solid #bbf7d0",
+  background: "#fff",
+  color: "#166534",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
 function applyManualMatchOverrides(rows, manualMatches) {
   if (!Array.isArray(rows) || !rows.length) return [];
   if (!Array.isArray(manualMatches) || !manualMatches.length) return rows;
@@ -2315,7 +3032,10 @@ function buildSelectionFamilyKey(row) {
   const marketType = normalizeMarketType(row.marketType);
   const selection = String(row.selectionNormalized || row.selectionRaw || "")
     .toLowerCase()
-    .replace(/Ã¢Ë†â€™/g, "-");
+    .replace(/−/g, "-")
+    .replace(/−/g, "-")
+    .replace(/Ã¢Ë†â€™/g, "-")
+    .replace(/ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢/g, "-");
 
   if (marketType === "player_points") return "points";
   if (marketType === "player_assists") return "assists";

@@ -14,15 +14,40 @@ export function parsePinnacleText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
  
+  const earlyWnbaAmericanRows = parsePinnacleWnbaAmericanMainLineFallback(lines);
+
+  if (earlyWnbaAmericanRows.length) {
+    return dedupeRows(earlyWnbaAmericanRows);
+  }
+
   const rows = [];
-  const detailGame = findPinnacleDetailPageGame(lines);
- 
+  const detailGame = findPinnacleDetailPageGame(lines); 
   if (detailGame) {
     const { away, home, marketStartIndex, sport, league } = detailGame;
     const event = `${away} @ ${home}`;
  
     const parsed = parsePinnacleDetailMarkets(lines, marketStartIndex, away, home);
     pushParsedRows(rows, { event, away, home, parsed, sport, league });
+
+    rows.push(
+      ...parsePinnacleSoccerCornerMarkets(lines, marketStartIndex, {
+        event,
+        away,
+        home,
+        sport,
+        league,
+      })
+    );
+
+    rows.push(
+      ...parsePinnacleSoccerSpecialMarkets(lines, marketStartIndex, {
+        event,
+        away,
+        home,
+        sport,
+        league,
+      })
+    );
  
     rows.push(
       ...parsePinnacleExpandedMainLineRows(lines, marketStartIndex, {
@@ -39,13 +64,388 @@ export function parsePinnacleText(rawText = "", context = {}) {
     rows.push(...parsePinnacleMustStartPlayerProps(lines, { event, sport, league }));
   }
  
+  const wnbaFallbackRows = parsePinnacleWnbaAmericanMainLineFallback(lines);
+
+  if (wnbaFallbackRows.length) {
+    const existingMainRowKeys = new Set(
+      rows
+        .filter((row) =>
+          ["moneyline_2way", "moneyline_3way", "spread", "total"].includes(String(row.marketType || ""))
+        )
+        .map((row) =>
+          [
+            row.eventLabelRaw,
+            row.marketType,
+            row.selectionNormalized,
+            row.lineValue ?? "",
+          ].join("|").toLowerCase()
+        )
+    );
+
+    for (const row of wnbaFallbackRows) {
+      const key = [
+        row.eventLabelRaw,
+        row.marketType,
+        row.selectionNormalized,
+        row.lineValue ?? "",
+      ].join("|").toLowerCase();
+
+      if (existingMainRowKeys.has(key)) continue;
+
+      existingMainRowKeys.add(key);
+      rows.push(row);
+    }
+  }
+
   if (!detailGame && rows.length === 0) {
     rows.push(...parsePinnacleLandingGames(lines));
   }
  
   return dedupeRows(rows);
 }
- 
+
+function parsePinnacleWnbaAmericanMainLineFallback(lines) {
+  const rows = [];
+
+  const game = findPinnacleWnbaVsDetailGame(lines);
+  if (!game) return rows;
+
+  const event = `${game.away} @ ${game.home}`;
+  const sport = "WNBA";
+  const league = "WNBA";
+
+  const moneyline = parsePinnacleFallbackMoneyline(lines, game.marketStartIndex, game.away, game.home);
+  const spread = parsePinnacleFallbackHandicap(lines, game.marketStartIndex, game.away, game.home);
+  const total = parsePinnacleFallbackTotal(lines, game.marketStartIndex);
+
+  if (moneyline.awayDec !== null) {
+    rows.push(makeRow({ event, selection: game.away, marketType: "moneyline_2way", lineValue: null, decimalOdds: moneyline.awayDec, sport, league }));
+  }
+
+  if (moneyline.homeDec !== null) {
+    rows.push(makeRow({ event, selection: game.home, marketType: "moneyline_2way", lineValue: null, decimalOdds: moneyline.homeDec, sport, league }));
+  }
+
+  if (spread.awayLine !== null && spread.awayDec !== null) {
+    rows.push(makeRow({ event, selection: game.away, marketType: "spread", lineValue: spread.awayLine, decimalOdds: spread.awayDec, sport, league }));
+  }
+
+  if (spread.homeLine !== null && spread.homeDec !== null) {
+    rows.push(makeRow({ event, selection: game.home, marketType: "spread", lineValue: spread.homeLine, decimalOdds: spread.homeDec, sport, league }));
+  }
+
+  if (total.totalLine !== null && total.overDec !== null) {
+    rows.push(makeRow({ event, selection: "Over", marketType: "total", lineValue: total.totalLine, decimalOdds: total.overDec, sport, league }));
+  }
+
+  if (total.totalLine !== null && total.underDec !== null) {
+    rows.push(makeRow({ event, selection: "Under", marketType: "total", lineValue: total.totalLine, decimalOdds: total.underDec, sport, league }));
+  }
+
+  rows.push(
+    ...parsePinnacleFallbackWnbaPlayerProps(lines, game.marketStartIndex, {
+      event,
+      sport,
+      league,
+    })
+  );
+
+  return rows;
+}
+
+function findPinnacleWnbaVsDetailGame(lines) {
+  for (let i = 0; i < lines.length - 5; i += 1) {
+    if (!/^Basketball$/i.test(normalizeLine(lines[i]))) continue;
+    if (!/^WNBA$/i.test(normalizeLine(lines[i + 1]))) continue;
+
+    const matchup = normalizeLine(lines[i + 2]);
+    const match = matchup.match(/^(.+?)\s+vs\.?\s+(.+)$/i);
+    if (!match) continue;
+
+    const away = normalizeLine(match[1]);
+    const home = normalizeLine(match[2]);
+
+    if (
+      !looksLikeTeamName(away) ||
+      !looksLikeTeamName(home) ||
+      isPinnacleNavigationOrJunkTeamName(away) ||
+      isPinnacleNavigationOrJunkTeamName(home)
+    ) {
+      continue;
+    }
+
+    // Prefer the first main-game market header after the matchup. This skips:
+    // date line, repeated team names, and nav blobs like ALLGAME1ST HALFPLAYER PROPS.
+    const marketStartIndex = findFirstPinnacleSectionHeader(lines, i + 3);
+
+    return {
+      away,
+      home,
+      marketStartIndex,
+    };
+  }
+
+  // Extra fallback for pages where the sport/league lines are noisy but the
+  // WNBA matchup line is still visible.
+  for (let i = 0; i < lines.length - 3; i += 1) {
+    const matchup = normalizeLine(lines[i]);
+    const match = matchup.match(/^(.+?)\s+vs\.?\s+(.+)$/i);
+    if (!match) continue;
+
+    const away = normalizeLine(match[1]);
+    const home = normalizeLine(match[2]);
+
+    if (
+      !looksLikeTeamName(away) ||
+      !looksLikeTeamName(home) ||
+      isPinnacleNavigationOrJunkTeamName(away) ||
+      isPinnacleNavigationOrJunkTeamName(home)
+    ) {
+      continue;
+    }
+
+    const nearbyText = lines.slice(Math.max(0, i - 5), Math.min(lines.length, i + 20)).join(" ");
+    if (!/\bWNBA\b/i.test(nearbyText)) continue;
+
+    return {
+      away,
+      home,
+      marketStartIndex: findFirstPinnacleSectionHeader(lines, i + 1),
+    };
+  }
+
+  return null;
+}
+
+function parsePinnacleFallbackWnbaPlayerProps(lines, startIndex, { event, sport, league } = {}) {
+  const rows = [];
+
+  function mapStatToMarketType(stat = "") {
+    const text = normalizeLine(stat).toLowerCase();
+
+    if (text === "points") return "player_points";
+    if (text === "rebounds") return "player_rebounds";
+    if (text === "assists") return "player_assists";
+    if (text === "threes made" || text === "made threes" || text === "three-pointers") return "player_threes";
+
+    return "";
+  }
+
+  function parsePropSideLine(value = "", side = "", stat = "") {
+    const text = normalizeLine(value);
+    const escapedSide = side === "Over" ? "Over" : "Under";
+
+    const match = text.match(new RegExp(`^${escapedSide}\\s+(\\d+(?:\\.\\d+)?)\\s+(.+)$`, "i"));
+    if (!match) return null;
+
+    const lineValue = Number(match[1]);
+    const statText = normalizeLine(match[2]).toLowerCase();
+    const expectedStatText = normalizeLine(stat).toLowerCase();
+
+    if (!Number.isFinite(lineValue)) return null;
+
+    // Pinnacle can use "Threes Made" while our market label is player_threes.
+    if (
+      expectedStatText === "threes made" ||
+      expectedStatText === "made threes" ||
+      expectedStatText === "three-pointers"
+    ) {
+      if (!/threes made|made threes|three-pointers/i.test(statText)) return null;
+      return lineValue;
+    }
+
+    if (statText !== expectedStatText) return null;
+
+    return lineValue;
+  }
+
+  for (let i = Math.max(0, startIndex); i < lines.length - 4; i += 1) {
+    const header = normalizeLine(lines[i]);
+
+    if (/^(FAVOURITES|TOP SPORTS|A-Z SPORTS|BET SLIP|MY BETS)$/i.test(header)) break;
+    if (isHardStopLine(header)) break;
+
+    const match = header.match(/^(.+?)\s+Total\s+(Points|Rebounds|Assists|Threes Made|Made Threes|Three-Pointers)$/i);
+    if (!match) continue;
+
+    const player = normalizeLine(match[1]);
+    const stat = normalizeLine(match[2]);
+    const marketType = mapStatToMarketType(stat);
+
+    if (!player || !marketType) continue;
+
+    const overLine = parsePropSideLine(lines[i + 1], "Over", stat);
+    const overDec = parseDecimal(lines[i + 2]);
+    const underLine = parsePropSideLine(lines[i + 3], "Under", stat);
+    const underDec = parseDecimal(lines[i + 4]);
+
+    if (
+      overLine === null ||
+      underLine === null ||
+      Math.abs(overLine - underLine) > 0.0001 ||
+      overDec === null ||
+      underDec === null
+    ) {
+      continue;
+    }
+
+    rows.push(
+      makeRow({
+        event,
+        selection: `${player} Over`,
+        marketType,
+        lineValue: overLine,
+        decimalOdds: overDec,
+        sport,
+        league,
+      })
+    );
+
+    rows.push(
+      makeRow({
+        event,
+        selection: `${player} Under`,
+        marketType,
+        lineValue: underLine,
+        decimalOdds: underDec,
+        sport,
+        league,
+      })
+    );
+
+    i += 4;
+  }
+
+  return rows;
+}
+
+function parsePinnacleFallbackMoneyline(lines, startIndex, away, home) {
+  const result = { awayDec: null, homeDec: null };
+
+  const idx = findLineIndexAfterPinnacleFallback(lines, startIndex, /^Money Line\s*[–â€“-]\s*Game$/i);
+  if (idx === -1) return result;
+
+  const end = findSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const label = normalizeLine(lines[i]);
+
+    if (/^(Show All|Hide All|See more|See less)$/i.test(label)) continue;
+
+    const odds = parseDecimal(lines[i + 1]);
+
+    if (sameText(label, away) && odds !== null) result.awayDec = odds;
+    if (sameText(label, home) && odds !== null) result.homeDec = odds;
+  }
+
+  return result;
+}
+
+function parsePinnacleFallbackHandicap(lines, startIndex, away, home) {
+  const result = { awayLine: null, awayDec: null, homeLine: null, homeDec: null };
+
+  const idx = findLineIndexAfterPinnacleFallback(lines, startIndex, /^Handicap\s*[–â€“-]\s*Game$/i);
+  if (idx === -1) return result;
+
+  const end = findSectionEnd(lines, idx + 1);
+  let best = null;
+
+  for (let i = idx + 1; i < end - 3; i += 1) {
+    const awayLine = parseSpreadLineToken(lines[i]);
+    const awayDec = parseDecimal(lines[i + 1]);
+    const homeLine = parseSpreadLineToken(lines[i + 2]);
+    const homeDec = parseDecimal(lines[i + 3]);
+
+    if (awayLine === null || awayDec === null || homeLine === null || homeDec === null) continue;
+    if (Math.abs(awayLine + homeLine) > 0.0001) continue;
+
+    const awayAmerican = parseAmericanForPinnacleFallback(lines[i + 1]);
+    const homeAmerican = parseAmericanForPinnacleFallback(lines[i + 3]);
+    const score = scorePinnacleFallbackMainLineOdds(awayAmerican, homeAmerican);
+
+    if (!best || score < best.score) {
+      best = { awayLine, awayDec, homeLine, homeDec, score };
+    }
+
+    i += 3;
+  }
+
+  if (best) {
+    result.awayLine = best.awayLine;
+    result.awayDec = best.awayDec;
+    result.homeLine = best.homeLine;
+    result.homeDec = best.homeDec;
+  }
+
+  return result;
+}
+
+function parsePinnacleFallbackTotal(lines, startIndex) {
+  const result = { totalLine: null, overDec: null, underDec: null };
+
+  const idx = findLineIndexAfterPinnacleFallback(lines, startIndex, /^Total\s*[–â€“-]\s*Game$/i);
+  if (idx === -1) return result;
+
+  const end = findSectionEnd(lines, idx + 1);
+  let best = null;
+
+  for (let i = idx + 1; i < end - 3; i += 1) {
+    const overLine = parseTotalLabelValue(lines[i]);
+    const overDec = parseDecimal(lines[i + 1]);
+    const underLine = parseTotalLabelValue(lines[i + 2]);
+    const underDec = parseDecimal(lines[i + 3]);
+
+    if (!isOverLabel(lines[i]) || !isUnderLabel(lines[i + 2])) continue;
+    if (overLine === null || underLine === null || Math.abs(overLine - underLine) > 0.0001) continue;
+    if (overDec === null || underDec === null) continue;
+
+    const overAmerican = parseAmericanForPinnacleFallback(lines[i + 1]);
+    const underAmerican = parseAmericanForPinnacleFallback(lines[i + 3]);
+    const score = scorePinnacleFallbackMainLineOdds(overAmerican, underAmerican);
+
+    if (!best || score < best.score) {
+      best = { totalLine: overLine, overDec, underDec, score };
+    }
+
+    i += 3;
+  }
+
+  if (best) {
+    result.totalLine = best.totalLine;
+    result.overDec = best.overDec;
+    result.underDec = best.underDec;
+  }
+
+  return result;
+}
+
+function findLineIndexAfterPinnacleFallback(lines, startIndex, pattern) {
+  for (let i = Math.max(0, startIndex); i < lines.length; i += 1) {
+    if (pattern.test(normalizeLine(lines[i]))) return i;
+    if (isHardStopLine(lines[i])) break;
+  }
+
+  return -1;
+}
+
+function parseAmericanForPinnacleFallback(value) {
+  const text = normalizeLine(value).toUpperCase();
+  if (text === "EVEN") return 100;
+  if (!/^[+-]\d+$/.test(text)) return null;
+
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function scorePinnacleFallbackMainLineOdds(a, b) {
+  const aa = Number(a);
+  const bb = Number(b);
+
+  if (!Number.isFinite(aa) || !Number.isFinite(bb)) return 9999;
+
+  return Math.abs(Math.abs(aa) - 110) + Math.abs(Math.abs(bb) - 110);
+}
+
 function parsePinnacleLandingGames(lines) {
   const rows = [];
   let slateMode = "";
@@ -175,7 +575,7 @@ function parsePinnacleLandingGames(lines) {
  
 function isPinnacleNavigationOrJunkTeamName(value) {
   const text = normalizeLine(value).toLowerCase();
- 
+
   return (
     !text ||
     text === "mlb" ||
@@ -184,6 +584,12 @@ function isPinnacleNavigationOrJunkTeamName(value) {
     text === "game" ||
     text === "live" ||
     text === "tomorrow" ||
+    text === "hide all" ||
+    text === "show all" ||
+    text === "show less" ||
+    text === "see more" ||
+    text === "see less" ||
+    /^allgame/i.test(text) ||
     /^game1st/i.test(text) ||
     /^game\s*1st/i.test(text) ||
     /team totals/i.test(text) ||
@@ -209,7 +615,9 @@ function findPinnacleDetailPageGame(lines) {
       looksLikeAtOrVsMatchup(maybeMatchup) &&
       looksLikeDateTimeLine(dateLine) &&
       looksLikeTeamName(away) &&
-      looksLikeTeamName(home)
+      looksLikeTeamName(home) &&
+      !isPinnacleNavigationOrJunkTeamName(away) &&
+      !isPinnacleNavigationOrJunkTeamName(home)
     ) {
       return {
         sport: inferSportFromText(`${maybeSport} ${maybeLeague}`),
@@ -223,7 +631,9 @@ function findPinnacleDetailPageGame(lines) {
     if (
       looksLikeDateTimeLine(maybeSport) &&
       looksLikeTeamName(maybeLeague) &&
-      looksLikeTeamName(maybeMatchup)
+      looksLikeTeamName(maybeMatchup) &&
+      !isPinnacleNavigationOrJunkTeamName(maybeLeague) &&
+      !isPinnacleNavigationOrJunkTeamName(maybeMatchup)
     ) {
       return {
         sport: inferSportFromText(`${maybeLeague} ${maybeMatchup}`),
@@ -255,7 +665,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
   for (let i = startIndex; i < lines.length; i += 1) {
     const line = normalizeLine(lines[i]);
  
-    if (/^Money Line\s*[–â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^(Money Line|Moneyline|Match Result|Full Time Result|Full-Time Result|3-Way Moneyline|Three Way Moneyline)\s*(?:[–â€“-]\s*(Match|Game|OT Included))?$/i.test(line)) {
       const parsed = parseMoneyLineSection(lines, i + 1, away, home);
       if (parsed) {
         result.mlAwayDec = parsed.awayDec;
@@ -265,7 +675,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
  
-    if (/^Handicap\s*[–â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^(Handicap|Spread)\s*(?:[–â€“-]\s*(Match|Game|OT Included))?$/i.test(line)) {
       const parsed = parseHandicapSection(lines, i + 1, away, home);
       if (parsed) {
         result.spreadAwayLine = parsed.awayLine;
@@ -276,7 +686,7 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
       continue;
     }
  
-    if (/^Total\s*[–â€“-]\s*(Match|Game|OT Included)$/i.test(line)) {
+    if (/^(Total|Total Goals)\s*(?:[–â€“-]\s*(Match|Game|OT Included))?$/i.test(line)) {
       const parsed = parseTotalSection(lines, i + 1);
       if (parsed) {
         result.totalLine = parsed.totalLine;
@@ -291,7 +701,256 @@ function parsePinnacleDetailMarkets(lines, startIndex, away, home) {
  
   return result;
 }
- 
+
+function parsePinnacleSoccerCornerMarkets(lines, startIndex, { event, away, home, sport, league } = {}) {
+  const rows = [];
+
+  const sportKey = String(sport || "").trim().toUpperCase();
+  const leagueText = String(league || "");
+  const pageText = lines.slice(0, 120).join(" ");
+
+  const looksSoccer =
+    sportKey === "SOCCER" ||
+    /\b(Soccer|World Cup|FIFA|International Friendlies|UEFA|CONCACAF|CONMEBOL)\b/i.test(`${leagueText} ${pageText}`);
+
+  if (!looksSoccer) return rows;
+
+  function stripCornerTeamLabel(value = "") {
+    return normalizeLine(value).replace(/\s*\(Corners\)\s*$/i, "");
+  }
+
+  function isDisplayControl(value = "") {
+    return /^(Show All|Hide All|Show Less|See more|See less)$/i.test(normalizeLine(value));
+  }
+
+  function parseCornerTotalLabel(value = "") {
+    const text = normalizeLine(value);
+    const match = text.match(/^(Over|Under)\s+(\d+(?:\.\d+)?)\s+Corners?$/i);
+    if (!match) return null;
+
+    return {
+      side: /^Over$/i.test(match[1]) ? "Over" : "Under",
+      lineValue: Number(match[2]),
+    };
+  }
+
+  function findHeader(pattern, fromIndex = startIndex) {
+    for (let i = Math.max(0, fromIndex); i < lines.length; i += 1) {
+      const line = normalizeLine(lines[i]);
+      if (pattern.test(line)) return i;
+      if (isHardStopLine(line)) break;
+    }
+
+    return -1;
+  }
+
+  // Money Line (Corners)Match
+  const cornerMoneyIdx = findHeader(/^Money Line \(Corners\)\s*Match$/i);
+  if (cornerMoneyIdx !== -1) {
+    const end = findSectionEnd(lines, cornerMoneyIdx + 1);
+    let awayDec = null;
+    let drawDec = null;
+    let homeDec = null;
+
+    for (let i = cornerMoneyIdx + 1; i < end - 1; i += 1) {
+      const label = normalizeLine(lines[i]);
+      if (isDisplayControl(label)) continue;
+
+      const cleanLabel = stripCornerTeamLabel(label);
+      const dec = parseDecimal(lines[i + 1]);
+      if (dec === null) continue;
+
+      if (sameText(cleanLabel, away)) awayDec = dec;
+      if (/^Draw$/i.test(cleanLabel)) drawDec = dec;
+      if (sameText(cleanLabel, home)) homeDec = dec;
+    }
+
+    if (awayDec !== null) rows.push(makeRow({ event, selection: away, marketType: "corner_moneyline_3way", lineValue: null, decimalOdds: awayDec, sport, league }));
+    if (drawDec !== null) rows.push(makeRow({ event, selection: "Draw", marketType: "corner_moneyline_3way", lineValue: null, decimalOdds: drawDec, sport, league }));
+    if (homeDec !== null) rows.push(makeRow({ event, selection: home, marketType: "corner_moneyline_3way", lineValue: null, decimalOdds: homeDec, sport, league }));
+  }
+
+  // Handicap (Corners)Match
+  const cornerHandicapIdx = findHeader(/^Handicap \(Corners\)\s*Match$/i);
+  if (cornerHandicapIdx !== -1) {
+    const end = findSectionEnd(lines, cornerHandicapIdx + 1);
+
+    for (let i = cornerHandicapIdx + 1; i < end - 3; i += 1) {
+      if (isDisplayControl(lines[i])) continue;
+
+      const awayLine = parseSignedNumber(lines[i]);
+      const awayDec = parseDecimal(lines[i + 1]);
+      const homeLine = parseSignedNumber(lines[i + 2]);
+      const homeDec = parseDecimal(lines[i + 3]);
+
+      if (awayLine !== null && awayDec !== null && homeLine !== null && homeDec !== null) {
+        rows.push(makeRow({ event, selection: away, marketType: "corner_spread", lineValue: awayLine, decimalOdds: awayDec, sport, league }));
+        rows.push(makeRow({ event, selection: home, marketType: "corner_spread", lineValue: homeLine, decimalOdds: homeDec, sport, league }));
+        break;
+      }
+    }
+  }
+
+  // Total (Corners)Match
+  const cornerTotalIdx = findHeader(/^Total \(Corners\)\s*Match$/i);
+  if (cornerTotalIdx !== -1) {
+    const end = findSectionEnd(lines, cornerTotalIdx + 1);
+
+    for (let i = cornerTotalIdx + 1; i < end - 3; i += 1) {
+      if (isDisplayControl(lines[i])) continue;
+
+      const first = parseCornerTotalLabel(lines[i]);
+      const firstDec = parseDecimal(lines[i + 1]);
+      const second = parseCornerTotalLabel(lines[i + 2]);
+      const secondDec = parseDecimal(lines[i + 3]);
+
+      if (
+        first &&
+        second &&
+        firstDec !== null &&
+        secondDec !== null &&
+        first.side === "Over" &&
+        second.side === "Under" &&
+        Math.abs(first.lineValue - second.lineValue) < 0.0001
+      ) {
+        rows.push(makeRow({ event, selection: "Over", marketType: "corner_total", lineValue: first.lineValue, decimalOdds: firstDec, sport, league }));
+        rows.push(makeRow({ event, selection: "Under", marketType: "corner_total", lineValue: second.lineValue, decimalOdds: secondDec, sport, league }));
+        break;
+      }
+    }
+  }
+
+  // Team Total (Corners)Match — useful later if DraftKings exposes team corners.
+  const teamCornerTotalIdx = findHeader(/^Team Total \(Corners\)\s*Match$/i);
+  if (teamCornerTotalIdx !== -1) {
+    const end = findSectionEnd(lines, teamCornerTotalIdx + 1);
+    const pairs = [];
+
+    for (let i = teamCornerTotalIdx + 1; i < end - 1; i += 1) {
+      if (isDisplayControl(lines[i])) continue;
+
+      const overMatch = normalizeLine(lines[i]).match(/^Over\s+(\d+(?:\.\d+)?)$/i);
+      const underMatch = normalizeLine(lines[i + 2] || "").match(/^Under\s+(\d+(?:\.\d+)?)$/i);
+      const overDec = parseDecimal(lines[i + 1]);
+      const underDec = parseDecimal(lines[i + 3]);
+
+      if (
+        overMatch &&
+        underMatch &&
+        overDec !== null &&
+        underDec !== null &&
+        Math.abs(Number(overMatch[1]) - Number(underMatch[1])) < 0.0001
+      ) {
+        pairs.push({ lineValue: Number(overMatch[1]), overDec, underDec });
+        i += 3;
+      }
+    }
+
+    if (pairs[0]) {
+      rows.push(makeRow({ event, selection: `${away} Over`, marketType: "team_corner_total", lineValue: pairs[0].lineValue, decimalOdds: pairs[0].overDec, sport, league }));
+      rows.push(makeRow({ event, selection: `${away} Under`, marketType: "team_corner_total", lineValue: pairs[0].lineValue, decimalOdds: pairs[0].underDec, sport, league }));
+    }
+
+    if (pairs[1]) {
+      rows.push(makeRow({ event, selection: `${home} Over`, marketType: "team_corner_total", lineValue: pairs[1].lineValue, decimalOdds: pairs[1].overDec, sport, league }));
+      rows.push(makeRow({ event, selection: `${home} Under`, marketType: "team_corner_total", lineValue: pairs[1].lineValue, decimalOdds: pairs[1].underDec, sport, league }));
+    }
+  }
+
+  return dedupeRows(rows);
+}
+
+function parsePinnacleSoccerSpecialMarkets(lines, startIndex, { event, away, home, sport, league } = {}) {
+  const rows = [];
+
+  const sportKey = String(sport || "").trim().toUpperCase();
+  const pageText = lines.slice(0, 160).join(" ");
+
+  const looksSoccer =
+    sportKey === "SOCCER" ||
+    /\b(Soccer|World Cup|FIFA|International Friendlies|UEFA|CONCACAF|CONMEBOL)\b/i.test(pageText);
+
+  if (!looksSoccer) return rows;
+
+  function isDisplayControl(value = "") {
+    return /^(Show All|Hide All|Show Less|See more|See less)$/i.test(normalizeLine(value));
+  }
+
+  function findHeader(pattern, fromIndex = startIndex) {
+    for (let i = Math.max(0, fromIndex); i < lines.length; i += 1) {
+      const line = normalizeLine(lines[i]);
+      if (pattern.test(line)) return i;
+      if (isHardStopLine(line)) break;
+    }
+
+    return -1;
+  }
+
+  function normalizeDoubleChanceSelection(value = "") {
+    return normalizeLine(value).replace(/\s+or\s+/gi, " Or ");
+  }
+
+  // Both Teams To Score? — full match only.
+  const bttsIdx = findHeader(/^Both Teams To Score\??$/i);
+  if (bttsIdx !== -1) {
+    const end = findSectionEnd(lines, bttsIdx + 1);
+
+    for (let i = bttsIdx + 1; i < end - 1; i += 1) {
+      const label = normalizeLine(lines[i]);
+      if (isDisplayControl(label)) continue;
+      if (!/^(Yes|No)$/i.test(label)) continue;
+
+      const dec = parseDecimal(lines[i + 1]);
+      if (dec === null) continue;
+
+      rows.push(
+        makeRow({
+          event,
+          selection: /^Yes$/i.test(label) ? "Yes" : "No",
+          marketType: "both_teams_to_score",
+          lineValue: null,
+          decimalOdds: dec,
+          sport,
+          league,
+        })
+      );
+
+      i += 1;
+    }
+  }
+
+  // Double Chance — full match only.
+  const doubleChanceIdx = findHeader(/^Double Chance$/i);
+  if (doubleChanceIdx !== -1) {
+    const end = findSectionEnd(lines, doubleChanceIdx + 1);
+
+    for (let i = doubleChanceIdx + 1; i < end - 1; i += 1) {
+      const label = normalizeDoubleChanceSelection(lines[i]);
+      if (isDisplayControl(label)) continue;
+      if (!/\bOr\b/i.test(label)) continue;
+
+      const dec = parseDecimal(lines[i + 1]);
+      if (dec === null) continue;
+
+      rows.push(
+        makeRow({
+          event,
+          selection: label,
+          marketType: "double_chance",
+          lineValue: null,
+          decimalOdds: dec,
+          sport,
+          league,
+        })
+      );
+
+      i += 1;
+    }
+  }
+
+  return rows;
+}
+
 function parsePinnaclePlayerProps(lines, startIndex, { event, sport, league }) {
   const rows = [];
  
@@ -547,7 +1206,7 @@ function parseAllHandicapRows(lines, startIndex, { event, away, home, sport, lea
   for (let i = startIndex; i < end - 3; i += 1) {
     const current = normalizeLine(lines[i]);
  
-    if (/^(Show All|Hide All|See more)$/i.test(current)) continue;
+    if (/^(Show All|Hide All|Show Less|See more|See less)$/i.test(current)) continue;
  
     const awayLine = parseSpreadLineToken(lines[i]);
     const awayDec = parseDecimal(lines[i + 1]);
@@ -598,7 +1257,7 @@ function parseAllTotalRows(lines, startIndex, { event, sport, league }) {
   for (let i = startIndex; i < end - 3; i += 1) {
     const current = normalizeLine(lines[i]);
  
-    if (/^(Show All|Hide All|See more)$/i.test(current)) continue;
+    if (/^(Show All|Hide All|Show Less|See more|See less)$/i.test(current)) continue;
  
     // Format:
     // Over 8
@@ -730,7 +1389,7 @@ function parseMoneyLineSection(lines, startIndex, away, home) {
   for (let i = startIndex; i < end - 1; i += 1) {
     const label = normalizeLine(lines[i]);
     const next = normalizeLine(lines[i + 1]);
-    if (/^(Show All|Hide All|See more)$/i.test(label)) continue;
+    if (/^(Show All|Hide All|Show Less|See more|See less)$/i.test(label)) continue;
  
     if (sameText(label, away) && parseDecimal(next) !== null) awayDec = parseDecimal(next);
     if (/^draw$/i.test(label) && parseDecimal(next) !== null) drawDec = parseDecimal(next);
@@ -1084,7 +1743,10 @@ function makeRow({ event, selection, marketType, lineValue, decimalOdds, sport, 
 function inferSportFromText(text = "") {
   const value = String(text).toLowerCase();
  
-  if (/soccer|serie a|premier league|internazionale|cagliari|arsenal|chelsea|tottenham|liverpool|man city|man utd/i.test(value)) {
+  if (
+    /soccer|world cup|fifa|international friendlies|uefa|concacaf|conmebol|serie a|premier league|internazionale|cagliari|arsenal|chelsea|tottenham|liverpool|man city|man utd/i.test(value) ||
+    /\b(united states|usa|mexico|canada|england|france|germany|spain|italy|portugal|netherlands|belgium|brazil|argentina|uruguay|colombia|croatia|switzerland|denmark|poland|japan|south korea|australia|morocco|senegal|cameroon|ghana|egypt|nigeria|turkiye|turkey|qatar|iran|iraq|saudi arabia|panama|jamaica|costa rica|ecuador|paraguay|peru|chile|new zealand|south africa)\b/i.test(value)
+  ) {
     return "SOCCER";
   }
  
@@ -1098,6 +1760,10 @@ function inferSportFromText(text = "") {
     return "NHL";
   }
  
+  if (/wnba|dream|chicago sky|connecticut sun|dallas wings|golden state valkyries|valkyries|indiana fever|las vegas aces|los angeles sparks|minnesota lynx|new york liberty|phoenix mercury|portland fire|seattle storm|toronto tempo|washington mystics/i.test(value)) {
+    return "WNBA";
+  }
+
   if (/heat|hornets|magic|warriors|suns|knicks|hawks|lakers|rockets|celtics|76ers|spurs|trail blazers|nuggets|timberwolves|cavaliers|raptors|bulls|pacers|bucks|pistons|clippers|sacramento kings|mavericks|nets|pelicans|thunder|jazz|wizards|nba|basketball/i.test(value)) {
     return "NBA";
   }
@@ -1124,7 +1790,12 @@ function looksLikeSportLine(value) {
  
 function looksLikeLeagueOrCompetitionLine(value) {
   const text = normalizeLine(value);
-  return /^(NBA|NHL|MLB|NFL|Serie A|Premier League|La Liga|Bundesliga|Ligue 1)$/i.test(text) || / - /i.test(text);
+
+  return (
+    /^(NBA|WNBA|NHL|MLB|NFL|Serie A|Premier League|La Liga|Bundesliga|Ligue 1)$/i.test(text) ||
+    /^(World Cup|World Cup 2026|FIFA World Cup|FIFA World Cup 2026|International Friendlies|International Friendlies \(M\)|International Friendlies \(W\)|World Cup Quals\.?|World Cup Quals\. - UEFA|World Cup Quals\. - CONCACAF|World Cup Quals\. - CONMEBOL|UEFA Nations League|CONCACAF Gold Cup|Copa America)$/i.test(text) ||
+    / - /i.test(text)
+  );
 }
  
 function looksLikeAtOrVsMatchup(value) {
@@ -1147,7 +1818,9 @@ function looksLikeTeamName(value) {
   if (
     /\b(today|tomorrow|yesterday)\b/i.test(text) ||
     /\b\d+\s+day\b/i.test(text) ||
-    /\b(mon|tue|wed|thu|fri|sat|sun)\b/i.test(text) ||
+     /^(mon|tue|wed|thu|fri|sat)(?:day)?$/i.test(text) ||
+    /^(mon|tue|wed|thu|fri|sat|sun)(?:day)?,?\s+/i.test(text) ||
+    /^sunday$/i.test(text) ||
     /\d{1,2}:\d{2}/.test(text) ||
     /\b(am|pm)\b/i.test(text)
   ) {
@@ -1155,7 +1828,7 @@ function looksLikeTeamName(value) {
   }
  
   if (
-    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|espaÃ±ol|suomi|franÃ§ais|italian|æ—¥æœ¬èªž|í•œêµ­ì–´|portuguÃªs|Ñ€ÑƒÑÑÐºÐ¸Ð¹|svenska|ç®€ä½“ä¸­æ–‡|ç¹é«”ä¸­æ–‡|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|see more|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss|live|series prices|over|under)$/i.test(
+    /^(join|log in|sports betting|live centre|casino|live casino|virtual sports|betting resources|help|language|english \(en\)|espaÃ±ol|suomi|franÃ§ais|italian|æ—¥æœ¬èªž|í•œêµ­ì–´|portuguÃªs|Ñ€ÑƒÑÑÐºÐ¸Ð¹|svenska|ç®€ä½“ä¸­æ–‡|ç¹é«”ä¸­æ–‡|odds format|decimal odds|american odds|welcome to pinnacle|accept|sports|search|soccer|basketball|baseball|football|tennis|hockey|esports|all|match|1st half|corners|team props|show all|hide all|show less|see more|see less|popular|featured|back to top|about pinnacle|corporate|press|affiliates|why pinnacle\?|policies|responsible gaming|terms & conditions|privacy policy|cookie policy|help & support|contact us|betting rules|bets offered|help|sitemap|payment options|social|x|youtube|facebook|linkedin|reddit|spotify|apple podcasts|bet slip|dismiss|live|series prices|over|under)$/i.test(
       text
     )
   ) {
@@ -1174,7 +1847,7 @@ function isHardStopLine(value) {
 }
  
 function isSectionHeader(line) {
-  return /^(Money Line|Handicap|Total|Team Total|Both Teams To Score|Draw No Bet|Correct Score|Half-Time\/Full-Time|First Team To Score|Exact Total Goals|Winning Margin|Winner\/Total|Points Odd\/Even|Runs Odd\/Even|Total Points Odd\/Even)/i.test(normalizeLine(line));
+  return /^(Money Line|Moneyline|Match Result|Full Time Result|Full-Time Result|3-Way Moneyline|Three Way Moneyline|Handicap|Spread|Total|Total Goals|Team Total|Both Teams To Score|Draw No Bet|Correct Score|Half-Time\/Full-Time|First Team To Score|Exact Total Goals|Winning Margin|Winner\/Total|Points Odd\/Even|Runs Odd\/Even|Total Points Odd\/Even)/i.test(normalizeLine(line));
 }
  
 function parseDecimal(value) {

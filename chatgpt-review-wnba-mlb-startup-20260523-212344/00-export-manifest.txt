@@ -1,0 +1,22 @@
+﻿
+Name                                                           Length
+----                                                           ------
+00-export-manifest.txt                                              0
+00-missing-files.txt                                               71
+app__ev-parlay-lab__components__ExtractionGuide.js.txt           5050
+app__ev-parlay-lab__components__ImportPanel.js.txt               8074
+app__ev-parlay-lab__data__extractionGuides.js.txt                4299
+app__ev-parlay-lab__data__teamAliases.js.txt                    34133
+app__ev-parlay-lab__utils__marketNormalization.js.txt            6446
+app__ev-parlay-lab__utils__matchMarkets.js.txt                   8972
+app__ev-parlay-lab__utils__normalizeTeams.js.txt                10898
+app__ev-parlay-lab__utils__parseOddsText.js.txt                  2991
+app__ev-parlay-lab__utils__parsers__parseBetMGMText.js.txt      56209
+app__ev-parlay-lab__utils__parsers__parseDraftKingsText.js.txt  30796
+app__ev-parlay-lab__utils__parsers__parseFanDuelText.js.txt     47875
+app__ev-parlay-lab__utils__parsers__parsePinnacleText.js.txt    40556
+app__ev-parlay-lab__utils__parsers__parseTheScoreText.js.txt    37159
+ev-parlay-extension__background.js.txt                         199819
+
+
+

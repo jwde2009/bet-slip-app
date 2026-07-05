@@ -1,0 +1,758 @@
+--- a/app/ev-parlay-lab/components/ImportPanel.js
++++ b/app/ev-parlay-lab/components/ImportPanel.js
+@@ -33,26 +33,99 @@
+   importMode = "append",
+   setImportMode,
+   defaultCollapsed = true,
++  ladderHelperEvents = [],
+ }) {
++  const safeLadderEvents = Array.isArray(ladderHelperEvents) ? ladderHelperEvents : [];
++  const defaultBetMgmLadderEvent = safeLadderEvents[0]?.eventName || "";
+   const [betMgmLadderEvent, setBetMgmLadderEvent] = useState("");
+-  const [betMgmLadderMarket, setBetMgmLadderMarket] = useState("Player points");
+-  const [betMgmLadderThreshold, setBetMgmLadderThreshold] = useState("1+");
+-
+-  function insertBetMgmLadderMarker() {
+-    const event = String(betMgmLadderEvent || "").trim();
+-    const market = String(betMgmLadderMarket || "").trim();
+-    const threshold = String(betMgmLadderThreshold || "").trim();
+-
+-    if (!event || !market || !threshold) {
+-      window.alert("Enter event, market, and threshold before inserting the BetMGM ladder marker.");
+-      return;
++  const [betMgmThresholds, setBetMgmThresholds] = useState({
++    player_points: "",
++    player_assists: "",
++    player_rebounds: "",
++    player_threes: "",
++  });
++  const [betMgmComboLines, setBetMgmComboLines] = useState([
++    { marketType: "player_pra", threshold: "" },
++  ]);
++
++  const resolvedBetMgmLadderEvent = betMgmLadderEvent || defaultBetMgmLadderEvent;
++
++  function updateBetMgmThreshold(marketType, threshold) {
++    setBetMgmThresholds((prev) => ({
++      ...prev,
++      [marketType]: threshold,
++    }));
++  }
++
++  function updateBetMgmComboLine(index, patch) {
++    setBetMgmComboLines((prev) =>
++      prev.map((line, lineIndex) =>
++        lineIndex === index ? { ...line, ...patch } : line
++      )
++    );
++  }
++
++  function addBetMgmComboLine() {
++    setBetMgmComboLines((prev) => [
++      ...prev,
++      { marketType: "player_points_rebounds", threshold: "" },
++    ]);
++  }
++
++  function buildBetMgmThresholdConfigLines() {
++    const event = String(resolvedBetMgmLadderEvent || "").trim();
++
++    if (!event) {
++      window.alert("Choose an event before adding BetMGM thresholds.");
++      return [];
+     }
+ 
+-    const marker = `BETMGM_MANUAL_LADDER_CAPTURE: sport=WNBA | event=${event} | market=${market} | threshold=${threshold}`;
++    const configRows = [];
++
++    for (const market of BETMGM_PRIMARY_LADDER_MARKETS) {
++      const threshold = String(betMgmThresholds[market.marketType] || "").trim();
++      if (!threshold) continue;
++
++      configRows.push(
++        `sport=WNBA | event=${event} | market=${market.marketType} | threshold=${threshold}`
++      );
++    }
++
++    for (const comboLine of betMgmComboLines) {
++      const marketType = String(comboLine.marketType || "").trim();
++      const threshold = String(comboLine.threshold || "").trim();
++
++      if (!marketType || !threshold) continue;
++
++      configRows.push(
++        `sport=WNBA | event=${event} | market=${marketType} | threshold=${threshold}`
++      );
++    }
++
++    if (!configRows.length) {
++      window.alert("Choose at least one threshold before adding BetMGM thresholds.");
++      return [];
++    }
++
++    return [
++      "BETMGM_LADDER_THRESHOLDS_START",
++      ...configRows,
++      "BETMGM_LADDER_THRESHOLDS_END",
++    ];
++  }
++
++  function insertBetMgmLadderThresholdConfig() {
++    const configLines = buildBetMgmThresholdConfigLines();
++    if (!configLines.length) return;
++
+     const current = String(rawText || "");
+-    const nextText = current.trim()
+-      ? `${current.trim()}\n\n${marker}\n`
+-      : `${marker}\n`;
++    const withoutOldConfig = current
++      .replace(/\n?BETMGM_LADDER_THRESHOLDS_START[\s\S]*?BETMGM_LADDER_THRESHOLDS_END\n?/gi, "\n")
++      .trim();
++
++    const nextText = withoutOldConfig
++      ? `${configLines.join("\n")}\n\n${withoutOldConfig}`
++      : `${configLines.join("\n")}\n`;
+ 
+     setRawText(nextText);
+   }
+@@ -109,53 +182,97 @@
+       </div>
+ 
+       <div style={betMgmLadderHelperStyle}>
+-        <div style={betMgmLadderTitleStyle}>BetMGM Manual Ladder Helper</div>
++        <div style={betMgmLadderTitleStyle}>BetMGM WNBA Ladder Threshold Helper</div>
+         <div style={betMgmLadderSubtleStyle}>
+-          Use this when BetMGM shows ladder-only WNBA props. Insert a marker, then paste the ladder text below it.
++          Use this when BetMGM shows ladder-only WNBA props. Pick the event and active thresholds, then add the config to the top of the raw input before parsing.
+         </div>
+ 
+         <div style={betMgmLadderGridStyle}>
+           <label style={fieldStyle}>
+             <span style={fieldLabelStyle}>Event</span>
+-            <input
+-              value={betMgmLadderEvent}
++            <select
++              value={resolvedBetMgmLadderEvent}
+               onChange={(event) => setBetMgmLadderEvent(event.target.value)}
+-              placeholder="Connecticut Sun @ Chicago Sky"
+-              style={inputStyle}
+-            />
+-          </label>
+-
+-          <label style={fieldStyle}>
+-            <span style={fieldLabelStyle}>Market</span>
+-            <select
+-              value={betMgmLadderMarket}
+-              onChange={(event) => setBetMgmLadderMarket(event.target.value)}
+               style={inputStyle}
+             >
+-              <option value="Player points">Player points</option>
+-              <option value="Player rebounds">Player rebounds</option>
+-              <option value="Player assists">Player assists</option>
+-              <option value="Player three-pointers">Player three-pointers</option>
+-              <option value="Player points + rebounds + assists">Player points + rebounds + assists</option>
+-              <option value="Player points + rebounds">Player points + rebounds</option>
+-              <option value="Player points + assists">Player points + assists</option>
+-              <option value="Player rebounds + assists">Player rebounds + assists</option>
++              {safeLadderEvents.length ? (
++                safeLadderEvents.map((eventOption) => (
++                  <option key={eventOption.eventName} value={eventOption.eventName}>
++                    {eventOption.eventName}
++                  </option>
++                ))
++              ) : (
++                <option value="">Load FanDuel/Pinnacle/BetMGM main lines first</option>
++              )}
+             </select>
+           </label>
+ 
+-          <label style={fieldStyle}>
+-            <span style={fieldLabelStyle}>Active Threshold</span>
+-            <input
+-              value={betMgmLadderThreshold}
+-              onChange={(event) => setBetMgmLadderThreshold(event.target.value)}
+-              placeholder="1+, 2+, 10+, etc."
+-              style={inputStyle}
+-            />
+-          </label>
+-
+-          <button type="button" onClick={insertBetMgmLadderMarker} style={secondaryButtonStyle}>
+-            Insert BetMGM Ladder Marker
+-          </button>
++          {BETMGM_PRIMARY_LADDER_MARKETS.map((market) => (
++            <label key={market.marketType} style={fieldStyle}>
++              <span style={fieldLabelStyle}>{market.label}</span>
++              <select
++                value={betMgmThresholds[market.marketType] || ""}
++                onChange={(event) => updateBetMgmThreshold(market.marketType, event.target.value)}
++                style={inputStyle}
++              >
++                <option value="">Skip</option>
++                {BETMGM_LADDER_THRESHOLD_OPTIONS.map((threshold) => (
++                  <option key={`${market.marketType}_${threshold}`} value={threshold}>
++                    {threshold}
++                  </option>
++                ))}
++              </select>
++            </label>
++          ))}
++        </div>
++
++        <div style={comboHelperStyle}>
++          <div style={comboHelperTitleStyle}>Combos</div>
++
++          {betMgmComboLines.map((comboLine, index) => (
++            <div key={`betmgm_combo_${index}`} style={comboLineStyle}>
++              <label style={fieldStyle}>
++                <span style={fieldLabelStyle}>Combo market</span>
++                <select
++                  value={comboLine.marketType}
++                  onChange={(event) => updateBetMgmComboLine(index, { marketType: event.target.value })}
++                  style={inputStyle}
++                >
++                  {BETMGM_COMBO_LADDER_MARKETS.map((market) => (
++                    <option key={market.marketType} value={market.marketType}>
++                      {market.label}
++                    </option>
++                  ))}
++                </select>
++              </label>
++
++              <label style={fieldStyle}>
++                <span style={fieldLabelStyle}>Value</span>
++                <select
++                  value={comboLine.threshold}
++                  onChange={(event) => updateBetMgmComboLine(index, { threshold: event.target.value })}
++                  style={inputStyle}
++                >
++                  <option value="">Skip</option>
++                  {BETMGM_LADDER_THRESHOLD_OPTIONS.map((threshold) => (
++                    <option key={`combo_${index}_${threshold}`} value={threshold}>
++                      {threshold}
++                    </option>
++                  ))}
++                </select>
++              </label>
++            </div>
++          ))}
++
++          <div style={betMgmLadderButtonRowStyle}>
++            <button type="button" onClick={addBetMgmComboLine} style={secondaryButtonStyle}>
++              Add another combo line
++            </button>
++
++            <button type="button" onClick={insertBetMgmLadderThresholdConfig} style={primaryActionButtonStyle}>
++              Add thresholds
++            </button>
++          </div>
+         </div>
+       </div>
+ 
+@@ -249,6 +366,23 @@
+   );
+ }
+ 
++
++const BETMGM_PRIMARY_LADDER_MARKETS = [
++  { marketType: "player_points", label: "Points" },
++  { marketType: "player_assists", label: "Assists" },
++  { marketType: "player_rebounds", label: "Rebounds" },
++  { marketType: "player_threes", label: "3-Pointers" },
++];
++
++const BETMGM_COMBO_LADDER_MARKETS = [
++  { marketType: "player_pra", label: "Points + Rebounds + Assists" },
++  { marketType: "player_points_rebounds", label: "Points + Rebounds" },
++  { marketType: "player_points_assists", label: "Points + Assists" },
++  { marketType: "player_rebounds_assists", label: "Rebounds + Assists" },
++];
++
++const BETMGM_LADDER_THRESHOLD_OPTIONS = Array.from({ length: 40 }, (_, index) => `${index + 1}+`);
++
+ const sectionStyle = {
+   background: "#f0fdf4",
+   border: "2px solid #166534",
+@@ -442,3 +576,38 @@
+   gap: 10,
+   alignItems: "end",
+ };
++
++
++const comboHelperStyle = {
++  marginTop: 12,
++  display: "grid",
++  gap: 10,
++};
++
++const comboHelperTitleStyle = {
++  fontSize: 12,
++  fontWeight: 900,
++  color: "#7c2d12",
++  textTransform: "uppercase",
++  letterSpacing: "0.04em",
++};
++
++const comboLineStyle = {
++  display: "grid",
++  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
++  gap: 10,
++};
++
++const betMgmLadderButtonRowStyle = {
++  display: "flex",
++  gap: 10,
++  flexWrap: "wrap",
++  alignItems: "center",
++};
++
++const primaryActionButtonStyle = {
++  ...secondaryButtonStyle,
++  background: "#7c2d12",
++  borderColor: "#7c2d12",
++  color: "white",
++};
+
+--- a/app/ev-parlay-lab/page.js
++++ b/app/ev-parlay-lab/page.js
+@@ -853,6 +853,51 @@
+   }
+ 
+   return bets.sort((a, b) => b.evPct - a.evPct).slice(0, 12);
++}
++
++
++function buildBetMgmLadderHelperEvents(rows = []) {
++  const eventMap = new Map();
++
++  for (const row of rows || []) {
++    if (!row || row.excluded) continue;
++
++    const sport = String(row.sport || row.league || "").trim().toUpperCase();
++    if (sport && sport !== "WNBA") continue;
++
++    const eventName = [
++      row.awayTeam || row.awayTeamRaw || "",
++      row.homeTeam || row.homeTeamRaw || "",
++    ]
++      .filter(Boolean)
++      .join(" @ ") || String(row.eventLabelRaw || "").trim();
++
++    if (!eventName) continue;
++
++    const key = eventName.toLowerCase();
++
++    if (!eventMap.has(key)) {
++      eventMap.set(key, {
++        eventName,
++        rowCount: 0,
++        books: new Set(),
++      });
++    }
++
++    const eventRecord = eventMap.get(key);
++    eventRecord.rowCount += 1;
++
++    const book = String(row.sportsbook || row.bookmaker || "").trim();
++    if (book) eventRecord.books.add(book);
++  }
++
++  return Array.from(eventMap.values())
++    .sort((a, b) => b.rowCount - a.rowCount || a.eventName.localeCompare(b.eventName))
++    .map((eventRecord) => ({
++      eventName: eventRecord.eventName,
++      rowCount: eventRecord.rowCount,
++      books: Array.from(eventRecord.books),
++    }));
+ }
+ 
+ function buildCoverageWarnings(rows = []) {
+@@ -2454,6 +2499,7 @@
+           onClearSavedSession={handleClearSavedSession}
+           importMode={importMode}
+           setImportMode={setImportMode}
++          ladderHelperEvents={buildBetMgmLadderHelperEvents(rows)}
+           defaultCollapsed
+         />
+ 
+
+--- a/app/ev-parlay-lab/utils/parsers/parseBetMGMText.js
++++ b/app/ev-parlay-lab/utils/parsers/parseBetMGMText.js
+@@ -1131,6 +1131,14 @@
+   const rows = [];
+   const resolvedSport = String(sport || "").trim().toUpperCase() || "WNBA";
+ 
++  const configuredThresholds = parseBetMgmLadderThresholdConfig(lines, resolvedSport);
++
++  if (configuredThresholds.length) {
++    rows.push(...parseBetMgmConfiguredLadderSections(lines, configuredThresholds, resolvedSport));
++  }
++
++  // Backward-compatible support for the older one-marker workflow.
++  // The new preferred workflow is BETMGM_LADDER_THRESHOLDS_START/END at the top of the input.
+   for (let idx = 0; idx < lines.length; idx += 1) {
+     const marker = normalizeLine(lines[idx]);
+     if (!/^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(marker)) continue;
+@@ -1169,6 +1177,92 @@
+   return rows;
+ }
+ 
++function parseBetMgmLadderThresholdConfig(lines, fallbackSport) {
++  const configs = [];
++  let insideConfig = false;
++
++  for (const rawLine of lines || []) {
++    const line = normalizeLine(rawLine);
++
++    if (/^BETMGM_LADDER_THRESHOLDS_START$/i.test(line)) {
++      insideConfig = true;
++      continue;
++    }
++
++    if (/^BETMGM_LADDER_THRESHOLDS_END$/i.test(line)) {
++      insideConfig = false;
++      continue;
++    }
++
++    if (!insideConfig) continue;
++
++    const meta = parseBetMgmManualLadderMarker(line);
++
++    if (!meta.event || !meta.marketType || meta.threshold === null) continue;
++
++    configs.push({
++      sport: meta.sport || String(fallbackSport || "WNBA").trim().toUpperCase(),
++      event: meta.event,
++      marketType: meta.marketType,
++      threshold: meta.threshold,
++    });
++  }
++
++  return configs;
++}
++
++function parseBetMgmConfiguredLadderSections(lines, configs, fallbackSport) {
++  const rows = [];
++  const configByMarket = new Map();
++
++  for (const config of configs || []) {
++    if (!config?.marketType || config.threshold === null) continue;
++
++    // One pasted BetMGM WNBA event is expected. If duplicate market configs are present,
++    // use the latest one so the helper can replace prior choices.
++    configByMarket.set(config.marketType, config);
++  }
++
++  if (!configByMarket.size) return rows;
++
++  for (let idx = 0; idx < lines.length; idx += 1) {
++    const headerMarketType = getBetMgmManualLadderMarketTypeFromHeader(lines[idx]);
++    if (!headerMarketType) continue;
++
++    const meta = configByMarket.get(headerMarketType);
++    if (!meta || !meta.event || meta.threshold === null) continue;
++
++    const end = findBetMgmManualLadderCaptureEnd(lines, idx + 1);
++
++    for (let i = idx + 1; i < end - 1; i += 1) {
++      const player = normalizeLine(lines[i]);
++
++      if (!player) continue;
++      if (isBetMgmManualLadderNoiseLine(player)) continue;
++      if (parsePlusToken(player) !== null) continue;
++      if (!looksLikePlayerName(player)) continue;
++
++      const odds = parseAmericanOdds(lines[i + 1]);
++      if (odds === null) continue;
++
++      rows.push(
++        buildRow({
++          sport: meta.sport || fallbackSport || "WNBA",
++          event: meta.event,
++          marketType: meta.marketType,
++          selection: `${player} Over`,
++          lineValue: meta.threshold - 0.5,
++          oddsAmerican: odds,
++        })
++      );
++
++      i += 1;
++    }
++  }
++
++  return rows;
++}
++
+ function parseBetMgmManualLadderMarker(marker) {
+   const inline = String(marker || "");
+ 
+@@ -1201,16 +1295,38 @@
+ function mapBetMgmManualLadderMarket(value = "") {
+   const text = normalizeLine(value).toLowerCase();
+ 
+-  if (/points/.test(text) && /rebounds/.test(text) && /assists/.test(text)) return "player_pra";
+-  if (/points/.test(text) && /rebounds/.test(text)) return "player_points_rebounds";
+-  if (/points/.test(text) && /assists/.test(text)) return "player_points_assists";
+-  if (/rebounds/.test(text) && /assists/.test(text)) return "player_rebounds_assists";
+-  if (/three|3-?pointer|threes/.test(text)) return "player_threes";
+-  if (/points/.test(text)) return "player_points";
+-  if (/rebounds/.test(text)) return "player_rebounds";
+-  if (/assists/.test(text)) return "player_assists";
++  if (text === "player_pra" || /points.*rebounds.*assists|pts.*reb.*ast|pra/.test(text)) return "player_pra";
++  if (text === "player_points_rebounds" || /points.*rebounds|pts.*reb/.test(text)) return "player_points_rebounds";
++  if (text === "player_points_assists" || /points.*assists|pts.*ast/.test(text)) return "player_points_assists";
++  if (text === "player_rebounds_assists" || /rebounds.*assists|reb.*ast/.test(text)) return "player_rebounds_assists";
++  if (text === "player_threes" || /three|3-?pointer|threes/.test(text)) return "player_threes";
++  if (text === "player_points" || /points/.test(text)) return "player_points";
++  if (text === "player_rebounds" || /rebounds/.test(text)) return "player_rebounds";
++  if (text === "player_assists" || /assists/.test(text)) return "player_assists";
+ 
+   return "";
++}
++
++function getBetMgmManualLadderMarketTypeFromHeader(value = "") {
++  const text = normalizeLine(value).toLowerCase();
++
++  if (!text) return "";
++
++  if (/^(alternate\s+)?player\s+points\s*\+\s*rebounds\s*\+\s*assists$/.test(text)) return "player_pra";
++  if (/^(alternate\s+)?player\s+points\s*\+\s*rebounds$/.test(text)) return "player_points_rebounds";
++  if (/^(alternate\s+)?player\s+points\s*\+\s*assists$/.test(text)) return "player_points_assists";
++  if (/^(alternate\s+)?player\s+rebounds\s*\+\s*assists$/.test(text)) return "player_rebounds_assists";
++
++  if (/^(alternate\s+)?player\s+(?:three-pointers|3-pointers|threes)$/.test(text)) return "player_threes";
++  if (/^(alternate\s+)?player\s+points$/.test(text)) return "player_points";
++  if (/^(alternate\s+)?player\s+rebounds$/.test(text)) return "player_rebounds";
++  if (/^(alternate\s+)?player\s+assists$/.test(text)) return "player_assists";
++
++  return "";
++}
++
++function isBetMgmManualLadderSectionHeader(value = "") {
++  return !!getBetMgmManualLadderMarketTypeFromHeader(value);
+ }
+ 
+ function findBetMgmManualLadderCaptureEnd(lines, startIndex) {
+@@ -1218,6 +1334,8 @@
+     const line = normalizeLine(lines[i]);
+ 
+     if (/^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(line)) return i;
++    if (/^BETMGM_LADDER_THRESHOLDS_(?:START|END)$/i.test(line)) return i;
++    if (isBetMgmManualLadderSectionHeader(line)) return i;
+     if (isHardStopLine(line)) return i;
+     if (/^(Moneyline|Spread|Total|Game lines|Team props|Game props|Periods|Quarters|Halves)$/i.test(line)) return i;
+   }
+@@ -1231,6 +1349,9 @@
+   return (
+     !text ||
+     /^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(text) ||
++    /^BETMGM_LADDER_THRESHOLDS_(?:START|END)$/i.test(text) ||
++    /^sport\s*=.+\|\s*event\s*=.+\|\s*market\s*=.+\|\s*threshold\s*=/i.test(text) ||
++    isBetMgmManualLadderSectionHeader(text) ||
+     /^(Player points|Player rebounds|Player assists|Player three-pointers|Player threes|Combo stats)$/i.test(text) ||
+     /^(All|Show More|Show Less|Yes|No|Over|Under|Avg:|Missouri)$/i.test(text) ||
+     /^[-+]?\d+(?:\.\d+)?$/.test(text) ||
+
+--- a/ev-parlay-extension/background.js
++++ b/ev-parlay-extension/background.js
+@@ -668,6 +668,10 @@
+     ? buildDraftKingsTargetLabelsFromMissingMarkets(missingMarketsForBook)
+     : [];
+ 
++  const theScoreTargetLabels = isTheScoreTabUrl(tab.url)
++    ? buildTheScoreTargetLabelsFromMissingMarkets(missingMarketsForBook)
++    : [];
++
+   if (fanDuelTargetLabels.length) {
+     await safeShowToast(
+       sourceTabId,
+@@ -690,6 +694,24 @@
+         pulse: true,
+       }
+     );
++  }
++
++  if (theScoreTargetLabels.length) {
++    await safeShowToast(
++      sourceTabId,
++      "TheScore missing-market targets found",
++      `Targeting only: ${theScoreTargetLabels.join(", ")}.`,
++      {
++        loading: true,
++        pulse: true,
++      }
++    );
++
++    await safeExecuteScript({
++      tabId: sourceTabId,
++      func: seedTheScoreTargetWorkflowLabels,
++      args: [theScoreTargetLabels],
++    });
+   }
+ 
+ 
+@@ -705,16 +727,8 @@
+     payload = await extractDraftKingsMultiPassPayload(sourceTabId, {
+       targetLabels: draftKingsTargetLabels,
+     });
+-  } else if (isTheScoreTabUrl(tab.url) && missingMarketsForBook.length) {
+-    const currentPayload = await extractSinglePayloadFromTab(sourceTabId);
+-    payload = {
+-      source: "TheScore",
+-      text: buildMissingMarketSafeModeText({
+-        source: "TheScore",
+-        targets: missingMarketsForBook,
+-        currentText: currentPayload?.text || "",
+-      }),
+-    };
++  } else if (isTheScoreTabUrl(tab.url)) {
++    payload = await extractSinglePayloadFromTab(sourceTabId);
+   } else {
+     payload = await extractSinglePayloadFromTab(sourceTabId);
+   }
+@@ -1215,6 +1229,102 @@
+ 
+   return labels;
+ }
++
++function buildTheScoreTargetLabelsFromMissingMarkets(missingMarkets = []) {
++  const labels = [];
++
++  function add(label) {
++    const value = String(label || "").trim();
++    if (!value) return;
++    if (labels.some((existing) => existing.toLowerCase() === value.toLowerCase())) return;
++    labels.push(value);
++  }
++
++  for (const raw of missingMarkets || []) {
++    const original = String(raw || "");
++    const text = original.toLowerCase();
++    const isNhl = /^nhl\s*:/i.test(original);
++    const isBasketball = /^(nba|wnba)\s*:/i.test(original);
++
++    if (isNhl) {
++      if (/\b(player_goals|anytime_goalscorer|goals)\b/i.test(text)) {
++        add("Goals");
++        continue;
++      }
++
++      if (/\b(player_shots_on_goal|shots on goal|shots)\b/i.test(text)) {
++        add("Shots on Goal");
++        continue;
++      }
++
++      if (/\b(player_assists|player_points|assists|points)\b/i.test(text)) {
++        add("Points/Assists");
++        add("Assists");
++        continue;
++      }
++
++      if (/\b(player_saves|goalie|saves)\b/i.test(text)) {
++        add("Goalie/Defense");
++        add("Saves");
++        continue;
++      }
++    }
++
++    if (isBasketball) {
++      if (/\b(player_threes|3-pointers|three-pointers|threes)\b/i.test(text)) {
++        add("Threes");
++        add("3-Pointers Made");
++        continue;
++      }
++
++      if (/\b(player_points|points)\b/i.test(text)) {
++        add("Points");
++        continue;
++      }
++
++      if (/\b(player_rebounds|rebounds)\b/i.test(text)) {
++        add("Rebounds");
++        continue;
++      }
++
++      if (/\b(player_assists|assists)\b/i.test(text)) {
++        add("Assists");
++        continue;
++      }
++
++      if (/\b(player_pra|player_points_rebounds|player_points_assists|player_rebounds_assists|combos|pra)\b/i.test(text)) {
++        add("Combos");
++        add("Pts + Reb + Ast");
++        continue;
++      }
++
++      if (/\b(double_double|double-double)\b/i.test(text)) {
++        add("Double Double");
++        continue;
++      }
++
++      if (/\b(triple_double|triple-double)\b/i.test(text)) {
++        add("Triple Double");
++        continue;
++      }
++    }
++  }
++
++  return labels;
++}
++
++function seedTheScoreTargetWorkflowLabels(targetLabels = []) {
++  try {
++    const labels = Array.isArray(targetLabels)
++      ? targetLabels.map((label) => String(label || "").trim()).filter(Boolean)
++      : [];
++
++    sessionStorage.setItem("EV_TS_TARGET_WORKFLOW_LABELS", JSON.stringify(labels));
++  } catch (err) {
++    // ignore sessionStorage failures
++  }
++}
++
+ 
+ 
+ function shouldUseMissingMarketSafeMode({ snapshot, source }) {
+@@ -7225,6 +7335,21 @@
+       return isUnsafeTheScoreMarketClickTarget(fallback, label) ? null : fallback;
+     }
+ 
++    function readTheScoreTargetWorkflowLabels() {
++      try {
++        const parsed = JSON.parse(sessionStorage.getItem("EV_TS_TARGET_WORKFLOW_LABELS") || "[]");
++        const labels = Array.isArray(parsed)
++          ? parsed.map((label) => String(label || "").trim()).filter(Boolean)
++          : [];
++
++        sessionStorage.removeItem("EV_TS_TARGET_WORKFLOW_LABELS");
++
++        return labels;
++      } catch (err) {
++        return [];
++      }
++    }
++
+     await preparePageForExtraction();
+     exports.push(`THESCORE_INITIAL_CAPTURE\n${captureCurrentPage()}`);
+ 
+@@ -7244,6 +7369,21 @@
+       await sleep(delayMs);
+ 
+       return didCapture;
++    }
++
++    const targetOnlyLabels = readTheScoreTargetWorkflowLabels();
++
++    if (targetOnlyLabels.length) {
++      exports.push(`THESCORE_TARGETED_RUN\nTHESCORE_TARGET_LABELS: ${targetOnlyLabels.join(", ")}`);
++
++      for (const label of targetOnlyLabels) {
++        const button = findTheScoreButtonByLabel(label);
++        if (!button) continue;
++
++        await captureTheScoreLabelOnce(label, button, 350);
++      }
++
++      return mergeStructuredExports(exports);
+     }
+ 
+     // First: generic market-tab pass.

@@ -27,13 +27,191 @@ export function parseDraftKingsText(rawText, context = {}) {
   return dedupeRows(rows);
 }
 
+function parseDraftKingsSoccerGameLines(block, event, away, home, context) {
+  const rows = [];
+
+  for (let i = 0; i < block.length - 8; i += 1) {
+    if (!/^(Game|Game Lines|Match Lines|Match|Main Lines)$/i.test(block[i])) continue;
+    const end = findNextDraftKingsSectionEnd(block, i + 1);
+    let teamIndex = -1;
+
+    for (let j = i + 1; j < end - 2; j += 1) {
+      if (
+        normalizeTeamName(block[j]) === away &&
+        isAtMarker(block[j + 1]) &&
+        normalizeTeamName(block[j + 2]) === home
+      ) {
+        teamIndex = j;
+        break;
+      }
+    }
+
+    if (teamIndex === -1) continue;
+
+    const spreadAway = parseSpreadLine(block[teamIndex + 3]);
+    const spreadAwayOdds = parseAmericanOdds(block[teamIndex + 4]);
+    const overMarker = normalizeLine(block[teamIndex + 5]);
+    const totalLine = parseTotalNumber(block[teamIndex + 6]);
+    const overOdds = parseAmericanOdds(block[teamIndex + 7]);
+    const mlAway = parseAmericanOdds(block[teamIndex + 8]);
+
+    const spreadHome = parseSpreadLine(block[teamIndex + 9]);
+    const spreadHomeOdds = parseAmericanOdds(block[teamIndex + 10]);
+    const underMarker = normalizeLine(block[teamIndex + 11]);
+    const totalLine2 = parseTotalNumber(block[teamIndex + 12]);
+    const underOdds = parseAmericanOdds(block[teamIndex + 13]);
+    const mlHome = parseAmericanOdds(block[teamIndex + 14]);
+
+    let mlDraw = null;
+
+    for (let d = teamIndex + 3; d < Math.min(end - 1, teamIndex + 40); d += 1) {
+      if (/^(Draw|Tie)$/i.test(normalizeLine(block[d]))) {
+        const odds = parseAmericanOdds(block[d + 1]);
+        if (odds !== null) {
+          mlDraw = odds;
+          break;
+        }
+      }
+    }
+
+    if (spreadAway !== null && spreadAwayOdds !== null) {
+      rows.push(makeRow({ event, selection: away, marketType: "spread", lineValue: spreadAway, oddsAmerican: spreadAwayOdds, context }));
+    }
+
+    if (spreadHome !== null && spreadHomeOdds !== null) {
+      rows.push(makeRow({ event, selection: home, marketType: "spread", lineValue: spreadHome, oddsAmerican: spreadHomeOdds, context }));
+    }
+
+    if (/^O$/i.test(overMarker) && totalLine !== null && overOdds !== null) {
+      rows.push(makeRow({ event, selection: "Over", marketType: "total", lineValue: totalLine, oddsAmerican: overOdds, context }));
+    }
+
+    if (/^U$/i.test(underMarker) && totalLine2 !== null && underOdds !== null) {
+      rows.push(makeRow({ event, selection: "Under", marketType: "total", lineValue: totalLine2, oddsAmerican: underOdds, context }));
+    }
+
+    // Soccer moneyline is 3-way. Only emit it if Draw is present.
+    if (mlAway !== null && mlDraw !== null && mlHome !== null) {
+      rows.push(
+        makeRow({ event, selection: away, marketType: "moneyline_3way", lineValue: null, oddsAmerican: mlAway, context }),
+        makeRow({ event, selection: "Draw", marketType: "moneyline_3way", lineValue: null, oddsAmerican: mlDraw, context }),
+        makeRow({ event, selection: home, marketType: "moneyline_3way", lineValue: null, oddsAmerican: mlHome, context })
+      );
+    }
+
+    if (rows.length) return rows;
+  }
+
+  return rows;
+}
+
+function parseDraftKingsSoccerCorners(block, event, away, home, context) {
+  const rows = [];
+
+  function isCornerSectionHeader(value = "") {
+    return /^(Corners|Corner Kicks|Match Corners|Game Corners)$/i.test(normalizeLine(value));
+  }
+
+  function parseTotalCornerLabel(value = "") {
+    const text = normalizeLine(value);
+    const match = text.match(/^(?:O|Over)\s*(\d+(?:\.\d+)?)$/i) || text.match(/^Over\s+(\d+(?:\.\d+)?)\s+Corners?$/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  function parseUnderCornerLabel(value = "") {
+    const text = normalizeLine(value);
+    const match = text.match(/^(?:U|Under)\s*(\d+(?:\.\d+)?)$/i) || text.match(/^Under\s+(\d+(?:\.\d+)?)\s+Corners?$/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  for (let i = 0; i < block.length; i += 1) {
+    if (!isCornerSectionHeader(block[i])) continue;
+
+    const end = findNextDraftKingsSectionEnd(block, i + 1);
+
+    for (let j = i + 1; j < end - 3; j += 1) {
+      const line = normalizeLine(block[j]);
+
+      // Total Corners / Total Corner Kicks
+      if (/^(Total Corners|Total Corner Kicks|Corners Total)$/i.test(line)) {
+        for (let k = j + 1; k < Math.min(end - 3, j + 60); k += 1) {
+          const overLine = parseTotalCornerLabel(block[k]);
+          const overOdds = parseAmericanOdds(block[k + 1]);
+          const underLine = parseUnderCornerLabel(block[k + 2]);
+          const underOdds = parseAmericanOdds(block[k + 3]);
+
+          if (
+            overLine !== null &&
+            underLine !== null &&
+            Math.abs(overLine - underLine) < 0.0001 &&
+            overOdds !== null &&
+            underOdds !== null
+          ) {
+            rows.push(makeRow({ event, selection: "Over", marketType: "corner_total", lineValue: overLine, oddsAmerican: overOdds, context }));
+            rows.push(makeRow({ event, selection: "Under", marketType: "corner_total", lineValue: underLine, oddsAmerican: underOdds, context }));
+            break;
+          }
+        }
+      }
+
+      // Corner Handicap / Corners Spread
+      if (/^(Corner Handicap|Corners Handicap|Corner Spread|Corners Spread)$/i.test(line)) {
+        for (let k = j + 1; k < Math.min(end - 3, j + 60); k += 1) {
+          const awayLine = parseSpreadLine(block[k]);
+          const awayOdds = parseAmericanOdds(block[k + 1]);
+          const homeLine = parseSpreadLine(block[k + 2]);
+          const homeOdds = parseAmericanOdds(block[k + 3]);
+
+          if (awayLine !== null && awayOdds !== null && homeLine !== null && homeOdds !== null) {
+            rows.push(makeRow({ event, selection: away, marketType: "corner_spread", lineValue: awayLine, oddsAmerican: awayOdds, context }));
+            rows.push(makeRow({ event, selection: home, marketType: "corner_spread", lineValue: homeLine, oddsAmerican: homeOdds, context }));
+            break;
+          }
+        }
+      }
+
+      // Most Corners / Corner Moneyline, if DK exposes it.
+      if (/^(Most Corners|Corner Moneyline|Corners Moneyline)$/i.test(line)) {
+        let awayOdds = null;
+        let drawOdds = null;
+        let homeOdds = null;
+
+        for (let k = j + 1; k < Math.min(end - 1, j + 80); k += 1) {
+          const label = normalizeLine(block[k]);
+          const odds = parseAmericanOdds(block[k + 1]);
+          if (odds === null) continue;
+
+          if (normalizeTeamName(label) === away) awayOdds = odds;
+          if (/^(Draw|Tie)$/i.test(label)) drawOdds = odds;
+          if (normalizeTeamName(label) === home) homeOdds = odds;
+        }
+
+        if (awayOdds !== null) rows.push(makeRow({ event, selection: away, marketType: "corner_moneyline_3way", lineValue: null, oddsAmerican: awayOdds, context }));
+        if (drawOdds !== null) rows.push(makeRow({ event, selection: "Draw", marketType: "corner_moneyline_3way", lineValue: null, oddsAmerican: drawOdds, context }));
+        if (homeOdds !== null) rows.push(makeRow({ event, selection: home, marketType: "corner_moneyline_3way", lineValue: null, oddsAmerican: homeOdds, context }));
+      }
+    }
+  }
+
+  return dedupeRows(rows);
+}
+
 function parseDraftKingsDetailPage(lines, game, context) {
   const { away, home } = game;
   const event = `${away} @ ${home}`;
+  const detailSport = inferSportFromText(event);
   const rows = [];
 
   const marketStart = findDetailMarketStart(lines);
   const block = marketStart === -1 ? lines : lines.slice(marketStart);
+
+  if (detailSport === "SOCCER") {
+    return dedupeRows([
+      ...parseDraftKingsSoccerVisibleMarkets(block, event, away, home, context),
+      ...parseDraftKingsSoccerGameLines(block, event, away, home, context),
+      ...parseDraftKingsSoccerCorners(block, event, away, home, context),
+    ]);
+  }
 
   console.log("DK DETAIL START", {
     event,
@@ -96,7 +274,18 @@ function parseDraftKingsDetailPage(lines, game, context) {
 
     // Standard player milestone ladders like:
   // Points / Cade Cunningham / 18+ / 20+ / 25+ / 29+ / 30+ / +105 / 35+
-  rows.push(...parseDraftKingsStandardPlusLadderSections(block, event, context));
+  //
+  // For WNBA and NHL, use O/U rows only for non-goalscorer props.
+  // DK NHL ladders and DK NHL O/U rows can represent the same canonical line
+  // with slightly different prices, which creates confusing suggested parlays.
+  // Dedicated NHL goalscorer parsing still runs below.
+  if (detailSport !== "WNBA" && detailSport !== "NHL") {
+    rows.push(...parseDraftKingsStandardPlusLadderSections(block, event, context));
+  }
+
+  // Direct WNBA/Basketball O/U table fallback:
+  // Points O/U / Player / Over / Under / Player / O / 20.5 / -107 / U / 20.5 / -123
+  rows.push(...parseDraftKingsWnbaDirectOuTables(block, event, context));
 
   // Player O/U sections like:
   // Points O/U / Player / Over / Under / Cade Cunningham / PPG / 0 / ... / O / 28.5 / -115 / U / 28.5 / -110
@@ -194,9 +383,11 @@ function parseDraftKingsDetailPage(lines, game, context) {
     }
   }
 
-    const dkComboRows = parseDraftKingsComboSections(block, event, context);
-    console.log("DK COMBO ROWS", dkComboRows);
-    rows.push(...dkComboRows);
+    if (detailSport !== "WNBA") {
+      const dkComboRows = parseDraftKingsComboSections(block, event, context);
+      console.log("DK COMBO ROWS", dkComboRows);
+      rows.push(...dkComboRows);
+    }
 
     const dkYesNoRows = parseDraftKingsYesNoSections(block, event, context);
     console.log("DK YES/NO ROWS", dkYesNoRows);
@@ -311,7 +502,13 @@ function findDetailMarketStart(lines) {
       /^Rebounds O\/U$/i.test(text) ||
       /^Assists O\/U$/i.test(text) ||
       /^Threes O\/U$/i.test(text) ||
-      /^Pts \+ Reb \+ Ast O\/U$/i.test(text)
+      /^3-Pointers O\/U$/i.test(text) ||
+      /^3-Pointers Made O\/U$/i.test(text) ||
+      /^Pts \+ Reb \+ Ast O\/U$/i.test(text) ||
+      /^Pts \+ Reb O\/U$/i.test(text) ||
+      /^Pts \+ Ast O\/U$/i.test(text) ||
+      /^Reb \+ Ast O\/U$/i.test(text) ||
+      /^Ast \+ Reb O\/U$/i.test(text)
     ) {
       return i;
     }
@@ -344,6 +541,7 @@ function inferOuMarketType(text) {
   if (/^Pts \+ Reb O\/U$/i.test(value)) return "player_points_rebounds";
   if (/^Pts \+ Ast O\/U$/i.test(value)) return "player_points_assists";
   if (/^Reb \+ Ast O\/U$/i.test(value)) return "player_rebounds_assists";
+  if (/^Ast \+ Reb O\/U$/i.test(value)) return "player_rebounds_assists";
 
   // NHL
   if (/^Shots on Goal O\/U$/i.test(value)) return "player_shots_on_goal";
@@ -351,8 +549,7 @@ function inferOuMarketType(text) {
   if (/^Points O\/U$/i.test(value)) return "player_points";
   if (/^Assists O\/U$/i.test(value)) return "player_assists";
   if (/^Saves O\/U$/i.test(value)) return "player_saves";
-  if (/^Power Play Points$/i.test(value)) return "player_power_play_points";
-
+  if (/^Power Play Points$/i.test(value)) return "";
   return "";
 }
 
@@ -371,60 +568,147 @@ function parseDraftKingsStandardPlusLadderSections(block, event, context) {
   ];
 
   for (const [header, marketType] of sections) {
-    const idx = block.findIndex((line) => {
-      const text = normalizeLine(line);
-      return new RegExp(`^${escapeRegExp(header)}$`, "i").test(text);
-    });
+    const headerPattern = new RegExp(`^${escapeRegExp(header)}$`, "i");
 
-    if (idx === -1) continue;
+    for (let idx = 0; idx < block.length; idx += 1) {
+      const text = normalizeLine(block[idx]);
+      if (!headerPattern.test(text)) continue;
 
-    const end = findNextDraftKingsSectionEnd(block, idx + 1);
+      const end = findNextDraftKingsSectionEnd(block, idx + 1);
+      let parsedAnyInSection = false;
 
-    for (let i = idx + 1; i < end; i += 1) {
-      const player = normalizeLine(block[i]);
+      for (let i = idx + 1; i < end; i += 1) {
+        const player = normalizeLine(block[i]);
 
-      if (isSectionBreak(player) || isHardStopLine(player)) break;
-      if (!looksLikePlayerName(player)) continue;
+        if (isSectionBreak(player) || isHardStopLine(player)) break;
+        if (!looksLikePlayerName(player)) continue;
 
-      let lastPlus = null;
-      let consumedIndex = i;
+        let lastPlus = null;
+        let consumedIndex = i;
 
-      for (let j = i + 1; j < Math.min(end, i + 80); j += 1) {
-        const token = normalizeLine(block[j]);
+        for (let j = i + 1; j < Math.min(end, i + 80); j += 1) {
+          const token = normalizeLine(block[j]);
 
-        if (j > i + 1 && looksLikePlayerName(token)) break;
-        if (isSectionBreak(token) || isHardStopLine(token)) break;
+          if (j > i + 1 && looksLikePlayerName(token)) break;
+          if (isSectionBreak(token) || isHardStopLine(token)) break;
 
-        const plus = parsePlusNumber(token);
-        if (plus !== null) {
-          lastPlus = plus;
-          continue;
+          const plus = parsePlusNumber(token);
+          if (plus !== null) {
+            lastPlus = plus;
+            continue;
+          }
+
+          const odds = parseAmericanOdds(token);
+          if (odds !== null && lastPlus !== null) {
+            rows.push(
+              makeRow({
+                event,
+                selection: `${player} | Over`,
+                marketType: String(marketType),
+                lineValue: lastPlus - 0.5,
+                oddsAmerican: odds,
+                context,
+              })
+            );
+
+            parsedAnyInSection = true;
+            consumedIndex = j;
+            break;
+          }
         }
 
-        const odds = parseAmericanOdds(token);
-        if (odds !== null && lastPlus !== null) {
-          rows.push(
-            makeRow({
-              event,
-              selection: `${player} | Over`,
-              marketType: String(marketType),
-              lineValue: lastPlus - 0.5,
-              oddsAmerican: odds,
-              context,
-            })
-          );
-
-          consumedIndex = j;
-          break;
-        }
+        i = Math.max(i, consumedIndex);
       }
 
-      i = Math.max(i, consumedIndex);
+      // Do not break after a nav/header-only section. Keep scanning for the real section.
+      if (parsedAnyInSection) {
+        continue;
+      }
     }
   }
 
   return rows;
 }
+
+function parseDraftKingsWnbaDirectOuTables(block, event, context) {
+  const rows = [];
+  const sport = inferSportFromText(event);
+
+  const sections = [
+    ["Points O/U", "player_points"],
+    ["Rebounds O/U", "player_rebounds"],
+    ["Assists O/U", "player_assists"],
+    ["Threes O/U", "player_threes"],
+    ["3-Pointers O/U", "player_threes"],
+    ["3-Pointers Made O/U", "player_threes"],
+    ["Pts + Reb + Ast O/U", "player_pra"],
+    ["Pts + Reb O/U", "player_points_rebounds"],
+    ["Pts + Ast O/U", "player_points_assists"],
+    ["Reb + Ast O/U", "player_rebounds_assists"],
+    ["Ast + Reb O/U", "player_rebounds_assists"],
+  ];
+
+  for (const [header, marketType] of sections) {
+    for (let idx = 0; idx < block.length; idx += 1) {
+      if (!new RegExp(`^${escapeRegExp(header)}$`, "i").test(normalizeLine(block[idx]))) {
+        continue;
+      }
+
+      const end = findNextDraftKingsSectionEnd(block, idx + 1);
+
+      for (let i = idx + 1; i < end - 5; i += 1) {
+        const player = normalizeLine(block[i]);
+
+        if (/^(Player|Over|Under)$/i.test(player)) continue;
+        if (!looksLikePlayerName(player)) continue;
+
+        const overMarker = normalizeLine(block[i + 1]);
+        const overLine = parseTotalNumber(block[i + 2]);
+        const overOdds = parseAmericanOdds(block[i + 3]);
+        const underMarker = normalizeLine(block[i + 4]);
+        const underLine = parseTotalNumber(block[i + 5]);
+        const underOdds = parseAmericanOdds(block[i + 6]);
+
+        if (
+          /^O$/i.test(overMarker) &&
+          /^U$/i.test(underMarker) &&
+          overLine !== null &&
+          underLine !== null &&
+          Math.abs(overLine - underLine) < 0.0001 &&
+          overOdds !== null &&
+          underOdds !== null
+        ) {
+          rows.push(
+            makeRow({
+              event,
+              selection: `${player} | Over`,
+              marketType,
+              lineValue: overLine,
+              oddsAmerican: overOdds,
+              context,
+            })
+          );
+
+          rows.push(
+            makeRow({
+              event,
+              selection: `${player} | Under`,
+              marketType,
+              lineValue: underLine,
+              oddsAmerican: underOdds,
+              context,
+            })
+          );
+
+          i += 6;
+        }
+      }
+    }
+  }
+
+  return rows;
+}
+
 
 function parseDraftKingsComboSections(block, event, context) {
   const rows = [];
@@ -433,52 +717,64 @@ function parseDraftKingsComboSections(block, event, context) {
     ["Pts + Reb", "player_points_rebounds"],
     ["Pts + Ast", "player_points_assists"],
     ["Reb + Ast", "player_rebounds_assists"],
+    ["Ast + Reb", "player_rebounds_assists"],
   ];
 
   for (const [header, marketType] of sections) {
-    const idx = block.findIndex((line) => {
-    const text = normalizeLine(line);
-    return new RegExp(`^${escapeRegExp(header)}$`, "i").test(text);
-  });
-    if (idx === -1) continue;
+    const headerPattern = new RegExp(`^${escapeRegExp(header)}$`, "i");
 
-    const end = findNextDraftKingsSectionEnd(block, idx + 1);
+    for (let idx = 0; idx < block.length; idx += 1) {
+      const text = normalizeLine(block[idx]);
+      if (!headerPattern.test(text)) continue;
 
-    for (let i = idx + 1; i < end; i += 1) {
-      const player = normalizeLine(block[i]);
+      const end = findNextDraftKingsSectionEnd(block, idx + 1);
+      let parsedAnyInSection = false;
 
-      // 🚫 Skip section headers
-      if (isSectionBreak(player)) continue;
+      for (let i = idx + 1; i < end; i += 1) {
+        const player = normalizeLine(block[i]);
 
-      if (!looksLikePlayerName(player)) continue;
+        if (isSectionBreak(player) || isHardStopLine(player)) break;
+        if (!looksLikePlayerName(player)) continue;
 
-      let lastPlus = null;
+        let lastPlus = null;
+        let consumedIndex = i;
 
-      for (let j = i + 1; j < end; j += 1) {
-        const token = normalizeLine(block[j]);
+        for (let j = i + 1; j < end; j += 1) {
+          const token = normalizeLine(block[j]);
 
-        if (looksLikePlayerName(token)) break;
-        if (isSectionBreak(token) || isHardStopLine(token)) break;
+          if (j > i + 1 && looksLikePlayerName(token)) break;
+          if (isSectionBreak(token) || isHardStopLine(token)) break;
 
-        const plus = parsePlusNumber(token);
-        if (plus !== null) {
-          lastPlus = plus;
-          continue;
+          const plus = parsePlusNumber(token);
+          if (plus !== null) {
+            lastPlus = plus;
+            continue;
+          }
+
+          const odds = parseAmericanOdds(token);
+          if (odds !== null && lastPlus !== null) {
+            rows.push(
+              makeRow({
+                event,
+                selection: `${player} | Over`,
+                marketType: String(marketType),
+                lineValue: lastPlus - 0.5,
+                oddsAmerican: odds,
+                context,
+              })
+            );
+
+            parsedAnyInSection = true;
+            consumedIndex = j;
+            break;
+          }
         }
 
-        const odds = parseAmericanOdds(token);
-        if (odds !== null && lastPlus !== null) {
-          rows.push(
-            makeRow({
-              event,
-              selection: `${player} | Over`,
-              marketType: String(marketType),
-              lineValue: lastPlus - 0.5,
-              oddsAmerican: odds,
-              context,
-            })
-          );
-        }
+        i = Math.max(i, consumedIndex);
+      }
+
+      if (parsedAnyInSection) {
+        continue;
       }
     }
   }
@@ -829,7 +1125,17 @@ function parseDraftKingsNhlGoalsSection(block, event, context) {
 function isSectionBreak(text) {
   const value = normalizeLine(text);
 
-  return /^(Points|Rebounds|Assists|Threes|Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Pts \+ Reb \+ Ast O\/U|Pts \+ Reb O\/U|Pts \+ Ast O\/U|Reb \+ Ast O\/U|Shots on Goal|Shots on Goal O\/U|Goals|Goals O\/U|Points O\/U|Assists O\/U|Saves O\/U|Power Play Points|Goalscorer|Double-Double|Triple-Double|Alternate Spread|Alternate Total|1st Half|1st Quarter|2nd Quarter|2nd Half|3rd Quarter|4th Quarter|Team Totals|Winning Margin|Most Points|Game Props|Team Props|Player Goal Milestones)$/i.test(
+  // Do not let full-game player prop parsers continue into period/quarter/half sections.
+  // Example: "Points - 1st Period" must not be parsed as full-game Points.
+  if (
+    /^(Points|Rebounds|Assists|Threes|3-Pointers|3-Pointers Made|Shots on Goal|Goals|Goalscorer|Saves|Blocks)\s*-\s*(1st|2nd|3rd|4th)\s*(Period|Quarter|Half)$/i.test(
+      value
+    )
+  ) {
+    return true;
+  }
+
+  return /^(Points|Rebounds|Assists|Threes|Pts \+ Reb \+ Ast|Pts \+ Reb|Pts \+ Ast|Reb \+ Ast|Ast \+ Reb|Points O\/U|Rebounds O\/U|Assists O\/U|Threes O\/U|3-Pointers O\/U|3-Pointers Made O\/U|Pts \+ Reb \+ Ast O\/U|Pts \+ Reb O\/U|Pts \+ Ast O\/U|Reb \+ Ast O\/U|Ast \+ Reb O\/U|Shots on Goal|Shots on Goal O\/U|Goals|Goals O\/U|Saves O\/U|Power Play Points|Goalscorer|Double-Double|Triple-Double|Alternate Spread|Alternate Total|1st Half|1st Quarter|2nd Quarter|2nd Half|3rd Quarter|4th Quarter|Team Totals|Winning Margin|Most Points|Game Props|Team Props|Player Goal Milestones)$/i.test(
     value
   );
 }
@@ -869,6 +1175,12 @@ function inferSportFromText(text) {
   const t = String(text || "").toLowerCase();
 
   if (
+    /wnba|dream|sky|connecticut sun|dallas wings|golden state valkyries|valkyries|indiana fever|las vegas aces|aces|los angeles sparks|sparks|minnesota lynx|lynx|new york liberty|liberty|phoenix mercury|mercury|portland fire|toronto tempo|seattle storm|washington mystics|mystics/.test(t)
+  ) {
+    return "WNBA";
+  }
+
+  if (
     /hornets|magic|warriors|suns|raptors|cavaliers|timberwolves|nuggets|hawks|knicks|rockets|lakers|76ers|celtics|trail blazers|spurs|pistons|thunder|mavericks|mavs|clippers|grizzlies|bucks|heat|pacers|bulls|wizards|nets|jazz|kings|pelicans/.test(t)
   ) {
     return "NBA";
@@ -887,7 +1199,8 @@ function inferSportFromText(text) {
   }
 
   if (
-    /soccer|chelsea|arsenal|tottenham|brighton|liverpool|man city|man utd|newcastle|everton|west ham|aston villa|barcelona|real madrid|atletico|bayern|dortmund|psg|inter milan|juventus|ac milan/.test(t)
+    /soccer|world cup|fifa|international friendlies|uefa|concacaf|conmebol|chelsea|arsenal|tottenham|brighton|liverpool|man city|man utd|newcastle|everton|west ham|aston villa|barcelona|real madrid|atletico|bayern|dortmund|psg|inter milan|juventus|ac milan/.test(t) ||
+    /\b(united states|usa|mexico|canada|england|france|germany|spain|italy|portugal|netherlands|belgium|brazil|argentina|uruguay|colombia|croatia|switzerland|denmark|poland|japan|south korea|australia|morocco|senegal|cameroon|ghana|egypt|nigeria|turkiye|turkey|qatar|iran|iraq|saudi arabia|panama|jamaica|costa rica|ecuador|paraguay|peru|chile|new zealand|south africa)\b/.test(t)
   ) {
     return "SOCCER";
   }

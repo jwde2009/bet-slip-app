@@ -1,0 +1,5 @@
+﻿a2e2760 Fix tools page suspense build issue
+c1c8c7b Improve EV Lab layout and add devig method controls
+1417d0d Add FanDuel NHL player-prop capture workflow
+18c3d4d Fix TheScore NHL market capture and team aliases
+8d6295a Restore FanDuel NBA triple-double parsing

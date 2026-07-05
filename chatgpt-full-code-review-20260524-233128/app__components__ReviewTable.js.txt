@@ -1,0 +1,2879 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  compareValues,
+  getDisplayedBookmaker,
+  getSortableValue,
+} from "../utils/tableHelpers";
+import {
+  americanOddsFromStakeAndProfit,
+  americanOddsFromStakeAndReturn,
+} from "../utils/oddsHelpers";
+
+import {
+  TEAM_ALIASES_BY_SPORT,
+  normalizeTeamNameBySport,
+} from "../ev-parlay-lab/data/teamAliases";
+
+
+const cellStyle = {
+  border: "1px solid #ccc",
+  padding: "6px 8px",
+  verticalAlign: "top",
+  background: "#fff",
+  color: "#000",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 13,
+  lineHeight: 1.25,
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  border: "1px solid #ccc",
+  borderRadius: 4,
+  backgroundColor: "#f5f5f5",
+  cursor: "pointer",
+};
+
+function getConfidenceSortValue(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "high") return 3;
+  if (v === "medium") return 2;
+  if (v === "low") return 1;
+  return 0;
+}
+
+function getLeagueOptionsForRow(row) {
+  const text = `${row?.selection || ""} ${row?.marketDetail || ""} ${row?.fixtureEvent || ""}`.toLowerCase();
+
+  if (/nba|points|rebounds|assists|double-double|triple-double/.test(text)) {
+    return ["", "NBA", "NCAAM", "NCAAW"];
+  }
+
+  if (/mlb|baseball|strikeouts|rbis|home runs|hits|earned runs/.test(text)) {
+    return ["", "Baseball"];
+  }
+
+  if (/nhl|hockey|shots on goal|puck line|goalscorer/.test(text)) {
+    return ["", "NHL"];
+  }
+
+  if (/ufc|mma|submission|ko\/tko|decision/.test(text)) {
+    return ["", "MMA"];
+  }
+
+  if (/soccer|mls|ucl|premier league|la liga|serie a|bundesliga/.test(text)) {
+    return ["", "Soccer"];
+  }
+
+  if (/tennis|atp|wta|total games|games spread/.test(text)) {
+    return ["", "Tennis"];
+  }
+
+  return [
+    "",
+    "NBA",
+    "NCAAM",
+    "NCAAW",
+    "NFL",
+    "Baseball",
+    "NHL",
+    "Soccer",
+    "MMA",
+    "Tennis",
+    "Multi",
+  ];
+}
+
+export default function ReviewTable({
+  rows,
+  selectedRowId,
+  setSelectedRowId,
+  selectedIds,
+  toggleSelected,
+  toggleSelectAllVisible,
+  allVisibleSelected,
+  sortConfig,
+  handleSort,
+  columnWidths,
+  startResize,
+  setWinStatusForRow,
+  deleteRow,
+  handleRowFieldChange,
+  tableMode = "debug",
+  getRowAttentionLevel,
+  rowNeedsReview,
+}) {
+  const [hoverPreview, setHoverPreview] = useState({
+    rowId: "",
+    src: "",
+    alt: "",
+    visible: false,
+    locked: false,
+    x: 0,
+    y: 0,
+  });
+  const [pulseRowId, setPulseRowId] = useState(null);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
+  const [previewZoomOrigin, setPreviewZoomOrigin] = useState({ x: "50%", y: "0%" });
+  const [dragState, setDragState] = useState({
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
+  });
+  const [editingCell, setEditingCell] = useState({
+    rowId: "",
+    key: "",
+  });
+  
+  const [lastReviewedContext, setLastReviewedContext] = useState(null);
+
+  const imageScrollRef = useRef(null);
+  const selectedRowRef = useRef(null);
+  const popupSelectionRef = useRef(null);
+  const popupFixtureRef = useRef(null);
+  const popupLeagueRef = useRef(null);
+  const popupBetDateRef = useRef(null);
+  const popupBetMonthRef = useRef(null);
+  const popupBetDayRef = useRef(null);
+  const popupBetYearRef = useRef(null);
+  const popupBetTypeRef = useRef(null);
+  const popupParticipantARef = useRef(null);
+  const popupParticipantBRef = useRef(null);
+  const popupSubjectRef = useRef(null);
+  const popupMarketContextRef = useRef(null);
+  const popupPlayerLastNameRef = useRef(null);
+  const popupPropMarketRef = useRef(null);
+  useEffect(() => {
+    if (!selectedRowId) return;
+
+    setPulseRowId(selectedRowId);
+
+    if (selectedRowRef.current) {
+      selectedRowRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+
+    const timeout = setTimeout(() => {
+      setPulseRowId(null);
+    }, 450);
+
+    return () => clearTimeout(timeout);
+  }, [selectedRowId]);
+
+  const closeHoverPreview = () => {
+    setHoverPreview({
+      rowId: "",
+      src: "",
+      alt: "",
+      visible: false,
+      locked: false,
+      x: 0,
+      y: 0,
+    });
+    setPreviewZoomed(false);
+    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+    if (imageScrollRef.current) {
+      imageScrollRef.current.scrollTop = 0;
+    }
+  };
+
+  const getPreviewPosition = () => {
+    const margin = 20;
+    const previewWidth = Math.min(1120, window.innerWidth - margin * 2);
+    const desiredX = 500;
+    const x = Math.max(margin, Math.min(desiredX, window.innerWidth - previewWidth - margin));
+    const y = 20;
+    return { x, y };
+  };
+
+  useEffect(() => {
+    if (!dragState.dragging) return;
+
+    const handleMouseMove = (e) => {
+      setHoverPreview((prev) => ({
+        ...prev,
+        x: Math.max(20, e.clientX - dragState.offsetX),
+        y: Math.max(20, e.clientY - dragState.offsetY),
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDragState((prev) => ({
+        ...prev,
+        dragging: false,
+      }));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [dragState]);
+
+  function beginPreviewDrag(e) {
+    if (!hoverPreview.locked) return;
+
+    const interactive = e.target.closest("button, input, select, textarea, label");
+    if (interactive) return;
+
+    e.preventDefault();
+
+    setDragState({
+      dragging: true,
+      offsetX: e.clientX - hoverPreview.x,
+      offsetY: e.clientY - hoverPreview.y,
+    });
+  }
+
+  const simplifiedColumns = [
+    { key: "select", label: "", sortable: false },
+    { key: "edit", label: "Select", sortable: false },
+    { key: "image", label: "Image", sortable: false },
+    { key: "bookmaker", label: "Bookmaker", sortable: true },
+    { key: "eventDate", label: "Event Date", sortable: true },
+    { key: "betDate", label: "Bet Date", sortable: true },
+    { key: "sportLeague", label: "Sport / League", sortable: true },
+    { key: "selection", label: "Selection", sortable: true },
+    { key: "marketType", label: "Market", sortable: true },
+    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
+    { key: "stake", label: "Stake", sortable: true },
+    { key: "oddsUS", label: "Odds", sortable: true },
+    { key: "likelyHedge", label: "Hedge", sortable: true },
+  ];
+
+  const debugColumns = [
+    { key: "select", label: "", sortable: false },
+    { key: "edit", label: "Select", sortable: false },
+    { key: "image", label: "Image", sortable: false },
+    { key: "sourceFileName", label: "Source File", sortable: true },
+    { key: "accountOwner", label: "Owner", sortable: true },
+    { key: "bookmaker", label: "Bookmaker", sortable: true },
+    { key: "betId", label: "Bet ID", sortable: true },
+    { key: "eventDate", label: "Event Date", sortable: true },
+    { key: "betDate", label: "Bet Date", sortable: true },
+    { key: "sportLeague", label: "Sport / League", sortable: true },
+    { key: "selection", label: "Selection", sortable: true },
+    { key: "marketType", label: "Market", sortable: true },
+    { key: "betSourceTag", label: "Source Tag", sortable: true },
+    { key: "fixtureEvent", label: "Fixture / Event", sortable: true },
+    { key: "stake", label: "Stake", sortable: true },
+    { key: "oddsUS", label: "Odds", sortable: true },
+    { key: "oddsMissingReason", label: "Odds Note", sortable: true },
+    { key: "impliedProbability", label: "Imp Prob", sortable: true },
+    { key: "confidenceFlag", label: "Confidence", sortable: true },
+    { key: "reviewBucket", label: "Priority", sortable: true },
+    { key: "reviewReasons", label: "Review Reasons", sortable: false },
+    { key: "likelyParserIssue", label: "QA", sortable: true },
+    { key: "live", label: "Live", sortable: true },
+    { key: "bonusBet", label: "Bonus", sortable: true },
+    { key: "reviewLater", label: "Review", sortable: true },
+    { key: "likelyHedge", label: "Hedge", sortable: true },
+    { key: "warnings", label: "Warnings", sortable: true },
+    { key: "actions", label: "Actions", sortable: false },
+  ];
+
+  const reviewColumns = tableMode === "simplified" ? simplifiedColumns : debugColumns;
+
+  const sortedRows = useMemo(() => {
+    if (!sortConfig?.key) return rows;
+
+    return [...rows].sort((a, b) => {
+      let aValue;
+      let bValue;
+
+      if (sortConfig.key === "confidenceFlag") {
+        aValue = getConfidenceSortValue(a.confidenceFlag);
+        bValue = getConfidenceSortValue(b.confidenceFlag);
+      } else {
+        aValue = getSortableValue(a, sortConfig.key);
+        bValue = getSortableValue(b, sortConfig.key);
+      }
+
+      return compareValues(aValue, bValue, sortConfig.direction);
+    });
+  }, [rows, sortConfig]);
+
+  const previewRow = rows.find((row) => row.id === hoverPreview.rowId) || null;
+
+  const fallbackRowNeedsReview = (row) =>
+    !!row &&
+    (
+      row.reviewResolved !== "Y" &&
+      (
+        row.likelyParserIssue === "Y" ||
+        !row.sportLeague ||
+        !row.oddsUS ||
+        row.oddsSource === "Calculated" ||
+        String(row.parseWarning || "").includes("stake_missing") ||
+        String(row.parseWarning || "").includes("selection_missing") ||
+        String(row.parseWarning || "").includes("fixture_missing") ||
+        row.reviewLater === "Y"
+      )
+    );
+
+  const reviewCheck = rowNeedsReview || fallbackRowNeedsReview;
+
+  const previewNeedsReview = !!previewRow && reviewCheck(previewRow);
+
+  function jumpToNextReviewRow(currentRowId) {
+    if (!rows?.length) return;
+
+    const currentIndex = rows.findIndex((row) => row.id === currentRowId);
+    if (currentIndex === -1) return;
+
+    const after = rows.slice(currentIndex + 1);
+    const before = rows.slice(0, currentIndex).reverse();
+
+    const nextRow =
+      after.find((row) => reviewCheck(row)) ||
+      before.find((row) => reviewCheck(row)) ||
+      after[0] ||
+      before[0] ||
+      null;
+
+    if (!nextRow) return;
+
+    setSelectedRowId(nextRow.id);
+
+    setHoverPreview((prev) => {
+      if (!prev.locked) return prev;
+
+      return {
+        ...prev,
+        rowId: nextRow.id,
+        src: nextRow.sourceImageUrl || "",
+        alt: nextRow.sourceFileName || "",
+        visible: !!nextRow.sourceImageUrl,
+      };
+    });
+  }
+
+function getReviewPassStatusForPopup(row = {}) {
+  const status = String(row?.status || "").toLowerCase();
+
+  if (!row?.betDate || row?.betDateNeedsConfirm === "Y") return "Date Confirm";
+  if (!row?.stake || !row?.oddsUS || !row?.selection) return "Parser Issue";
+  if (!row?.win && !["open", "cashed out", "voided", "void", "push"].includes(status)) return "Parser Issue";
+  if (row?.likelyHedge === "Y" && row?.hedgeOverride !== "Y" && row?.hedgeOverride !== "N") return "Hedge Check";
+  if (!row?.sportLeague || !row?.fixtureEvent) return "Context Needed";
+  if (row?.reviewResolved === "Y") return "Export Ready";
+  return "Clean";
+}
+
+function getFieldPill(label, status) {
+  let bg = "#e5e7eb";
+  let color = "#374151";
+
+  if (status === "good") {
+    bg = "#dcfce7";
+    color = "#166534";
+  } else if (status === "warn") {
+    bg = "#fef3c7";
+    color = "#92400e";
+  } else if (status === "bad") {
+    bg = "#fee2e2";
+    color = "#991b1b";
+  } else if (status === "info") {
+    bg = "#dbeafe";
+    color = "#1d4ed8";
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 900,
+        background: bg,
+        color,
+        border: "1px solid rgba(0,0,0,0.08)",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function buildContextFromPopup(row = {}) {
+  const dateValue = getPopupDateValue(row);
+
+  return {
+    betDate: dateValue,
+    sportLeague: popupLeagueRef.current?.value || row?.sportLeague || "",
+    betType: popupBetTypeRef.current?.value || row?.betType || "",
+    fixtureEvent: popupFixtureRef.current?.value || row?.fixtureEvent || "",
+    participantA: popupParticipantARef.current?.value || row?.participantA || "",
+    participantB: popupParticipantBRef.current?.value || row?.participantB || "",
+    participantANormalized: getParticipantANormalized(row),
+    participantBNormalized: getParticipantBNormalized(row),
+    playerLastName: popupPlayerLastNameRef.current?.value || row?.playerLastName || "",
+    propMarket: normalizePropMarketValue(
+      popupPropMarketRef.current?.value || row?.propMarket || ""
+    ),
+    canonicalSubject: popupSubjectRef.current?.value || row?.canonicalSubject || "",
+    canonicalMarketContext:
+      popupMarketContextRef.current?.value || row?.canonicalMarketContext || "",
+  };
+}
+
+function saveLastReviewedContext(row = {}) {
+  setLastReviewedContext(buildContextFromPopup(row));
+}
+
+function applyContextToCurrentRow(row, mode = "all") {
+  if (!row || !lastReviewedContext) return;
+
+  const currentRowId = row.id;
+  const ctx = lastReviewedContext;
+
+if (mode === "all" || mode === "date") {
+  if (ctx.betDate) {
+    const parts = getDateParts(ctx.betDate);
+
+    handleRowFieldChange(currentRowId, "betDate", ctx.betDate);
+    handleRowFieldChange(currentRowId, "betDateNeedsConfirm", "Y");
+    handleRowFieldChange(currentRowId, "betDateConfirmed", "N");
+
+    if (popupBetMonthRef.current) popupBetMonthRef.current.value = parts.month;
+    if (popupBetDayRef.current) popupBetDayRef.current.value = parts.day;
+    if (popupBetYearRef.current) popupBetYearRef.current.value = parts.year;
+    if (popupBetDateRef.current) popupBetDateRef.current.value = ctx.betDate;
+  }
+}
+
+  if (mode === "all" || mode === "league") {
+    handleRowFieldChange(currentRowId, "sportLeagueManual", "Y");
+    handleRowFieldChange(currentRowId, "sportLeague", ctx.sportLeague || "");
+    if (popupLeagueRef.current) popupLeagueRef.current.value = ctx.sportLeague || "";
+  }
+
+  if (mode === "all" || mode === "participants") {
+    handleRowFieldChange(currentRowId, "participantA", ctx.participantA || "");
+    handleRowFieldChange(currentRowId, "participantB", ctx.participantB || "");
+    handleRowFieldChange(currentRowId, "participantANormalized", ctx.participantANormalized || "");
+    handleRowFieldChange(currentRowId, "participantBNormalized", ctx.participantBNormalized || "");
+
+    if (popupParticipantARef.current) popupParticipantARef.current.value = ctx.participantA || ctx.participantANormalized || "";
+    if (popupParticipantBRef.current) popupParticipantBRef.current.value = ctx.participantB || ctx.participantBNormalized || "";
+  }
+
+  if (mode === "all" || mode === "betType") {
+    handleRowFieldChange(currentRowId, "betType", ctx.betType || "");
+    if (popupBetTypeRef.current) popupBetTypeRef.current.value = ctx.betType || "";
+  }
+
+  if (mode === "all" || mode === "event") {
+    handleRowFieldChange(currentRowId, "fixtureEvent", ctx.fixtureEvent || "");
+    if (popupFixtureRef.current) popupFixtureRef.current.value = ctx.fixtureEvent || "";
+  }
+}
+
+
+function getPopupDateValue(row) {
+  const dateFromParts = buildDateFromParts(
+    popupBetMonthRef.current?.value,
+    popupBetDayRef.current?.value,
+    popupBetYearRef.current?.value
+  );
+
+  return (
+    dateFromParts ||
+    popupBetDateRef.current?.value ||
+    row?.betDate ||
+    ""
+  );
+}
+
+function rowNeedsDateConfirm(row) {
+  if (!row) return false;
+
+  const currentDate = getPopupDateValue(row);
+  return !currentDate || row.betDateNeedsConfirm === "Y";
+}
+
+function confirmPopupDate(rowId) {
+  if (!rowId) return false;
+
+  const row = rows.find((r) => r.id === rowId);
+  const nextDate = getPopupDateValue(row);
+
+  if (!nextDate) {
+    window.alert("Enter a Bet Date before confirming.");
+    return false;
+  }
+
+  handleRowFieldChange(rowId, "betDate", nextDate);
+
+  if (row && !row.eventDate) {
+    handleRowFieldChange(rowId, "eventDate", nextDate);
+  }
+
+  handleRowFieldChange(rowId, "betDateNeedsConfirm", "N");
+  handleRowFieldChange(rowId, "betDateConfirmed", "Y");
+  saveLastReviewedContext(row || { id: rowId, betDate: nextDate });
+
+  return true;
+}
+
+function canProceedFromPopup(row) {
+  if (!row) return false;
+
+  if (rowNeedsDateConfirm(row)) {
+    window.alert("Confirm the Bet Date before moving to the next row.");
+    return false;
+  }
+
+  return true;
+}
+
+function normalizePropMarketValue(value = "") {
+  const text = String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+
+  if (/assist/.test(text)) return "assists";
+  if (/rebound/.test(text)) return "rebounds";
+  if (/\bpoints?\b|\bpts\b/.test(text)) return "points";
+  if (/three|3-pointer|3 pointer|threes/.test(text)) return "threes";
+  if (/double-double|double double/.test(text)) return "double-double";
+  if (/triple-double|triple double/.test(text)) return "triple-double";
+  if (/anytime goal scorer|anytime goalscorer|goalscorer|goal scorer|player goals|\bgoals?\b/.test(text)) return "goals";
+  if (/shot.*goal|sog/.test(text)) return "shots on goal";
+  if (/save/.test(text)) return "saves";
+  if (/strikeout|ks\b/.test(text)) return "strikeouts";
+  if (/total base/.test(text)) return "total bases";
+  if (/home run|homer/.test(text)) return "home runs";
+  if (/rbi/.test(text)) return "rbis";
+  if (/hit\b|hits\b/.test(text)) return "hits";
+
+  return text;
+}
+
+function getLastNameFromText(value = "") {
+  const cleaned = String(value || "")
+    .replace(/[^A-Za-z\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "";
+
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
+
+function normalizeBetTypeValue(value = "") {
+  const text = String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (!text) return "";
+
+  if (/moneyline|match winner|winner/.test(text)) return "moneyline";
+  if (/spread|puck line|run line|handicap/.test(text)) return "spread";
+  if (/total|over\/under|o\/u/.test(text)) return "total";
+  if (/player prop|player|points|rebounds|assists|goals|shots|strikeouts|home runs|total bases/.test(text)) return "player prop";
+  if (/game prop/.test(text)) return "game prop";
+  if (/parlay|sgp|same game parlay/.test(text)) return "parlay";
+  if (/future/.test(text)) return "futures";
+  if (/straight/.test(text)) return "straight";
+
+  return text;
+}
+
+function inferBetTypeFromRow(row = {}) {
+  const existing = String(row.betType || "").trim();
+  if (existing) return existing;
+
+  const text = [
+    row.selection,
+    row.marketDetail,
+    row.canonicalMarketContext,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return normalizeBetTypeValue(text);
+}
+
+function normalizeMarketContext(value = "") {
+  let text = String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+
+  text = text
+    .replace(/\bplayer\s+/g, "")
+    .replace(/\bto record\b/g, "")
+    .replace(/\bo\/u\b/g, "")
+    .replace(/\bover\/under\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const sideLine = text.match(/\b(over|under)\s+(\d+(?:\.\d+)?)\b/i);
+  const side = sideLine ? sideLine[1].toLowerCase() : "";
+  const line = sideLine ? sideLine[2] : "";
+
+  let market = "";
+
+  if (/anytime goal scorer|anytime goalscorer|goalscorer|to score|player goals|\bgoals\b/.test(text)) {
+    market = "goals";
+  } else if (/assist/.test(text)) {
+    market = "assists";
+  } else if (/rebound/.test(text)) {
+    market = "rebounds";
+  } else if (/point/.test(text)) {
+    market = "points";
+  } else if (/three|3-pointer|3 pointer|threes/.test(text)) {
+    market = "threes";
+  } else if (/shot.*goal|sog/.test(text)) {
+    market = "shots on goal";
+  } else if (/strikeout|ks\b/.test(text)) {
+    market = "strikeouts";
+  } else if (/total base/.test(text)) {
+    market = "total bases";
+  } else if (/home run|homer/.test(text)) {
+    market = "home runs";
+  } else if (/moneyline|match winner|winner/.test(text)) {
+    market = "moneyline";
+  } else if (/spread|puck line|run line|handicap/.test(text)) {
+    market = "spread";
+  } else if (/total/.test(text)) {
+    market = "total";
+  } else if (/top\s*\d+/.test(text)) {
+    market = text.match(/top\s*\d+/)?.[0] || text;
+  } else {
+    market = text;
+  }
+
+  if (side && line && market) return `${side} ${line} ${market}`;
+  if (side && market) return `${side} ${market}`;
+  return market;
+}
+
+function buildContextEventLabel(row) {
+  const a = getParticipantANormalized(row);
+  const b = getParticipantBNormalized(row);
+  const subject = String(
+    popupSubjectRef.current?.value ||
+      row?.canonicalSubject ||
+      row?.canonicalPlayer ||
+      ""
+  ).trim();
+
+  const propMarket = normalizePropMarketValue(
+    popupPropMarketRef.current?.value ||
+      row?.propMarket ||
+      row?.canonicalMarketContext ||
+      row?.marketDetail ||
+      ""
+  );
+
+  const market = normalizeMarketContext(
+    popupMarketContextRef.current?.value ||
+      row?.betType ||
+      ""
+  );
+
+  const pieces = [];
+
+  if (a && b) pieces.push(`${a} @ ${b}`);
+  else if (a) pieces.push(a);
+  else if (b) pieces.push(b);
+
+  if (subject) pieces.push(subject);
+  if (propMarket) pieces.push(propMarket);
+  if (market && market !== propMarket) pieces.push(market);
+
+  return pieces.join(" | ");
+}
+
+function getDateParts(value = "") {
+  const raw = String(value || "").trim();
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if (!m) {
+    return { month: "", day: "", year: "" };
+  }
+
+  return {
+    month: m[1],
+    day: m[2],
+    year: m[3],
+  };
+}
+
+function normalizeDateYear(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (/^\d{2}$/.test(raw)) return `20${raw}`;
+  if (/^\d{4}$/.test(raw)) return raw;
+
+  return raw;
+}
+
+function buildDateFromParts(monthValue = "", dayValue = "", yearValue = "") {
+  const month = String(monthValue || "").trim();
+  const day = String(dayValue || "").trim();
+  const year = normalizeDateYear(yearValue);
+
+  if (!month || !day || !year) return "";
+
+  const m = Number(month);
+  const d = Number(day);
+  const y = Number(year);
+
+  if (!Number.isFinite(m) || !Number.isFinite(d) || !Number.isFinite(y)) return "";
+  if (m < 1 || m > 12) return "";
+  if (d < 1 || d > 31) return "";
+  if (year.length !== 4) return "";
+
+  const date = new Date(y, m - 1, d);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getMonth() !== m - 1 ||
+    date.getDate() !== d ||
+    date.getFullYear() !== y
+  ) {
+    return "";
+  }
+
+  return `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}/${y}`;
+}
+
+function getAliasSportKey(league = "") {
+  const value = String(league || "").trim().toLowerCase();
+
+  if (value === "baseball" || value === "mlb") return "MLB";
+  if (value === "nba") return "NBA";
+  if (value === "wnba") return "WNBA";
+  if (value === "nhl") return "NHL";
+  if (value === "nfl") return "NFL";
+
+  if (
+    value === "soccer" ||
+    value === "mls" ||
+    value === "epl" ||
+    value === "premier league" ||
+    value === "la liga" ||
+    value === "serie a" ||
+    value === "bundesliga" ||
+    value === "ligue 1"
+  ) {
+    return "";
+  }
+
+  return String(league || "").trim().toUpperCase();
+}
+
+function normalizeParticipantName(value = "", league = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const sportKey = getAliasSportKey(league);
+  return normalizeTeamNameBySport(raw, sportKey) || raw;
+}
+
+function getParticipantOptionsForLeague(league = "") {
+  const sportKey = getAliasSportKey(league);
+  const mapsToUse = [];
+
+  if (sportKey && TEAM_ALIASES_BY_SPORT[sportKey]) {
+    mapsToUse.push(TEAM_ALIASES_BY_SPORT[sportKey]);
+  }
+
+  // Soccer is spread across several sport keys in the EV alias database.
+  if (!sportKey || /^soccer$/i.test(String(league || ""))) {
+    [
+      "MLS",
+      "EPL",
+      "LALIGA",
+      "SERIEA",
+      "BUNDESLIGA",
+      "LIGUE1",
+      "INTL",
+    ].forEach((key) => {
+      if (TEAM_ALIASES_BY_SPORT[key]) mapsToUse.push(TEAM_ALIASES_BY_SPORT[key]);
+    });
+  }
+
+  const values = new Set();
+
+  for (const map of mapsToUse) {
+    Object.entries(map || {}).forEach(([alias, canonical]) => {
+      if (canonical) values.add(canonical);
+      if (alias && alias.length <= 24) values.add(alias);
+    });
+  }
+
+  return Array.from(values).sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
+function getPreviewLeagueValue(row) {
+  return (
+    popupLeagueRef.current?.value ||
+    row?.sportLeague ||
+    ""
+  );
+}
+
+function getParticipantANormalized(row) {
+  return normalizeParticipantName(
+    popupParticipantARef.current?.value || row?.participantA || "",
+    getPreviewLeagueValue(row)
+  );
+}
+
+function getParticipantBNormalized(row) {
+  return normalizeParticipantName(
+    popupParticipantBRef.current?.value || row?.participantB || "",
+    getPreviewLeagueValue(row)
+  );
+}
+
+function buildFixtureFromPopupParticipants(row) {
+  const a = getParticipantANormalized(row);
+  const b = getParticipantBNormalized(row);
+
+  if (a && b) return `${a} @ ${b}`;
+  return "";
+}
+
+
+function parseDateInput(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const year = Number(m[3]);
+
+  const date = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getFullYear() !== year
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDateInput(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function getPreviousRowDate(rowId) {
+  const orderedRows = sortedRows || rows;
+  const index = orderedRows.findIndex((row) => row.id === rowId);
+  if (index <= 0) return "";
+
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (orderedRows[i]?.betDate) return orderedRows[i].betDate;
+  }
+
+  return "";
+}
+
+function setBetDateForRow(rowId, value) {
+  if (!rowId) return;
+
+  handleRowFieldChange(rowId, "betDate", value);
+  handleRowFieldChange(rowId, "betDateNeedsConfirm", "Y");
+  handleRowFieldChange(rowId, "betDateConfirmed", "N");
+
+  // Event date usually equals bet date for review/export unless a parser supplied a separate event date.
+  const row = rows.find((r) => r.id === rowId);
+
+  if (row && !row.eventDate) {
+    handleRowFieldChange(rowId, "eventDate", value);
+  }
+}
+
+function shiftBetDateForRow(rowId, deltaDays) {
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return;
+
+  const baseDateText = row.betDate || getPreviousRowDate(rowId);
+  const baseDate = parseDateInput(baseDateText);
+
+  if (!baseDate) return;
+
+  baseDate.setDate(baseDate.getDate() + deltaDays);
+
+  setBetDateForRow(rowId, formatDateInput(baseDate));
+}
+
+function usePreviousBetDateForRow(rowId) {
+  const previousDate = getPreviousRowDate(rowId);
+  if (!previousDate) return;
+
+  setBetDateForRow(rowId, previousDate);
+}
+
+  function getNumericMoney(value) {
+    const n = Number(String(value || "").replace(/,/g, "").replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+function getParsedResultLabel(row) {
+  if (!row) return "UNKNOWN";
+
+  if (row.win === "Y") return "WIN";
+  if (row.win === "N") return "LOSS";
+
+  const status = String(row.status || "").trim().toLowerCase();
+
+  if (status === "won") return "WIN";
+  if (status === "lost") return "LOSS";
+  if (status === "voided" || status === "void" || status === "push") return "VOID";
+  if (status === "cashed out") return "CASHED OUT";
+  if (status === "open") return "OPEN";
+
+  return "UNKNOWN";
+}
+
+function getParsedResultStyle(row) {
+  const label = getParsedResultLabel(row);
+
+  if (label === "WIN") {
+    return {
+      background: "#dcfce7",
+      border: "3px solid #166534",
+      color: "#14532d",
+    };
+  }
+
+  if (label === "LOSS") {
+    return {
+      background: "#fee2e2",
+      border: "3px solid #991b1b",
+      color: "#7f1d1d",
+    };
+  }
+
+  if (label === "VOID" || label === "PUSH") {
+    return {
+      background: "#f3f4f6",
+      border: "3px solid #4b5563",
+      color: "#111827",
+    };
+  }
+
+  if (label === "CASHED OUT") {
+    return {
+      background: "#dbeafe",
+      border: "3px solid #1d4ed8",
+      color: "#1e3a8a",
+    };
+  }
+
+  return {
+    background: "#fef3c7",
+    border: "3px solid #b45309",
+    color: "#78350f",
+  };
+}
+
+function markPopupResult(rowId, resultValue) {
+  if (!rowId) return;
+
+  const row = rows.find((r) => r.id === rowId);
+  if (!canProceedFromPopup(row)) return;
+
+  commitPopupReviewEdits(rowId);
+  saveLastReviewedContext(row);
+
+
+  if (resultValue === "Y") {
+    handleRowFieldChange(rowId, "win", "Y");
+    handleRowFieldChange(rowId, "status", "Won");
+  }
+
+  if (resultValue === "N") {
+    handleRowFieldChange(rowId, "win", "N");
+    handleRowFieldChange(rowId, "status", "Lost");
+    handleRowFieldChange(rowId, "payout", "0.00");
+    handleRowFieldChange(rowId, "toWin", "0.00");
+  }
+
+  if (resultValue === "V") {
+    handleRowFieldChange(rowId, "win", "");
+    handleRowFieldChange(rowId, "status", "Voided");
+    handleRowFieldChange(rowId, "payout", "0.00");
+    handleRowFieldChange(rowId, "toWin", "0.00");
+  }
+
+  handleRowFieldChange(rowId, "reviewResolved", "Y");
+  handleRowFieldChange(rowId, "reviewLater", "N");
+
+  setTimeout(() => jumpToNextReviewRow(rowId), 0);
+}
+
+function commitPopupReviewEdits(rowId) {
+  if (!rowId) return;
+
+  const row = rows.find((r) => r.id === rowId);
+  const leagueValue = popupLeagueRef.current?.value || row?.sportLeague || "";
+
+  if (popupSelectionRef.current) {
+    handleRowFieldChange(rowId, "selection", popupSelectionRef.current.value);
+  }
+
+  if (popupFixtureRef.current) {
+    handleRowFieldChange(rowId, "fixtureEvent", popupFixtureRef.current.value);
+  }
+
+  if (popupLeagueRef.current) {
+    handleRowFieldChange(rowId, "sportLeagueManual", "Y");
+    handleRowFieldChange(rowId, "sportLeague", popupLeagueRef.current.value);
+  }
+
+  if (popupBetTypeRef.current) {
+    handleRowFieldChange(rowId, "betType", popupBetTypeRef.current.value);
+  }
+
+  if (popupParticipantARef.current) {
+    const raw = popupParticipantARef.current.value;
+    handleRowFieldChange(rowId, "participantA", raw);
+    handleRowFieldChange(rowId, "participantANormalized", normalizeParticipantName(raw, leagueValue));
+  }
+
+  if (popupParticipantBRef.current) {
+    const raw = popupParticipantBRef.current.value;
+    handleRowFieldChange(rowId, "participantB", raw);
+    handleRowFieldChange(rowId, "participantBNormalized", normalizeParticipantName(raw, leagueValue));
+  }
+
+  if (popupSubjectRef.current) {
+    const rawSubject = popupSubjectRef.current.value;
+    const lastName = popupPlayerLastNameRef.current?.value || getLastNameFromText(rawSubject);
+
+    handleRowFieldChange(rowId, "canonicalSubject", rawSubject);
+    handleRowFieldChange(rowId, "playerLastName", lastName);
+  }
+
+  if (popupPropMarketRef.current) {
+    handleRowFieldChange(
+      rowId,
+      "propMarket",
+      normalizePropMarketValue(popupPropMarketRef.current.value)
+    );
+  }
+
+  if (popupMarketContextRef.current) {
+    const rawMarketContext = popupMarketContextRef.current.value;
+    const normalizedContext = normalizeMarketContext(rawMarketContext);
+    const normalizedBetType = normalizeBetTypeValue(rawMarketContext);
+
+    handleRowFieldChange(rowId, "canonicalMarketContext", normalizedContext);
+
+    if (normalizedBetType) {
+      handleRowFieldChange(rowId, "betType", normalizedBetType);
+    }
+  }
+
+const nextDate = getPopupDateValue(row);
+
+if (nextDate) {
+  handleRowFieldChange(rowId, "betDate", nextDate);
+
+  if (row && !row.eventDate) {
+    handleRowFieldChange(rowId, "eventDate", nextDate);
+  }
+}
+}
+
+
+  function autoFillCalculatedFields(row) {
+    if (!row) return;
+
+    const stake = getNumericMoney(row.stake);
+    const payout = getNumericMoney(row.payout);
+    const toWin = getNumericMoney(row.toWin);
+
+    if (!row.oddsUS) {
+      let calculatedOdds = "";
+
+      if (Number.isFinite(stake) && Number.isFinite(payout) && payout > stake) {
+        calculatedOdds = americanOddsFromStakeAndReturn(stake, payout);
+      } else if (Number.isFinite(stake) && Number.isFinite(toWin) && toWin > 0) {
+        calculatedOdds = americanOddsFromStakeAndProfit(stake, toWin);
+      }
+
+      if (calculatedOdds) {
+        handleRowFieldChange(row.id, "oddsUS", calculatedOdds);
+        handleRowFieldChange(row.id, "oddsSource", "Calculated");
+        handleRowFieldChange(row.id, "reviewLater", "Y");
+      }
+    }
+
+    if (!row.payout && Number.isFinite(stake) && row.oddsUS) {
+      const oddsNum = Number(String(row.oddsUS).replace(/[^0-9+-]/g, ""));
+      if (Number.isFinite(oddsNum) && stake > 0) {
+        let toWinCalc = 0;
+        if (oddsNum > 0) toWinCalc = (stake * oddsNum) / 100;
+        if (oddsNum < 0) toWinCalc = (stake * 100) / Math.abs(oddsNum);
+
+        if (toWinCalc > 0) {
+          const payoutCalc = (stake + toWinCalc).toFixed(2);
+          handleRowFieldChange(row.id, "payout", payoutCalc);
+          handleRowFieldChange(row.id, "reviewLater", "Y");
+        }
+      }
+    }
+  }
+
+    const inlineEditableKeys = new Set([
+    "selection",
+    "fixtureEvent",
+    "stake",
+    "oddsUS",
+    "betDate",
+    "eventDate",
+    "sportLeague",
+    "betType",
+    "toWin",
+    "payout",
+  ]);
+
+  function beginInlineEdit(rowId, key) {
+    setEditingCell({ rowId, key });
+  }
+
+  function stopInlineEdit() {
+    setEditingCell({ rowId: "", key: "" });
+  }
+
+  function renderInlineEditor(row, rowBg, colKey, reactKey) {
+    const value = row[colKey] || "";
+    const isEditing = editingCell.rowId === row.id && editingCell.key === colKey;
+
+    if (!inlineEditableKeys.has(colKey)) {
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {value}
+        </td>
+      );
+    }
+
+    if (!isEditing) {
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg, cursor: "text" }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            beginInlineEdit(row.id, colKey);
+          }}
+          title="Double-click to edit"
+        >
+          {value}
+        </td>
+      );
+    }
+
+    if (colKey === "sportLeague") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <input
+            autoFocus
+            list={`league-options-inline-${row.id}`}
+            defaultValue={value}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+
+              if (e.key === "Enter") {
+                handleRowFieldChange(row.id, "sportLeagueManual", "Y");
+                handleRowFieldChange(row.id, colKey, e.currentTarget.value);
+                stopInlineEdit();
+              }
+
+              if (e.key === "Escape") stopInlineEdit();
+            }}
+            onBlur={(e) => {
+              handleRowFieldChange(row.id, "sportLeagueManual", "Y");
+              handleRowFieldChange(row.id, colKey, e.currentTarget.value);
+              stopInlineEdit();
+            }}
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              border: "1px solid #2563eb",
+              borderRadius: 4,
+              background: "#fff",
+              color: "#000",
+              boxSizing: "border-box",
+            }}
+          />
+
+          <datalist id={`league-options-inline-${row.id}`}>
+            {getLeagueOptionsForRow(row).map((league) => (
+              <option key={league || "blank"} value={league} />
+            ))}
+          </datalist>
+        </td>
+      );
+    }
+
+    return (
+      <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+        <input
+          autoFocus
+          value={value}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => handleRowFieldChange(row.id, colKey, e.target.value)}
+          onBlur={stopInlineEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") stopInlineEdit();
+            if (e.key === "Escape") stopInlineEdit();
+          }}
+          style={{
+            width: "100%",
+            padding: "6px 8px",
+            border: "1px solid #2563eb",
+            borderRadius: 4,
+            background: "#fff",
+            color: "#000",
+            boxSizing: "border-box",
+          }}
+        />
+      </td>
+    );
+  }
+
+  const renderCell = (row, rowBg, colKey, reactKey) => {
+    if (colKey === "reviewBucket") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.reviewBucket || ""}
+          {row.reviewPriority ? ` (${row.reviewPriority})` : ""}
+        </td>
+      );
+    }
+
+    if (colKey === "reviewReasons") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          {row.reviewReasons || ""}
+        </td>
+      );
+    }
+    if (colKey === "select") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(row.id)}
+            onChange={() => toggleSelected(row.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </td>
+      );
+    }
+
+    if (colKey === "edit") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedRowId(row.id);
+
+              setHoverPreview((prev) => {
+                if (!prev.locked) return prev;
+                return {
+                  ...prev,
+                  rowId: row.id,
+                  src: row.sourceImageUrl || "",
+                  alt: row.sourceFileName || "",
+                  visible: !!row.sourceImageUrl,
+                };
+              });
+            }}
+            style={smallButtonStyle}
+          >
+            {row.id === selectedRowId ? "Selected" : "Edit"}
+          </button>
+        </td>
+      );
+    }
+
+    if (colKey === "image") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, overflow: "visible" }}>
+          {row.sourceImageUrl ? (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewZoomed(true);
+                setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                if (imageScrollRef.current) {
+                  imageScrollRef.current.scrollTop = 0;
+                }
+
+                const position = getPreviewPosition();
+
+                setHoverPreview((prev) => {
+                  const sameRow = prev.rowId === row.id;
+
+                  if (sameRow && prev.locked) {
+                    return {
+                      rowId: "",
+                      src: "",
+                      alt: "",
+                      visible: false,
+                      locked: false,
+                      x: 0,
+                      y: 0,
+                    };
+                  }
+
+                  return {
+                    rowId: row.id,
+                    src: row.sourceImageUrl,
+                    alt: row.sourceFileName,
+                    visible: true,
+                    locked: true,
+                    x: position.x,
+                    y: position.y,
+                  };
+                });
+              }}
+              style={{
+                display: "inline-block",
+                cursor: "pointer",
+              }}
+              title="Click to open preview"
+            >
+              <img
+                src={row.sourceImageUrl}
+                alt={row.sourceFileName}
+                style={{
+                  width: 84,
+                  height: 84,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                  border: "1px solid #ccc",
+                }}
+              />
+            </div>
+          ) : (
+            ""
+          )}
+        </td>
+      );
+    }
+
+    if (colKey === "bookmaker") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {getDisplayedBookmaker(row)}
+        </td>
+      );
+    }
+    if (colKey === "confidenceFlag") {
+      const confidence = String(row.confidenceFlag || "").trim().toLowerCase();
+
+      let bg = "#e5e7eb";
+      let color = "#374151";
+
+      if (confidence === "high") {
+        bg = "#166534";
+        color = "#ecfdf5";
+      } else if (confidence === "medium") {
+        bg = "#ca8a04";
+        color = "#fefce8";
+      } else if (confidence === "low") {
+        bg = "#dc2626";
+        color = "#fef2f2";
+      }
+
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.confidenceFlag ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 68,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontWeight: 800,
+                fontSize: 12,
+                background: bg,
+                color,
+              }}
+            >
+              {row.confidenceFlag}
+            </span>
+          ) : (
+            ""
+          )}
+        </td>
+      );
+    }
+      
+    if (colKey === "likelyParserIssue") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
+          {row.likelyParserIssue === "Y" ? "Check" : ""}
+        </td>
+      );
+    }
+
+               if (colKey === "likelyHedge") {
+      const override = String(row.hedgeOverride || "").toUpperCase();
+      const isLikely = row.likelyHedge === "Y";
+      const guaranteedProfit = row.guaranteedProfit === "Y";
+
+      let badgeBg = "#e5e7eb";
+      let badgeColor = "#374151";
+      let badgeText = "";
+
+      if (override === "Y") {
+        badgeBg = "#166534";
+        badgeColor = "#ecfdf5";
+        badgeText = "Confirmed";
+      } else if (override === "N") {
+        badgeBg = "#9a3412";
+        badgeColor = "#fff7ed";
+        badgeText = "Denied";
+      } else if (isLikely) {
+        const quality = String(row.hedgeQuality || "").trim();
+
+        if (quality === "Guaranteed Profit") {
+          badgeBg = "#065f46";
+          badgeColor = "#ecfdf5";
+          badgeText = "Guaranteed Profit";
+        } else if (quality === "Middle") {
+          badgeBg = "#7c3aed";
+          badgeColor = "#f5f3ff";
+          badgeText = "Middle";
+        } else {
+          badgeBg = "#2563eb";
+          badgeColor = "#eff6ff";
+          badgeText = "Likely Hedge";
+        }
+      }
+
+      return (
+        <td
+          key={reactKey}
+          style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}
+        >
+          {badgeText ? (
+            <div style={{ marginBottom: 8 }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 110,
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontWeight: 800,
+                  fontSize: 12,
+                  background: badgeBg,
+                  color: badgeColor,
+                }}
+              >
+                {badgeText}
+              </span>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8, color: "#6b7280" }}>—</div>
+          )}
+
+          {row.hedgeClusterId && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Cluster:</strong> {row.hedgeClusterId.slice(0, 8)}
+               ({row.hedgeClusterSize || 2})
+            </div>
+          )}
+
+          {row.hedgeConfidence && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Confidence:</strong> {row.hedgeConfidence}
+            </div>
+          )}
+
+          {row.hedgePartnerBookmaker && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Pair:</strong> {row.hedgePartnerBookmaker}
+            </div>
+          )}
+
+          {row.hedgeStake && row.hedgeQuality !== "Middle" && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Hedge Stake:</strong> ${row.hedgeStake}
+            </div>
+          )}
+
+          {guaranteedProfit && row.guaranteedProfitAmount && (
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              <strong>Guaranteed:</strong> ${row.guaranteedProfitAmount}
+            </div>
+          )}
+
+          {row.hedgeProfitIfThisWins && row.hedgeQuality !== "Middle" && (
+            <div style={{ fontSize: 12, marginBottom: 4 }}>
+              <strong>This wins:</strong> ${row.hedgeProfitIfThisWins}
+            </div>
+          )}
+
+          {row.hedgeProfitIfOtherWins && row.hedgeQuality !== "Middle" && (
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              <strong>Other wins:</strong> ${row.hedgeProfitIfOtherWins}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "Y");
+                handleRowFieldChange(
+                  row.id,
+                  "betSourceTag",
+                  row.hedgeQuality === "Middle" ? "Middle" : "Hedge"
+                );
+              }}
+              style={smallButtonStyle}
+            >
+              Confirm
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "N");
+              }}
+              style={smallButtonStyle}
+            >
+              Deny
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRowFieldChange(row.id, "hedgeOverride", "");
+              }}
+              style={smallButtonStyle}
+            >
+              Reset
+            </button>
+          </div>
+        </td>
+      );
+    }
+
+    if (colKey === "warnings") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          {row.parseWarning && <div>{row.parseWarning}</div>}
+          {row.duplicateWarning && <div>{row.duplicateWarning}</div>}
+        </td>
+      );
+    }
+
+    if (colKey === "actions") {
+      return (
+        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg, whiteSpace: "normal" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setWinStatusForRow(row.id, "Y", true);
+              }}
+              style={smallButtonStyle}
+            >
+              Win
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setWinStatusForRow(row.id, "N", true);
+              }}
+              style={smallButtonStyle}
+            >
+              Loss
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteRow(row.id);
+              }}
+              style={smallButtonStyle}
+            >
+              Delete
+            </button>
+          </div>
+        </td>
+      );
+    }
+
+    return renderInlineEditor(row, rowBg, colKey, reactKey);
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      {hoverPreview.visible && hoverPreview.src && (
+        <div
+          onMouseDown={beginPreviewDrag}
+          style={{
+            position: "fixed",
+            left: hoverPreview.x,
+            top: hoverPreview.y,
+            zIndex: 9999,
+            pointerEvents: hoverPreview.locked ? "auto" : "none",
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
+            padding: 12,
+            width: 1280,
+            maxWidth: "96vw",
+            maxHeight: "92vh",
+            overflow: "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+              gap: 12,
+              cursor: hoverPreview.locked ? "move" : "default",
+              userSelect: "none",
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>
+              {hoverPreview.locked ? "Review Panel" : "Preview"}
+            </div>
+
+            {hoverPreview.locked && (
+              <button onClick={closeHoverPreview} style={smallButtonStyle}>
+                Close
+              </button>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "360px minmax(0, 1fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+            <strong>Bookmaker:</strong>{" "}
+            <select
+              value={previewRow?.bookmaker || ""}
+              onChange={(e) =>
+                previewRow &&
+                handleRowFieldChange(previewRow.id, "bookmaker", e.target.value)
+              }
+              style={{
+                marginLeft: 8,
+                padding: "6px 8px",
+                border: "1px solid #ccc",
+                borderRadius: 6,
+              }}
+            >
+              <option value="">Select</option>
+              <option value="DraftKings">DraftKings</option>
+              <option value="BetMGM">BetMGM</option>
+              <option value="FanDuel">FanDuel</option>
+              <option value="Caesars">Caesars</option>
+              <option value="Fanatics">Fanatics</option>
+              <option value="The Score">The Score</option>
+              <option value="Bet365">Bet365</option>
+              <option value="Circa">Circa</option>
+              <option value="Kalshi">Kalshi</option>
+            </select>
+          </div>
+
+          <div>
+            <strong>Selection:</strong>{" "}
+            <input
+              key={`selection-${previewRow?.id || "none"}`}
+              ref={popupSelectionRef}
+              defaultValue={previewRow?.selection || ""}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+
+                if (e.key === "Enter" && previewRow) {
+                  handleRowFieldChange(previewRow.id, "selection", e.currentTarget.value);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={(e) =>
+                previewRow &&
+                handleRowFieldChange(previewRow.id, "selection", e.currentTarget.value)
+              }
+              style={{
+                marginLeft: 8,
+                width: "70%",
+                padding: "6px 8px",
+                border: "1px solid #ccc",
+                borderRadius: 6,
+              }}
+            />
+          </div>
+
+          <div>
+            <strong>Event:</strong>{" "}
+            <input
+              key={`fixture-${previewRow?.id || "none"}`}
+              ref={popupFixtureRef}
+              defaultValue={previewRow?.fixtureEvent || ""}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+
+                if (e.key === "Enter" && previewRow) {
+                  handleRowFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={(e) =>
+                previewRow &&
+                handleRowFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value)
+              }
+              style={{
+                marginLeft: 8,
+                width: "70%",
+                padding: "6px 8px",
+                border: "1px solid #ccc",
+                borderRadius: 6,
+              }}
+            />
+          </div>
+
+            <div>
+              <strong>League:</strong>{" "}
+              <input
+                key={`league-${previewRow?.id || "none"}`}
+                list={`league-options-${previewRow?.id || "none"}`}
+                ref={popupLeagueRef}
+                defaultValue={previewRow?.sportLeague || ""}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+
+                  if (e.key === "Enter" && previewRow) {
+                    handleRowFieldChange(previewRow.id, "sportLeagueManual", "Y");
+                    handleRowFieldChange(previewRow.id, "sportLeague", e.currentTarget.value);
+                    e.currentTarget.blur();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (!previewRow) return;
+
+                  handleRowFieldChange(previewRow.id, "sportLeagueManual", "Y");
+                  handleRowFieldChange(previewRow.id, "sportLeague", e.currentTarget.value);
+                }}
+                placeholder="NBA, Baseball, NHL..."
+                style={{
+                  marginLeft: 8,
+                  width: 140,
+                  padding: "6px 8px",
+                  border: "1px solid #ccc",
+                  borderRadius: 6,
+                }}
+              />
+
+              <datalist id={`league-options-${previewRow?.id || "none"}`}>
+                {getLeagueOptionsForRow(previewRow || {}).map((league) => (
+                  <option key={league || "blank"} value={league} />
+                ))}
+              </datalist>
+            </div>
+              <div>
+                <strong>Bet Type:</strong>{" "}
+                <input
+                  key={`bet-type-${previewRow?.id || "none"}`}
+                  ref={popupBetTypeRef}
+                  list={`bet-type-options-${previewRow?.id || "none"}`}
+                  defaultValue={previewRow?.betType || ""}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+
+                    if (e.key === "Enter" && previewRow) {
+                      handleRowFieldChange(previewRow.id, "betType", e.currentTarget.value);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onBlur={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "betType", e.currentTarget.value)
+                  }
+                  placeholder="moneyline, spread, total..."
+                  style={{
+                    marginLeft: 8,
+                    width: 160,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+
+                <datalist id={`bet-type-options-${previewRow?.id || "none"}`}>
+                  <option value="moneyline" />
+                  <option value="spread" />
+                  <option value="total" />
+                  <option value="player prop" />
+                  <option value="game prop" />
+                  <option value="parlay" />
+                  <option value="futures" />
+                  <option value="straight" />
+                </datalist>
+              </div>   
+              {hoverPreview.locked && previewRow && (
+                <div
+                  style={{
+                    padding: 10,
+                    border: "1px solid #d1d5db",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <strong style={{ marginRight: 4 }}>Review Pass:</strong>
+                  {getFieldPill(getReviewPassStatusForPopup(previewRow), "info")}
+                  {getFieldPill("Date", previewRow.betDateNeedsConfirm === "Y" || !previewRow.betDate ? "warn" : "good")}
+                  {getFieldPill("Money", previewRow.stake && previewRow.oddsUS ? "good" : "bad")}
+                  {getFieldPill("Result", previewRow.win || ["open", "voided", "void", "push", "cashed out"].includes(String(previewRow.status || "").toLowerCase()) ? "good" : "bad")}
+                  {getFieldPill("Context", previewRow.sportLeague && (previewRow.fixtureEvent || previewRow.participantANormalized || previewRow.participantBNormalized) ? "good" : "warn")}
+                  {getFieldPill("Hedge", previewRow.likelyHedge === "Y" ? "warn" : "good")}
+                </div>
+              )}
+                            {hoverPreview.locked && previewRow && (
+                <div
+                  style={{
+                    padding: 10,
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 10,
+                    background: "#eff6ff",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 900, color: "#1e3a8a" }}>
+                    Match / Hedge Context
+                  </div>
+                  {lastReviewedContext && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button type="button" onClick={() => applyContextToCurrentRow(previewRow, "all")} style={smallButtonStyle}>
+                        Use Last Reviewed Context
+                      </button>
+                      <button type="button" onClick={() => applyContextToCurrentRow(previewRow, "date")} style={smallButtonStyle}>
+                        Use Last Date
+                      </button>
+                      <button type="button" onClick={() => applyContextToCurrentRow(previewRow, "league")} style={smallButtonStyle}>
+                        Use Last League
+                      </button>
+                      <button type="button" onClick={() => applyContextToCurrentRow(previewRow, "participants")} style={smallButtonStyle}>
+                        Use Last Participants
+                      </button>
+                      <button type="button" onClick={() => applyContextToCurrentRow(previewRow, "betType")} style={smallButtonStyle}>
+                        Use Last Bet Type
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <strong>Participant A:</strong>{" "}
+                    <input
+                      key={`participant-a-${previewRow?.id || "none"}`}
+                      ref={popupParticipantARef}
+                      list={`participant-options-a-${previewRow?.id || "none"}`}
+                      defaultValue={previewRow?.participantA || previewRow?.participantANormalized || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        if (!previewRow) return;
+
+                        const raw = e.currentTarget.value;
+                        const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
+
+                        handleRowFieldChange(previewRow.id, "participantA", raw);
+                        handleRowFieldChange(previewRow.id, "participantANormalized", normalized);
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+
+                        if (e.key === "Enter" && previewRow) {
+                          const raw = e.currentTarget.value;
+                          const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
+
+                          handleRowFieldChange(previewRow.id, "participantA", raw);
+                          handleRowFieldChange(previewRow.id, "participantANormalized", normalized);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      placeholder="Cavs, Yankees, Sabalenka..."
+                      style={{
+                        marginLeft: 8,
+                        width: 170,
+                        padding: "6px 8px",
+                        border: "1px solid #93c5fd",
+                        borderRadius: 6,
+                      }}
+                    />
+
+                    <datalist id={`participant-options-a-${previewRow?.id || "none"}`}>
+                      {getParticipantOptionsForLeague(getPreviewLeagueValue(previewRow)).map((option) => (
+                        <option key={`a-${option}`} value={option} />
+                      ))}
+                    </datalist>
+
+                    <div style={{ fontSize: 12, marginTop: 3, color: "#1d4ed8" }}>
+                      Normalized: {getParticipantANormalized(previewRow) || "—"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <strong>Participant B:</strong>{" "}
+                    <input
+                      key={`participant-b-${previewRow?.id || "none"}`}
+                      ref={popupParticipantBRef}
+                      list={`participant-options-b-${previewRow?.id || "none"}`}
+                      defaultValue={previewRow?.participantB || previewRow?.participantBNormalized || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        if (!previewRow) return;
+
+                        const raw = e.currentTarget.value;
+                        const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
+
+                        handleRowFieldChange(previewRow.id, "participantB", raw);
+                        handleRowFieldChange(previewRow.id, "participantBNormalized", normalized);
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+
+                        if (e.key === "Enter" && previewRow) {
+                          const raw = e.currentTarget.value;
+                          const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
+
+                          handleRowFieldChange(previewRow.id, "participantB", raw);
+                          handleRowFieldChange(previewRow.id, "participantBNormalized", normalized);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      placeholder="Pistons, Cubs, Cirstea..."
+                      style={{
+                        marginLeft: 8,
+                        width: 170,
+                        padding: "6px 8px",
+                        border: "1px solid #93c5fd",
+                        borderRadius: 6,
+                      }}
+                    />
+
+                    <datalist id={`participant-options-b-${previewRow?.id || "none"}`}>
+                      {getParticipantOptionsForLeague(getPreviewLeagueValue(previewRow)).map((option) => (
+                        <option key={`b-${option}`} value={option} />
+                      ))}
+                    </datalist>
+
+                    <div style={{ fontSize: 12, marginTop: 3, color: "#1d4ed8" }}>
+                      Normalized: {getParticipantBNormalized(previewRow) || "—"}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    style={smallButtonStyle}
+                    onClick={() => {
+                      if (!previewRow) return;
+
+                      const currentRowId = previewRow.id;
+                      const nextEventLabel = buildContextEventLabel(previewRow);
+
+                      if (nextEventLabel) {
+                        if (popupFixtureRef.current) {
+                          popupFixtureRef.current.value = nextEventLabel;
+                        }
+
+                        handleRowFieldChange(currentRowId, "fixtureEvent", nextEventLabel);
+                      }
+                    }}
+                  >
+                    Build Event from Context
+                  </button>
+
+                  <div>
+                    <strong>Player Last Name / Subject:</strong>{" "}
+                    <input
+                      key={`subject-${previewRow?.id || "none"}`}
+                      ref={popupSubjectRef}
+                      defaultValue={previewRow?.canonicalSubject || previewRow?.canonicalPlayer || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        if (!previewRow) return;
+
+                        const rawSubject = e.currentTarget.value;
+                        const lastName = popupPlayerLastNameRef.current?.value || getLastNameFromText(rawSubject);
+
+                        handleRowFieldChange(previewRow.id, "canonicalSubject", rawSubject);
+                        handleRowFieldChange(previewRow.id, "playerLastName", lastName);
+                      }}
+                      placeholder="Mobley, Sabalenka, Rose..."
+                      style={{
+                        marginLeft: 8,
+                        width: 170,
+                        padding: "6px 8px",
+                        border: "1px solid #93c5fd",
+                        borderRadius: 6,
+                      }}
+                    />
+
+                    <input
+                      key={`player-last-${previewRow?.id || "none"}`}
+                      ref={popupPlayerLastNameRef}
+                      defaultValue={previewRow?.playerLastName || getLastNameFromText(previewRow?.canonicalSubject || previewRow?.canonicalPlayer || "")}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) =>
+                        previewRow &&
+                        handleRowFieldChange(previewRow.id, "playerLastName", e.currentTarget.value)
+                      }
+                      placeholder="Last name"
+                      style={{
+                        marginLeft: 8,
+                        width: 100,
+                        padding: "6px 8px",
+                        border: "1px solid #93c5fd",
+                        borderRadius: 6,
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <strong>Prop Market:</strong>{" "}
+                    <input
+                      key={`prop-market-${previewRow?.id || "none"}`}
+                      ref={popupPropMarketRef}
+                      list={`prop-market-options-${previewRow?.id || "none"}`}
+                      defaultValue={previewRow?.propMarket || normalizePropMarketValue(previewRow?.canonicalMarketContext || previewRow?.marketDetail || "")}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) =>
+                        previewRow &&
+                        handleRowFieldChange(
+                          previewRow.id,
+                          "propMarket",
+                          normalizePropMarketValue(e.currentTarget.value)
+                        )
+                      }
+                      placeholder="assists, points, goals..."
+                      style={{
+                        marginLeft: 8,
+                        width: 170,
+                        padding: "6px 8px",
+                        border: "1px solid #93c5fd",
+                        borderRadius: 6,
+                      }}
+                    />
+
+                    <datalist id={`prop-market-options-${previewRow?.id || "none"}`}>
+                      <option value="points" />
+                      <option value="assists" />
+                      <option value="rebounds" />
+                      <option value="threes" />
+                      <option value="double-double" />
+                      <option value="triple-double" />
+                      <option value="goals" />
+                      <option value="shots on goal" />
+                      <option value="saves" />
+                      <option value="strikeouts" />
+                      <option value="total bases" />
+                      <option value="home runs" />
+                      <option value="rbis" />
+                      <option value="hits" />
+                    </datalist>
+                  </div>
+
+
+                <div>
+                  <strong>Market / Bet Type:</strong>{" "}
+                  <input
+                    key={`market-context-${previewRow?.id || "none"}`}
+                    ref={popupMarketContextRef}
+                    list={`market-context-options-${previewRow?.id || "none"}`}
+                    defaultValue={
+                      inferBetTypeFromRow(previewRow || {}) ||
+                      previewRow?.canonicalMarketContext ||
+                      previewRow?.marketDetail ||
+                      ""
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => {
+                      if (!previewRow) return;
+
+                      const rawMarketContext = e.currentTarget.value;
+                      const normalizedContext = normalizeMarketContext(rawMarketContext);
+                      const normalizedBetType = normalizeBetTypeValue(rawMarketContext);
+
+                      handleRowFieldChange(previewRow.id, "canonicalMarketContext", normalizedContext);
+
+                      if (normalizedBetType) {
+                        handleRowFieldChange(previewRow.id, "betType", normalizedBetType);
+                      }
+                    }}
+                    placeholder="moneyline, spread, total..."
+                    style={{
+                      marginLeft: 8,
+                      width: 170,
+                      padding: "6px 8px",
+                      border: "1px solid #93c5fd",
+                      borderRadius: 6,
+                    }}
+                  />
+
+                  <datalist id={`market-context-options-${previewRow?.id || "none"}`}>
+                    <option value="moneyline" />
+                    <option value="spread" />
+                    <option value="total" />
+                    <option value="player prop" />
+                    <option value="game prop" />
+                    <option value="parlay" />
+                    <option value="futures" />
+                    <option value="straight" />
+                  </datalist>
+                </div>
+
+                </div>
+              )}
+              <div>
+
+              <div
+                style={{
+                  padding: 10,
+                  border: rowNeedsDateConfirm(previewRow) ? "3px solid #b45309" : "1px solid #d1d5db",
+                  borderRadius: 10,
+                  background: rowNeedsDateConfirm(previewRow) ? "#fef3c7" : "#f9fafb",
+                }}
+              >
+                <strong>Bet Date:</strong>{" "}
+
+                {rowNeedsDateConfirm(previewRow) && (
+                  <div style={{ marginTop: 4, marginBottom: 8, fontWeight: 900, color: "#92400e" }}>
+                    ⚠ Date needs confirmation before continuing.
+                  </div>
+                )}
+
+                <input
+                  ref={popupBetMonthRef}
+                  defaultValue={getDateParts(previewRow?.betDate || "").month}
+                  placeholder="MM"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    marginLeft: 8,
+                    width: 42,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+
+                <input
+                  ref={popupBetDayRef}
+                  defaultValue={getDateParts(previewRow?.betDate || "").day}
+                  placeholder="DD"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    marginLeft: 4,
+                    width: 42,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+
+                <input
+                  ref={popupBetYearRef}
+                  defaultValue={getDateParts(previewRow?.betDate || "").year}
+                  placeholder="YY"
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={() => {
+                    if (!previewRow) return;
+
+                    const dateFromParts = buildDateFromParts(
+                      popupBetMonthRef.current?.value,
+                      popupBetDayRef.current?.value,
+                      popupBetYearRef.current?.value
+                    );
+
+                    if (dateFromParts) {
+                      setBetDateForRow(previewRow.id, dateFromParts);
+                    }
+                  }}
+                  style={{
+                    marginLeft: 4,
+                    width: 56,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+
+                <input
+                  ref={popupBetDateRef}
+                  value={previewRow?.betDate || ""}
+                  readOnly
+                  placeholder="MM/DD/YYYY"
+                  style={{
+                    marginLeft: 8,
+                    width: 110,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background: "#f9fafb",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && usePreviousBetDateForRow(previewRow.id)}
+                  style={{ ...smallButtonStyle, marginLeft: 8 }}
+                >
+                  Use Prev Date
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && shiftBetDateForRow(previewRow.id, -1)}
+                  style={{ ...smallButtonStyle, marginLeft: 6 }}
+                >
+                  -1 Day
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && shiftBetDateForRow(previewRow.id, 1)}
+                  style={{ ...smallButtonStyle, marginLeft: 6 }}
+                >
+                  +1 Day
+                </button>
+
+                <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
+                  Prev: {previewRow ? getPreviousRowDate(previewRow.id) || "—" : "—"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && confirmPopupDate(previewRow.id)}
+                  style={{
+                    ...smallButtonStyle,
+                    marginLeft: 8,
+                    fontWeight: 900,
+                    border: "1px solid #166534",
+                    background: "#dcfce7",
+                    color: "#14532d",
+                  }}
+                >
+                  Confirm Date
+                </button>
+              </div>
+
+                <strong>Stake:</strong>{" "}
+                <input
+                  value={previewRow?.stake || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "stake", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                  }}
+                />
+              </div>
+
+              <div>
+                <strong>Odds:</strong>{" "}
+                <input
+                  value={previewRow?.oddsUS || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "oddsUS", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      previewRow?.oddsSource === "Calculated" ? "#fee2e2" : "#fff",
+                    color:
+                      previewRow?.oddsSource === "Calculated" ? "#991b1b" : "#111827",
+                    fontWeight:
+                      previewRow?.oddsSource === "Calculated" ? 700 : 400,
+                  }}
+                />
+              </div>
+
+              <div>
+                <strong>Payout:</strong>{" "}
+                <input
+                  value={previewRow?.payout || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "payout", e.target.value)
+                  }
+                  style={{
+                    marginLeft: 8,
+                    width: 120,
+                    padding: "6px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background:
+                      !previewRow?.payout && previewRow?.oddsUS ? "#fee2e2" : "#fff",
+                  }}
+                />
+              </div>
+
+              {hoverPreview.locked && previewRow && (
+                <div
+                  style={{
+                    ...getParsedResultStyle(previewRow),
+                    padding: 12,
+                    borderRadius: 10,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>
+                    PARSED RESULT
+                  </div>
+
+                  <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: 1 }}>
+                    {getParsedResultLabel(previewRow)}
+                  </div>
+
+                  <div style={{ fontSize: 13, display: "grid", gap: 3 }}>
+                    <div>
+                      <strong>Status:</strong> {previewRow.status || "—"}
+                    </div>
+
+                    <div>
+                      <strong>Bonus Bet:</strong>{" "}
+                      {previewRow.bonusBet === "Y" ? "Yes" : "No"}
+                    </div>
+
+                    <div>
+                      <strong>Stake / Odds / Payout:</strong>{" "}
+                      {previewRow.stake ? `$${previewRow.stake}` : "—"} /{" "}
+                      {previewRow.oddsUS || "—"} /{" "}
+                      {previewRow.payout ? `$${previewRow.payout}` : "—"}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentRowId = previewRow.id;
+                        if (!canProceedFromPopup(previewRow)) return;
+                        commitPopupReviewEdits(currentRowId);
+                        saveLastReviewedContext(previewRow);
+                        handleRowFieldChange(currentRowId, "reviewResolved", "Y");
+                        handleRowFieldChange(currentRowId, "reviewLater", "N");
+                        setTimeout(() => jumpToNextReviewRow(currentRowId), 0);
+                      }}
+                      style={{
+                        ...smallButtonStyle,
+                        fontWeight: 800,
+                        border: "1px solid #166534",
+                        background: "#dcfce7",
+                        color: "#14532d",
+                      }}
+                    >
+                      Confirm Parsed + Next
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => markPopupResult(previewRow.id, "Y")}
+                      style={smallButtonStyle}
+                    >
+                      Correct: Win
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => markPopupResult(previewRow.id, "N")}
+                      style={smallButtonStyle}
+                    >
+                      Correct: Loss
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => markPopupResult(previewRow.id, "V")}
+                      style={smallButtonStyle}
+                    >
+                      Correct: Void
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "grid", gap: 6 }}>
+                <strong>Notes:</strong>
+                <textarea
+                  value={previewRow?.reviewNotes || ""}
+                  onChange={(e) =>
+                    previewRow &&
+                    handleRowFieldChange(previewRow.id, "reviewNotes", e.target.value)
+                  }
+                  placeholder="Add parser/debug notes here"
+                  style={{
+                    width: "100%",
+                    minHeight: 110,
+                    padding: "8px 10px",
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    background: "#fff",
+                    color: "#000",
+                    resize: "vertical",
+                    fontFamily: "Arial, sans-serif",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {previewNeedsReview && (
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    border: "1px solid #fecaca",
+                    borderRadius: 6,
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                    fontWeight: 700,
+                  }}
+                >
+                  Needs Review
+                </div>
+              )}
+
+              {hoverPreview.locked && previewRow && (
+                <>
+                  
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                <button
+                  onClick={() => {
+                    const currentRowId = previewRow.id;
+
+                    if (!canProceedFromPopup(previewRow)) return;
+
+                    commitPopupReviewEdits(currentRowId);
+                    setTimeout(() => jumpToNextReviewRow(currentRowId), 0);
+                  }}
+                  style={smallButtonStyle}
+                >
+                  Next Row / No Change
+                </button>
+
+
+                <button
+                  onClick={() => {
+                    const currentRowId = previewRow.id;
+
+                    if (!canProceedFromPopup(previewRow)) return;
+
+                    commitPopupReviewEdits(currentRowId);
+
+                    handleRowFieldChange(
+                      currentRowId,
+                      "reviewLater",
+                      previewRow.reviewLater === "Y" ? "N" : "Y"
+                    );
+
+                    handleRowFieldChange(currentRowId, "reviewResolved", "N");
+
+                    setTimeout(() => {
+                      jumpToNextReviewRow(currentRowId);
+                    }, 0);
+                  }}
+                  style={smallButtonStyle}
+                >
+                  Review Later + Next
+                </button>
+
+                <button
+                  onClick={() =>
+                    handleRowFieldChange(
+                      previewRow.id,
+                      "bonusBet",
+                      previewRow.bonusBet === "Y" ? "N" : "Y"
+                    )
+                  }
+                  style={smallButtonStyle}
+                >
+                  Toggle Bonus
+                </button>
+
+                <button
+                  onClick={() => autoFillCalculatedFields(previewRow)}
+                  style={smallButtonStyle}
+                >
+                  Auto Fill Odds / Payout
+                </button>
+
+                <button
+                  onClick={() => {
+                    closeHoverPreview();
+                    deleteRow(previewRow.id);
+                  }}
+                  style={smallButtonStyle}
+                >
+                  Delete
+                </button>
+              </div>
+                </>
+              )}
+            </div>
+
+            <div
+              ref={imageScrollRef}
+              style={{
+                maxHeight: "84vh",
+                height: previewZoomed ? "76vh" : "auto",
+                overflowY: previewZoomed ? "auto" : "hidden",
+                overflowX: "hidden",
+                border: "1px solid #e5e7eb",
+                borderRadius: 6,
+                background: "#fff",
+              }}
+            >
+              <img
+                src={hoverPreview.src}
+                alt={hoverPreview.alt}
+                onClick={(e) => {
+                  if (!hoverPreview.locked) return;
+
+                  if (previewZoomed) {
+                    setPreviewZoomed(false);
+                    setPreviewZoomOrigin({ x: "50%", y: "0%" });
+                    if (imageScrollRef.current) {
+                      imageScrollRef.current.scrollTop = 0;
+                    }
+                    return;
+                  }
+
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+                  setPreviewZoomOrigin({
+                    x: `${x}%`,
+                    y: `${y}%`,
+                  });
+
+                  setPreviewZoomed(true);
+                }}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                  borderRadius: 6,
+                  cursor: hoverPreview.locked
+                    ? previewZoomed
+                      ? "zoom-out"
+                      : "zoom-in"
+                    : "default",
+                  transform: previewZoomed ? "scale(1)" : "scale(0.45)",
+                  transformOrigin: previewZoomed
+                    ? `${previewZoomOrigin.x} ${previewZoomOrigin.y}`
+                    : "50% 0%",
+                  transition: "transform 0.15s ease",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h3 style={{ color: "#000" }}>Review Queue</h3>
+
+      <div
+        style={{
+          overflowX: "auto",
+          overflowY: "auto",
+          maxHeight: "74vh",
+          minHeight: "58vh",
+          border: "1px solid #ddd",
+          borderRadius: 6,
+        }}
+      >
+        <table
+          style={{
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            width: "100%",
+            backgroundColor: "#fff",
+            tableLayout: "fixed",
+          }}
+        >
+          <colgroup>
+            {reviewColumns.map((col) => (
+              <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
+            ))}
+          </colgroup>
+
+          <thead>
+            <tr>
+              {reviewColumns.map((col, idx) => {
+                const isSorted = sortConfig.key === col.key;
+                const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
+                 return (
+                  <th
+                    key={col.key}
+                    style={{
+                      borderRight: "1px solid #d1d5db",
+                      borderBottom: "2px solid #9ca3af",
+                      padding: 0,
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      textAlign: "left",
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 3,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "relative",
+                        minHeight: 42,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (col.sortable) handleSort(col.key);
+                        }}
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          background: "transparent",
+                          textAlign: "left",
+                          padding: "10px 18px 10px 12px",
+                          fontWeight: 700,
+                          color: "#111827",
+                          cursor: col.sortable ? "pointer" : "default",
+                        }}
+                      >
+                        {idx === 0 ? (
+                          <input
+                            type="checkbox"
+                            checked={allVisibleSelected}
+                            onChange={toggleSelectAllVisible}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          `${col.label}${sortArrow}`
+                        )}
+                      </button>
+
+                      <div
+                        onMouseDown={(e) => startResize(e, col.key)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 14,
+                          height: "100%",
+                          cursor: "col-resize",
+                          zIndex: 2,
+                          background: "transparent",
+                        }}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+
+          <tbody>
+            {sortedRows.map((row, index) => {
+              const zebra = index % 2 === 0 ? "#ffffff" : "#e5e7eb";
+              const attentionLevel = getRowAttentionLevel ? getRowAttentionLevel(row) : "";
+              const isResolved = row.reviewResolved === "Y";
+
+              const isCriticalReview = attentionLevel === "critical";
+              const isDateConfirmReview = attentionLevel === "date-confirm";
+              const isSoftReview = attentionLevel === "soft";
+
+              const needsReview =
+                isCriticalReview ||
+                isDateConfirmReview ||
+                isSoftReview ||
+                row.likelyParserIssue === "Y" ||
+                !row.sportLeague ||
+                !row.oddsUS ||
+                row.oddsSource === "Calculated";
+
+              const isSelected = row.id === selectedRowId;
+
+              const isHedgeRow = row.likelyHedge === "Y";
+
+              const rowBg =
+                isSelected
+                  ? "#e0f2fe"
+                  : attentionLevel === "resolved-critical"
+                  ? "#fff7ed"
+                  : attentionLevel === "resolved"
+                  ? "#f1f8e9"
+                  : attentionLevel === "duplicate"
+                  ? "#fdecea"
+                  : isCriticalReview
+                  ? "#ef4444"
+                  : isDateConfirmReview
+                  ? "#ffedd5"
+                  : isSoftReview
+                  ? "#fff8e1"
+                  : isHedgeRow
+                  ? "#faf5ff"
+                  : zebra;
+
+              return (
+                <tr
+                  key={row.id}
+                  ref={row.id === selectedRowId ? selectedRowRef : null}
+                  onClick={() => {
+                    setSelectedRowId(row.id);
+
+                    setHoverPreview((prev) => {
+                      if (!prev.locked) return prev;
+                      return {
+                        ...prev,
+                        rowId: row.id,
+                        src: row.sourceImageUrl || "",
+                        alt: row.sourceFileName || "",
+                        visible: !!row.sourceImageUrl,
+                      };
+                    });
+                  }}
+                  style={{
+                  backgroundColor: rowBg,
+                  cursor: "pointer",
+
+                  outline: isSelected
+                    ? "3px solid #0284c7"
+                    : attentionLevel === "resolved-critical"
+                    ? "2px solid #ea580c"
+                    : attentionLevel === "resolved"
+                    ? "2px solid #a3d9a5"
+                    : attentionLevel === "duplicate"
+                    ? "2px solid #dc2626"
+                    : isCriticalReview
+                    ? "3px solid #7f1d1d"
+                    : isDateConfirmReview
+                    ? "3px solid #f97316"
+                    : isSoftReview
+                    ? "2px solid #f0b429"
+                    : "none",
+
+                  outlineOffset: "-2px",
+
+                  borderLeft: isSelected
+                    ? "6px solid #0284c7"
+                    : attentionLevel === "resolved-critical"
+                    ? "6px solid #ea580c"
+                    : attentionLevel === "resolved"
+                    ? "6px solid #65a30d"
+                    : isCriticalReview
+                    ? "10px solid #7f1d1d"
+                    : isDateConfirmReview
+                    ? "8px solid #f97316"
+                    : isSoftReview
+                    ? "6px solid #f0b429"
+                    : attentionLevel === "duplicate"
+                    ? "6px solid #dc2626"
+                    : row.guaranteedProfit === "Y"
+                    ? "6px solid #16a34a"
+                    : row.likelyHedge === "Y"
+                    ? "6px solid #7c3aed"
+                    : "none",
+
+                  // 🔥 Glow pulse effect
+                  boxShadow:
+                    pulseRowId === row.id
+                      ? "0 0 0 6px rgba(2,132,199,0.45)"
+                      : isSelected
+                      ? "0 0 0 2px rgba(2,132,199,0.2)"
+                      : "none",
+
+                  transition: "box-shadow 0.25s ease",
+                }}
+                >
+                  {reviewColumns.map((col) => (
+                    renderCell(row, rowBg, col.key, col.key)
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

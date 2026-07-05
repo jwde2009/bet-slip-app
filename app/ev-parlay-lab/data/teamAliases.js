@@ -10,11 +10,23 @@ function addAliases(map, sport, canonical, aliases) {
 export const TEAM_ALIASES_BY_SPORT = {};
 
 export function normalizeTeamNameBySport(name = "", sport = "") {
-  const clean = String(name).trim();
+  const clean = String(name || "")
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
+    .replace(/^[\s"'“”*•·–—-]+/g, "")
+    .replace(/\bNeutral\s+(?:Venue|Site|Court|Field|Stadium|Arena|Ice|Location)\b/gi, " ")
+    .replace(/\b(?:Venue|Neutral Site|Neutral Court|Neutral Field|Neutral Stadium|Neutral Arena)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   if (!clean) return "";
 
   const sportKey = String(sport || "").trim().toUpperCase();
-  const lower = clean.toLowerCase();
+  const lower = clean
+    .toLowerCase()
+    .replace(/^[\s"'*•·–—-]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (sportKey && TEAM_ALIASES_BY_SPORT[sportKey]?.[lower]) {
     return TEAM_ALIASES_BY_SPORT[sportKey][lower];
@@ -36,7 +48,17 @@ addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Atlanta Hawks", ["atl", "atlanta", "ha
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Boston Celtics", ["bos", "boston", "celtics", "bos celtics"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Brooklyn Nets", ["bkn", "bk", "brooklyn", "nets", "bkn nets"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha", "charlotte", "hornets", "cha hornets"]);
-addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Chicago Bulls", ["chi", "chicago", "bulls", "chi bulls"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Chicago Bulls", [
+  "chi",
+  "chicago",
+  "bulls",
+  "chi bulls",
+  "chicago bull",
+  "chi bull",
+  "* chi bulls",
+  "” chi bulls",
+  '" chi bulls',
+]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Cleveland Cavaliers", ["cle", "cavs", "cavaliers", "cle cavaliers"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Dallas Mavericks", ["dal", "dallas", "mavs", "mavericks", "dal mavericks"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Denver Nuggets", ["den", "denver", "nuggets", "den nuggets"]);
@@ -77,6 +99,25 @@ addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha hornets"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Philadelphia 76ers", ["phi 76ers"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Orlando Magic", ["orl magic"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Miami Heat", ["mia heat"]);
+
+/* =========================
+   WNBA
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Atlanta Dream", ["atl", "atl dream", "atlanta", "atlanta dream", "dream"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Chicago Sky", ["chi", "chi sky", "chicago", "chicago sky", "sky"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Connecticut Sun", ["con", "ct", "con sun", "ct sun", "connecticut", "connecticut sun", "sun"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Dallas Wings", ["dal", "dal wings", "dallas", "dallas wings", "wings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Golden State Valkyries", ["gs", "gsv", "gs valkyries", "gsv valkyries", "golden state", "golden state valkyries", "valkyries"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Indiana Fever", ["ind", "ind fever", "indiana", "indiana fever", "fever"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Las Vegas Aces", ["lv", "lva", "lv aces", "lva aces", "las vegas", "las vegas aces", "aces"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Los Angeles Sparks", ["la", "las", "la sparks", "las sparks", "los angeles", "los angeles sparks", "sparks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Minnesota Lynx", ["min", "min lynx", "minnesota", "minnesota lynx", "lynx"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "New York Liberty", ["ny", "nyl", "ny liberty", "nyl liberty", "new york", "new york liberty", "liberty"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Phoenix Mercury", ["phx", "pho", "phx mercury", "pho mercury", "phoenix", "phoenix mercury", "mercury"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Portland Fire", ["por", "por fire", "portland", "portland fire", "fire"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Seattle Storm", ["sea", "sea storm", "seattle", "seattle storm", "storm"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Toronto Tempo", ["tor", "tor tempo", "toronto", "toronto tempo", "tempo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "WNBA", "Washington Mystics", ["was", "wsh", "was mystics", "wsh mystics", "washington", "washington mystics", "mystics"]);
 
 /* =========================
    NHL
@@ -425,4 +466,24 @@ addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Saudi Arabia", ["ksa"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Qatar", ["qat"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iran", ["irn"]);
 addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iraq", ["irq"]);
-addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Draw", ["tie", "x"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Algeria", ["alg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Bolivia", ["bol"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "China", ["chn", "china pr"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Côte d'Ivoire", ["cote d'ivoire", "côte d’ivoire", "ivory coast", "civ"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "DR Congo", ["democratic republic of congo", "congo dr", "drc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Ghana", ["gha"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Greece", ["gre"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Honduras", ["hon"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Hungary", ["hun"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "New Zealand", ["nzl", "new zealand all whites"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Northern Ireland", ["nir"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Republic of Ireland", ["ireland", "irl"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Romania", ["rou", "romania"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Scotland", ["sco"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Slovakia", ["svk"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Slovenia", ["svn"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "South Africa", ["rsa", "zaf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Tunisia", ["tun"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Türkiye", ["turkiye", "turkey", "tur"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Venezuela", ["ven"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Wales", ["wal"]);addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Draw", ["tie", "x"]);

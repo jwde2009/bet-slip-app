@@ -1,0 +1,2695 @@
+﻿
+
+===== app/ev-parlay-lab/data/teamAliases.js =====
+function addAliases(map, sport, canonical, aliases) {
+  if (!map[sport]) map[sport] = {};
+  const all = [canonical, ...aliases];
+
+  for (const alias of all) {
+    map[sport][String(alias).trim().toLowerCase()] = canonical;
+  }
+}
+
+export const TEAM_ALIASES_BY_SPORT = {};
+
+export function normalizeTeamNameBySport(name = "", sport = "") {
+  const clean = String(name).trim();
+  if (!clean) return "";
+
+  const sportKey = String(sport || "").trim().toUpperCase();
+  const lower = clean.toLowerCase();
+
+  if (sportKey && TEAM_ALIASES_BY_SPORT[sportKey]?.[lower]) {
+    return TEAM_ALIASES_BY_SPORT[sportKey][lower];
+  }
+
+  for (const key of Object.keys(TEAM_ALIASES_BY_SPORT)) {
+    if (TEAM_ALIASES_BY_SPORT[key][lower]) {
+      return TEAM_ALIASES_BY_SPORT[key][lower];
+    }
+  }
+
+  return clean;
+}
+
+/* =========================
+   NBA
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Atlanta Hawks", ["atl", "atlanta", "hawks", "atl hawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Boston Celtics", ["bos", "boston", "celtics", "bos celtics"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Brooklyn Nets", ["bkn", "bk", "brooklyn", "nets", "bkn nets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha", "charlotte", "hornets", "cha hornets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Chicago Bulls", ["chi", "chicago", "bulls", "chi bulls"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Cleveland Cavaliers", ["cle", "cavs", "cavaliers", "cle cavaliers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Dallas Mavericks", ["dal", "dallas", "mavs", "mavericks", "dal mavericks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Denver Nuggets", ["den", "denver", "nuggets", "den nuggets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Detroit Pistons", ["det", "detroit", "pistons", "det pistons"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Golden State Warriors", ["gs", "gsw", "golden state", "warriors", "gs warriors", "gsw warriors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Houston Rockets", ["hou", "houston", "rockets", "hou rockets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Indiana Pacers", ["ind", "indy", "indiana", "pacers", "ind pacers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Clippers", ["lac", "la clippers", "clippers", "los angeles clippers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Lakers", ["lal", "la lakers", "lakers", "los angeles lakers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Memphis Grizzlies", ["mem", "memphis", "grizzlies", "mem grizzlies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Miami Heat", ["mia", "miami", "heat", "mia heat"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Milwaukee Bucks", ["mil", "milwaukee", "bucks", "mil bucks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Minnesota Timberwolves", ["min", "minnesota", "wolves", "timberwolves", "min timberwolves"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New Orleans Pelicans", ["no", "nop", "new orleans", "pelicans", "nop pelicans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New York Knicks", ["ny", "nyk", "new york", "knicks", "ny knicks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Oklahoma City Thunder", ["okc", "oklahoma city", "thunder", "okc thunder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Orlando Magic", ["orl", "orlando", "magic", "orl magic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Philadelphia 76ers", ["phi", "philadelphia", "76ers", "sixers", "phi 76ers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Phoenix Suns", ["phx", "phoenix", "suns", "phx suns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Portland Trail Blazers", ["por", "portland", "blazers", "trail blazers", "por blazers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Sacramento Kings", ["sac", "sacramento", "kings", "sac kings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "San Antonio Spurs", ["sa", "sas", "san antonio", "spurs", "sas spurs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Toronto Raptors", ["tor", "toronto", "raptors", "tor raptors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Utah Jazz", ["utah", "uta", "jazz", "uta jazz"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Washington Wizards", ["wsh", "was", "washington", "wizards", "was wizards"]);
+// TheScore-style abbreviations (CRITICAL)
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Golden State Warriors", ["gs warriors"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Cleveland Cavaliers", ["cle cavaliers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "San Antonio Spurs", ["sa spurs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New York Knicks", ["ny knicks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "New Orleans Pelicans", ["no pelicans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Oklahoma City Thunder", ["okc thunder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Clippers", ["la clippers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Los Angeles Lakers", ["la lakers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Phoenix Suns", ["phx suns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Portland Trail Blazers", ["por trail blazers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Charlotte Hornets", ["cha hornets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Philadelphia 76ers", ["phi 76ers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Orlando Magic", ["orl magic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NBA", "Miami Heat", ["mia heat"]);
+
+/* =========================
+   NHL
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Anaheim Ducks", ["ana", "anaheim", "ducks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Boston Bruins", ["bos", "boston", "bruins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Buffalo Sabres", ["buf", "buffalo", "sabres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Calgary Flames", ["cgy", "calgary", "flames"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Carolina Hurricanes", ["car", "carolina", "hurricanes", "canes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Chicago Blackhawks", ["chi", "chicago", "blackhawks", "hawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Colorado Avalanche", ["col", "colorado", "avalanche", "avs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Columbus Blue Jackets", ["cbj", "columbus", "blue jackets", "jackets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Dallas Stars", ["dal", "dallas", "stars"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Detroit Red Wings", ["det", "detroit", "red wings", "wings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Edmonton Oilers", ["edm", "edmonton", "oilers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Florida Panthers", ["fla", "florida", "panthers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Los Angeles Kings", ["la", "lak", "kings", "la kings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Minnesota Wild", ["min", "minnesota", "wild"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Montreal Canadiens", ["mtl", "montreal", "canadiens", "habs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Nashville Predators", ["nsh", "nashville", "predators", "preds"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New Jersey Devils", ["nj", "njd", "new jersey", "devils"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Islanders", ["nyi", "islanders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Rangers", ["nyr", "rangers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Ottawa Senators", ["ott", "ottawa", "senators", "sens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Philadelphia Flyers", ["phi", "philadelphia", "flyers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Pittsburgh Penguins", ["pit", "pittsburgh", "penguins", "pens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "San Jose Sharks", ["sj", "sjs", "san jose", "sharks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Seattle Kraken", ["sea", "seattle", "kraken"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "St. Louis Blues", ["stl", "st louis", "saint louis", "blues"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Tampa Bay Lightning", ["tb", "tbl", "tampa", "tampa bay", "tampa lightning", "tb lightning", "tbl lightning", "lightning", "bolts"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Toronto Maple Leafs", ["tor", "toronto", "maple leafs", "leafs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["utah", "utah hockey club", "utah hc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["utah mammoth", "mammoth"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vancouver Canucks", ["van", "vancouver", "canucks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vegas Golden Knights", ["vgk", "vegas", "golden knights", "knights"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Washington Capitals", ["wsh", "was", "washington", "capitals", "caps"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Winnipeg Jets", ["wpg", "winnipeg", "jets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Boston Bruins", ["bos bruins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Buffalo Sabres", ["buf sabres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Carolina Hurricanes", ["car hurricanes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Ottawa Senators", ["ott senators"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Colorado Avalanche", ["col avalanche"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Dallas Stars", ["dal stars"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Minnesota Wild", ["min wild"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Montreal Canadiens", ["mtl canadiens", "mon canadiens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Los Angeles Kings", ["la kings", "lak kings"]);
+// TheScore / sportsbook-style NHL combined aliases
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Anaheim Ducks", ["ana ducks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Boston Bruins", ["bos bruins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Buffalo Sabres", ["buf sabres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Calgary Flames", ["cgy flames"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Carolina Hurricanes", ["car hurricanes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Chicago Blackhawks", ["chi blackhawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Colorado Avalanche", ["col avalanche"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Columbus Blue Jackets", ["cbj blue jackets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Dallas Stars", ["dal stars"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Detroit Red Wings", ["det red wings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Edmonton Oilers", ["edm oilers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Florida Panthers", ["fla panthers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Los Angeles Kings", ["la kings", "lak kings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Minnesota Wild", ["min wild"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Montreal Canadiens", ["mtl canadiens", "mon canadiens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Nashville Predators", ["nsh predators"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New Jersey Devils", ["nj devils", "njd devils"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Islanders", ["nyi islanders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "New York Rangers", ["ny rangers", "nyr rangers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Ottawa Senators", ["ott senators"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Philadelphia Flyers", ["phi flyers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Pittsburgh Penguins", ["pit penguins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "San Jose Sharks", ["sj sharks", "sjs sharks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Seattle Kraken", ["sea kraken"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "St. Louis Blues", ["stl blues"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Tampa Bay Lightning", ["tb lightning", "tbl lightning", "tampa", "tampa lightning"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Toronto Maple Leafs", ["tor maple leafs", "tor leafs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Utah Hockey Club", ["uta hockey club", "utah mammoth", "uta mammoth"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vancouver Canucks", ["van canucks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Vegas Golden Knights", ["vgk golden knights", "vegas golden knights"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Washington Capitals", ["wsh capitals", "was capitals"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NHL", "Winnipeg Jets", ["wpg jets"]);
+
+/* =========================
+   MLB
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Arizona Diamondbacks", ["ari", "ari diamondbacks", "arizona", "arizona diamondbacks", "diamondbacks", "dbacks", "d-backs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Atlanta Braves", ["atl", "atl braves", "atlanta", "atlanta braves", "braves"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Baltimore Orioles", ["bal", "bal orioles", "baltimore", "baltimore orioles", "orioles", "o's", "os"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Boston Red Sox", ["bos", "bos red sox", "boston", "boston red sox", "red sox"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Chicago Cubs", ["chc", "chi cubs", "chicago cubs", "cubs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Chicago White Sox", ["chw", "cws", "chi white sox", "chicago white sox", "white sox"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Cincinnati Reds", ["cin", "cin reds", "cincinnati", "cincinnati reds", "reds"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Cleveland Guardians", ["cle", "cle guardians", "cleveland", "cleveland guardians", "guardians"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Colorado Rockies", ["col", "col rockies", "colorado", "colorado rockies", "rockies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Detroit Tigers", ["det", "det tigers", "detroit", "detroit tigers", "tigers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Houston Astros", ["hou", "hou astros", "houston", "houston astros", "astros"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Kansas City Royals", ["kc", "kcr", "kc royals", "kansas city", "kansas city royals", "royals"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Los Angeles Angels", ["laa", "la angels", "los angeles angels", "angels"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Los Angeles Dodgers", ["lad", "la dodgers", "los angeles dodgers", "dodgers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Miami Marlins", ["mia", "mia marlins", "miami", "miami marlins", "marlins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Milwaukee Brewers", ["mil", "mil brewers", "milwaukee", "milwaukee brewers", "brewers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Minnesota Twins", ["min", "min twins", "minnesota", "minnesota twins", "twins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "New York Mets", ["nym", "ny mets", "new york mets", "mets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "New York Yankees", ["nyy", "ny yankees", "new york yankees", "yankees"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Athletics", ["ath", "oak", "oak athletics", "oakland", "oakland athletics", "a's", "as", "athletics"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Philadelphia Phillies", ["phi", "phi phillies", "philadelphia", "philadelphia phillies", "phillies"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Pittsburgh Pirates", ["pit", "pit pirates", "pittsburgh", "pittsburgh pirates", "pirates"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "San Diego Padres", ["sd", "sdp", "sd padres", "san diego", "san diego padres", "padres"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "San Francisco Giants", ["sf", "sfg", "sf giants", "san francisco", "san francisco giants", "giants"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Seattle Mariners", ["sea", "sea mariners", "seattle", "seattle mariners", "mariners"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "St. Louis Cardinals", ["stl", "stl cardinals", "st louis", "st. louis", "saint louis", "st. louis cardinals", "st louis cardinals", "cardinals", "cards"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Tampa Bay Rays", ["tb", "tbr", "tb rays", "tampa bay", "tampa bay rays", "rays"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Texas Rangers", ["tex", "tex rangers", "texas", "texas rangers", "rangers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Toronto Blue Jays", ["tor", "tor blue jays", "toronto", "toronto blue jays", "blue jays", "jays"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLB", "Washington Nationals", ["wsh", "was", "wsh nationals", "washington", "washington nationals", "nationals", "nats"]);
+
+/* =========================
+   NFL
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Arizona Cardinals", ["ari", "arizona", "cardinals", "cards"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Atlanta Falcons", ["atl", "atlanta", "falcons"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Baltimore Ravens", ["bal", "baltimore", "ravens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Buffalo Bills", ["buf", "buffalo", "bills"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Carolina Panthers", ["car", "carolina", "panthers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Chicago Bears", ["chi", "chicago", "bears"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Cincinnati Bengals", ["cin", "cincinnati", "bengals"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Cleveland Browns", ["cle", "cleveland", "browns"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Dallas Cowboys", ["dal", "dallas", "cowboys"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Denver Broncos", ["den", "denver", "broncos"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Detroit Lions", ["det", "detroit", "lions"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Green Bay Packers", ["gb", "packers", "green bay"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Houston Texans", ["hou", "houston", "texans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Indianapolis Colts", ["ind", "indy", "colts"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Jacksonville Jaguars", ["jax", "jacksonville", "jaguars", "jags"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Kansas City Chiefs", ["kc", "chiefs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Las Vegas Raiders", ["lv", "raiders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Los Angeles Chargers", ["lac", "chargers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Los Angeles Rams", ["lar", "rams"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Miami Dolphins", ["mia", "miami", "dolphins"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Minnesota Vikings", ["min", "minnesota", "vikings"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New England Patriots", ["ne", "patriots"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New Orleans Saints", ["no", "saints"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New York Giants", ["nyg", "giants"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "New York Jets", ["nyj", "jets"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Philadelphia Eagles", ["phi", "eagles"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Pittsburgh Steelers", ["pit", "steelers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "San Francisco 49ers", ["sf", "49ers", "niners"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Seattle Seahawks", ["sea", "seahawks"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Tampa Bay Buccaneers", ["tb", "bucs", "buccaneers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Tennessee Titans", ["ten", "titans"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "NFL", "Washington Commanders", ["wsh", "was", "washington", "commanders"]);
+
+/* =========================
+   MLS
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Atlanta United", ["atlanta united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Austin FC", ["austin", "austin fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Charlotte FC", ["charlotte fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Chicago Fire", ["chicago fire", "fire"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "FC Cincinnati", ["cincinnati", "fc cincinnati"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Colorado Rapids", ["colorado rapids", "rapids"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Columbus Crew", ["columbus crew", "crew"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "D.C. United", ["dc united", "d.c. united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "FC Dallas", ["fc dallas", "dallas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Houston Dynamo", ["houston dynamo", "dynamo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Inter Miami CF", ["inter miami", "miami cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "LA Galaxy", ["la galaxy", "galaxy"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Los Angeles FC", ["lafc", "los angeles fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Minnesota United", ["minnesota united"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "CF MontrÃ©al", ["montreal", "cf montreal", "cf montrÃ©al"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Nashville SC", ["nashville sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New England Revolution", ["new england revolution", "revolution", "revs"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New York City FC", ["nycfc", "new york city fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "New York Red Bulls", ["ny red bulls", "red bulls"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Orlando City SC", ["orlando city", "orlando city sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Philadelphia Union", ["philadelphia union", "union"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Portland Timbers", ["portland timbers", "timbers"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Real Salt Lake", ["real salt lake", "rsl"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "San Diego FC", ["san diego fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "San Jose Earthquakes", ["san jose earthquakes", "earthquakes", "quakes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Seattle Sounders FC", ["seattle sounders", "sounders"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Sporting Kansas City", ["sporting kc", "sporting kansas city", "skc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "St. Louis City SC", ["st louis city", "saint louis city", "st. louis city", "city sc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Toronto FC", ["toronto fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "MLS", "Vancouver Whitecaps FC", ["vancouver whitecaps", "whitecaps"]);
+
+/* =========================
+   Premier League
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Arsenal", ["arsenal fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Aston Villa", ["villa", "aston villa fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Bournemouth", ["afc bournemouth", "bournemouth"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Brentford", ["brentford fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Brighton & Hove Albion", ["brighton", "brighton and hove albion"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Chelsea", ["chelsea fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Crystal Palace", ["palace", "crystal palace fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Everton", ["everton fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Fulham", ["fulham fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Ipswich Town", ["ipswich", "ipswich town fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Leicester City", ["leicester", "leicester city fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Liverpool", ["liverpool fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Manchester City", ["man city", "manchester city", "mci"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Manchester United", ["man united", "man utd", "manchester united", "mun"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Newcastle United", ["newcastle", "newcastle united fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Nottingham Forest", ["nottingham forest", "forest"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Southampton", ["southampton fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Tottenham Hotspur", ["tottenham", "spurs", "tottenham hotspur fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "West Ham United", ["west ham", "west ham united fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "EPL", "Wolverhampton Wanderers", ["wolves", "wolverhampton", "wolverhampton wanderers"]);
+
+/* =========================
+   Bundesliga
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Bayern Munich", ["bayern", "fc bayern", "fc bayern munchen", "fc bayern mÃ¼nchen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Borussia Dortmund", ["dortmund", "bvb", "borussia dortmund"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "RB Leipzig", ["leipzig", "rbl", "rb leipzig"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Bayer Leverkusen", ["leverkusen", "bayer leverkusen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Eintracht Frankfurt", ["frankfurt", "eintracht"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfB Stuttgart", ["stuttgart", "vfb stuttgart"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfL Wolfsburg", ["wolfsburg", "vfl wolfsburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Borussia MÃ¶nchengladbach", ["gladbach", "monchengladbach", "mÃ¶nchengladbach"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Werder Bremen", ["bremen", "werder"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "SC Freiburg", ["freiburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "TSG Hoffenheim", ["hoffenheim"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FSV Mainz 05", ["mainz", "mainz 05"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC Augsburg", ["augsburg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Union Berlin", ["union berlin"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC Heidenheim", ["heidenheim"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "FC St. Pauli", ["st pauli", "st. pauli"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "Holstein Kiel", ["holstein kiel", "kiel"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "BUNDESLIGA", "VfL Bochum", ["bochum"]);
+
+/* =========================
+   Ligue 1
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Paris Saint-Germain", ["psg", "paris sg", "paris saint germain"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Marseille", ["om", "olympique de marseille"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Monaco", ["as monaco"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lille", ["lille osc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lyon", ["ol", "olympique lyonnais"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Nice", ["ogc nice"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Lens", ["rc lens"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Rennes", ["stade rennes", "rennes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Reims", ["stade reims"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Strasbourg", ["rc strasbourg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Nantes", ["fc nantes"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Montpellier", ["montpellier hsc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Toulouse", ["toulouse fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Brest", ["stad brestois", "brest"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Auxerre", ["aj auxerre"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Le Havre", ["le havre ac"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Angers", ["angers sco"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LIGUE1", "Saint-Ã‰tienne", ["saint etienne", "st etienne", "saint-Ã©tienne"]);
+
+/* =========================
+   La Liga
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Madrid", ["rm", "real madrid cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Barcelona", ["barca", "fc barcelona"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "AtlÃ©tico Madrid", ["atletico madrid", "atleti"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Athletic Club", ["athletic bilbao", "bilbao"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Sociedad", ["sociedad", "real sociedad"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Betis", ["betis"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Sevilla", ["sevilla fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Villarreal", ["villarreal cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Valencia", ["valencia cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Getafe", ["getafe cf"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Celta Vigo", ["celta", "celta de vigo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Osasuna", ["ca osasuna"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Mallorca", ["rcd mallorca"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Rayo Vallecano", ["rayo"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Girona", ["girona fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "AlavÃ©s", ["alaves", "deportivo alaves", "deportivo alavÃ©s"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Las Palmas", ["ud las palmas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "LeganÃ©s", ["leganes", "cd leganÃ©s"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Espanyol", ["rcd espanyol"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "LALIGA", "Real Valladolid", ["valladolid"]);
+
+/* =========================
+   Serie A
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Inter Milan", ["inter", "internazionale"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "AC Milan", ["milan", "ac milan"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Juventus", ["juve"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Napoli", ["ssc napoli"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Roma", ["as roma"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Lazio", ["ss lazio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Atalanta", ["atalanta bc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Bologna", ["bologna fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Fiorentina", ["acf fiorentina"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Torino", ["torino fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Genoa", ["genoa cfc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Monza", ["ac monza"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Udinese", ["udinese calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Lecce", ["us lecce"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Parma", ["parma calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Cagliari", ["cagliari calcio"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Hellas Verona", ["verona", "hellas"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Como", ["como 1907"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Empoli", ["empoli fc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "SERIEA", "Venezia", ["venezia fc"]);
+
+/* =========================
+   International Soccer
+========================= */
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "United States", ["usa", "usmnt", "united states men", "united states national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Mexico", ["mex", "mexico national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Canada", ["can", "canada national team"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "England", ["eng"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "France", ["fra"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Germany", ["ger", "deutschland"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Spain", ["esp"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Italy", ["ita"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Portugal", ["por"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Netherlands", ["ned", "holland"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Belgium", ["bel"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Brazil", ["bra"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Argentina", ["arg"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Uruguay", ["uru"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Colombia", ["col"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Croatia", ["cro"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Switzerland", ["sui"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Denmark", ["den"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Poland", ["pol"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Japan", ["jpn"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "South Korea", ["kor", "korea republic"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Australia", ["aus"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Morocco", ["mar"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Nigeria", ["nga"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Egypt", ["egy"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Senegal", ["sen"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Cameroon", ["cmr"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Turkey", ["tur"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Austria", ["aut"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Czech Republic", ["cze"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Sweden", ["swe"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Norway", ["nor"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Serbia", ["srb"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Ukraine", ["ukr"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Chile", ["chi"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Peru", ["per"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Ecuador", ["ecu"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Paraguay", ["par"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Costa Rica", ["crc"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Panama", ["pan"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Jamaica", ["jam"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Saudi Arabia", ["ksa"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Qatar", ["qat"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iran", ["irn"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Iraq", ["irq"]);
+addAliases(TEAM_ALIASES_BY_SPORT, "INTL", "Draw", ["tie", "x"]);
+
+
+===== app/ev-parlay-lab/utils/normalizeTeams.js =====
+import { normalizeTeamNameBySport } from "../data/teamAliases";
+import { americanToDecimal } from "./odds";
+import { normalizeMarketType, isPlayerPropMarket } from "./marketNormalization";
+
+export function normalizeParsedRows(rows) {
+  const seededRows = (rows || []).map((row) => {
+    const sport = String(row.sport || "").toUpperCase();
+    const { homeTeam, awayTeam } = inferTeamsFromEvent(row.eventLabelRaw || "");
+
+    const normalizedHome = cleanTeam(homeTeam, sport);
+    const normalizedAway = cleanTeam(awayTeam, sport);
+
+    return {
+      ...row,
+      homeTeamRaw: row.homeTeamRaw || homeTeam,
+      awayTeamRaw: row.awayTeamRaw || awayTeam,
+      homeTeam: row.homeTeam || normalizedHome,
+      awayTeam: row.awayTeam || normalizedAway,
+    };
+  });
+
+  const aliasMapByEvent = buildEventPlayerAliasMap(seededRows);
+
+  return seededRows.map((row) => {
+    const rawSelection = String(row.selectionRaw || row.selectionNormalized || "");
+    const selectionNormalized = normalizeSelectionWithinEvent(row, rawSelection, aliasMapByEvent);
+
+    return {
+      ...row,
+      selectionNormalized,
+      oddsDecimal: Number.isFinite(row.oddsAmerican)
+        ? americanToDecimal(row.oddsAmerican)
+        : row.oddsDecimal,
+    };
+  });
+}
+
+function buildEventPlayerAliasMap(rows) {
+  const map = new Map();
+
+  for (const row of rows || []) {
+    if (!isPlayerPropMarket(row.marketType)) continue;
+
+    const eventKey = buildEventAliasKey(row);
+    const sportKey = buildSportAliasKey(row);
+    const rawSelection = String(row.selectionRaw || row.selectionNormalized || "");
+    const baseName = extractBasePlayerName(rawSelection);
+
+    if (!looksLikeFullPlayerName(baseName)) continue;
+
+    if (!map.has(eventKey)) {
+      map.set(eventKey, []);
+    }
+
+    const eventNames = map.get(eventKey);
+    if (!eventNames.includes(baseName)) {
+      eventNames.push(baseName);
+    }
+
+    if (!map.has(sportKey)) {
+      map.set(sportKey, []);
+    }
+
+    const sportNames = map.get(sportKey);
+    if (!sportNames.includes(baseName)) {
+      sportNames.push(baseName);
+    }
+  }
+
+  return map;
+}
+
+function buildEventAliasKey(row) {
+  const sport = String(row.sport || "").toUpperCase();
+  const away = cleanTeam(row.awayTeam || row.awayTeamRaw || "", sport);
+  const home = cleanTeam(row.homeTeam || row.homeTeamRaw || "", sport);
+
+  if (away && home) {
+    return `${away} @ ${home}`;
+  }
+
+  const inferred = inferTeamsFromEvent(row.eventLabelRaw || "");
+  const inferredAway = cleanTeam(inferred.awayTeam || "", sport);
+  const inferredHome = cleanTeam(inferred.homeTeam || "", sport);
+
+  return `${inferredAway} @ ${inferredHome}`;
+}
+
+function buildSportAliasKey(row) {
+  const sport = String(row.sport || "").trim().toUpperCase();
+  return `__sport__::${sport || "UNKNOWN"}`;
+}
+
+function normalizeSelectionWithinEvent(row, rawSelection, aliasMapByEvent) {
+  const marketType = normalizeMarketType(row.marketType);
+  const sport = String(row.sport || "").toUpperCase();
+  const cleanedSelection = String(rawSelection || "").trim();
+
+  if (["moneyline_2way", "moneyline_3way", "spread"].includes(marketType)) {
+    return cleanTeam(cleanedSelection, sport);
+  }
+
+  if (/^total$/i.test(marketType)) {
+    if (/^over$/i.test(cleanedSelection)) return "Over";
+    if (/^under$/i.test(cleanedSelection)) return "Under";
+    return cleanedSelection;
+  }
+
+  if (!isPlayerPropMarket(marketType)) {
+    return cleanedSelection;
+  }
+
+  const side = detectSelectionSide(cleanedSelection);
+  const baseName = extractBasePlayerName(cleanedSelection);
+  const resolvedName = resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent);
+
+  if (side) {
+    return `${resolvedName} ${side}`;
+  }
+
+  return resolvedName;
+}
+
+function resolvePlayerNameWithinEvent(row, baseName, aliasMapByEvent) {
+  const trimmed = String(baseName || "").trim();
+  if (!trimmed) return trimmed;
+  if (!looksLikeAbbreviatedPlayerName(trimmed)) return trimmed;
+
+  const eventKey = buildEventAliasKey(row);
+  const candidates = Array.from(new Set(aliasMapByEvent.get(eventKey) || []));
+
+  const abbreviated = normalizeSimpleName(trimmed);
+  const abbreviatedParts = abbreviated.split(" ").filter(Boolean);
+  if (abbreviatedParts.length < 2) return trimmed;
+
+  const abbreviatedFirst = abbreviatedParts[0];
+  const abbreviatedLast = abbreviatedParts[abbreviatedParts.length - 1];
+
+  const matches = candidates.filter((candidate) => {
+    const normalizedCandidate = normalizeSimpleName(candidate);
+    const candidateParts = normalizedCandidate.split(" ").filter(Boolean);
+    if (candidateParts.length < 2) return false;
+
+    const candidateFirst = candidateParts[0];
+    const candidateLast = candidateParts[candidateParts.length - 1];
+
+    if (candidateLast !== abbreviatedLast) return false;
+
+    return isFirstNameAbbreviationMatch(abbreviatedFirst, candidateFirst);
+  });
+
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  // Safety rule:
+  // If J. Jones could be John Jones or James Jones in the same event,
+  // do not guess. Leave the abbreviated name unchanged.
+  return trimmed;
+}
+
+function isFirstNameAbbreviationMatch(shortFirst, fullFirst) {
+  const short = normalizeSimpleName(shortFirst);
+  const full = normalizeSimpleName(fullFirst);
+
+  if (!short || !full) return false;
+  if (short === full) return true;
+
+  // A. Black -> Anthony Black
+  if (short.length === 1) {
+    return full.charAt(0) === short;
+  }
+
+  // Don. Mitchell -> Donovan Mitchell
+  // Ja. Walter -> Ja'Kobe Walter, if that shape appears
+  return full.startsWith(short);
+}
+
+function extractBasePlayerName(text) {
+  return String(text || "")
+    .replace(/\|/g, " ")
+    .replace(/\b(over|under)\b/gi, " ")
+    .replace(/\bto record a\b/gi, " ")
+    .replace(/\bdouble double\b/gi, " ")
+    .replace(/\btriple double\b/gi, " ")
+    .replace(/\bplayer shutout\b/gi, " ")
+    .replace(/\b\d+(\.\d+)?\+?\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectSelectionSide(text) {
+  if (/\bover\b/i.test(text)) return "Over";
+  if (/\bunder\b/i.test(text)) return "Under";
+  return "";
+}
+
+function normalizeSimpleName(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeFullPlayerName(text) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  if (!/\s/.test(value)) return false;
+
+  const parts = value.split(/\s+/);
+  if (parts.length < 2) return false;
+
+  const first = parts[0].replace(/\./g, "");
+  return first.length > 1;
+}
+
+function looksLikeAbbreviatedPlayerName(text) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+
+  const parts = value.split(/\s+/);
+  if (parts.length < 2) return false;
+
+  const firstRaw = parts[0];
+  const first = firstRaw.replace(/\./g, "");
+
+  // A. Black / A Black
+  if (first.length <= 2) return true;
+
+  // Don. Mitchell / Don Mitchell-style short forms.
+  // The period is the safest signal that this is not a complete first name.
+  if (firstRaw.includes(".")) return true;
+
+  return false;
+}
+
+function normalizePlayerName(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\b(over|under)\b/g, "")
+    .replace(/\b\d+(\.\d+)?\+?\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferTeamsFromEvent(eventLabelRaw = "") {
+  const label = eventLabelRaw.trim();
+
+  if (label.includes("@")) {
+    const [away, home] = label.split("@").map((s) => s.trim());
+    return { homeTeam: home || "", awayTeam: away || "" };
+  }
+
+  if (/\bvs\b/i.test(label)) {
+    const [away, home] = label.split(/\bvs\b/i).map((s) => s.trim());
+    return { homeTeam: home || "", awayTeam: away || "" };
+  }
+
+  return { homeTeam: "", awayTeam: "" };
+}
+
+function cleanTeam(value = "", sport = "") {
+  const cleaned = cleanText(value);
+  const sportKey = String(sport || "").toUpperCase();
+
+  const direct = normalizeTeamNameBySport(cleaned, sportKey);
+  if (direct) return direct;
+
+  if (sportKey === "NBA") {
+    const nbaName = normalizeNbaTeamByContainedName(cleaned);
+    if (nbaName) return nbaName;
+  }
+
+  return cleaned;
+}
+
+function cleanText(value = "") {
+  return String(value || "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeNbaTeamByContainedName(value = "") {
+  const text = cleanText(value).toLowerCase();
+
+  if (!text) return "";
+
+  const teams = [
+    ["hawks", "atlanta", "atl", "Atlanta Hawks"],
+    ["celtics", "boston", "bos", "Boston Celtics"],
+    ["nets", "brooklyn", "bkn", "Brooklyn Nets"],
+    ["hornets", "charlotte", "cha", "Charlotte Hornets"],
+    ["bulls", "chicago", "chi", "Chicago Bulls"],
+    ["cavaliers", "cleveland", "cavs", "cle", "Cleveland Cavaliers"],
+    ["mavericks", "dallas", "mavs", "dal", "Dallas Mavericks"],
+    ["nuggets", "denver", "den", "Denver Nuggets"],
+    ["pistons", "detroit", "det", "Detroit Pistons"],
+    ["warriors", "golden state", "gsw", "Golden State Warriors"],
+    ["rockets", "houston", "hou", "Houston Rockets"],
+    ["pacers", "indiana", "ind", "Indiana Pacers"],
+    ["clippers", "la clippers", "lac", "Los Angeles Clippers"],
+    ["lakers", "la lakers", "lal", "Los Angeles Lakers"],
+    ["grizzlies", "memphis", "mem", "Memphis Grizzlies"],
+    ["heat", "miami", "mia", "Miami Heat"],
+    ["bucks", "milwaukee", "mil", "Milwaukee Bucks"],
+    ["timberwolves", "minnesota", "wolves", "min", "Minnesota Timberwolves"],
+    ["pelicans", "new orleans", "nop", "no pelicans", "New Orleans Pelicans"],
+    ["knicks", "new york", "ny knicks", "nyk", "New York Knicks"],
+    ["thunder", "oklahoma city", "okc", "Oklahoma City Thunder"],
+    ["magic", "orlando", "orl", "Orlando Magic"],
+    ["76ers", "sixers", "philadelphia", "phi", "Philadelphia 76ers"],
+    ["suns", "phoenix", "phx", "Phoenix Suns"],
+    ["trail blazers", "portland", "por", "Portland Trail Blazers"],
+    ["kings", "sacramento", "sac", "Sacramento Kings"],
+    ["spurs", "san antonio", "sa spurs", "sas", "San Antonio Spurs"],
+    ["raptors", "toronto", "tor", "Toronto Raptors"],
+    ["jazz", "utah", "uta", "Utah Jazz"],
+    ["wizards", "washington", "wsh", "was", "Washington Wizards"],
+  ];
+
+  for (const team of teams) {
+    const fullName = team[team.length - 1];
+    const aliases = team.slice(0, -1);
+
+    for (const alias of aliases) {
+      const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i");
+
+      if (pattern.test(text)) {
+        return fullName;
+      }
+    }
+  }
+
+  return "";
+}
+
+
+===== app/ev-parlay-lab/utils/matchMarkets.js =====
+import { normalizeTeamNameBySport } from "../data/teamAliases";
+import { normalizeMarketType, isPlayerPropMarket } from "./marketNormalization";
+
+
+export function buildCanonicalMarkets(rows) {
+  const eligibleRows = rows.filter(
+    (row) =>
+      !row.excluded &&
+      Number.isFinite(row.oddsAmerican) &&
+      row.selectionNormalized &&
+      row.eventLabelRaw
+  );
+
+  const marketMap = new Map();
+  const unmatchedRows = [];
+
+  const rowsByEvent = new Map();
+
+  for (const row of eligibleRows) {
+    const eventKey = buildCanonicalEventKey(row);
+
+    if (!rowsByEvent.has(eventKey)) {
+      rowsByEvent.set(eventKey, []);
+    }
+
+    rowsByEvent.get(eventKey).push(row);
+  }
+
+  for (const row of eligibleRows) {
+    const eventKey = buildCanonicalEventKey(row);
+    row._allRowsInEvent = rowsByEvent.get(eventKey) || [];
+
+    const normalizedLineValue = normalizeLineValueForMarket(row);
+    const normalizedMarketType = normalizeMarketType(row.marketType);
+    const subjectKey = buildSubjectKey(row);
+
+    const marketKey = [
+      String(row.sport || "").trim().toUpperCase(),
+      eventKey,
+      normalizedMarketType,
+      subjectKey,
+      normalizedLineValue,
+    ].join("||");
+
+    if (!marketMap.has(marketKey)) {
+      marketMap.set(marketKey, {
+        id: marketKey,
+        displayName: buildCanonicalDisplayName(row),
+        eventKey,
+        sport: row.sport,
+        marketType: normalizedMarketType,
+        subjectKey,
+        lineValue: normalizedLineValue === "" ? null : Number(normalizedLineValue),
+        selections: [],
+      });
+    }
+
+    const market = marketMap.get(marketKey);
+    const selectionLabel = normalizeSelectionLabel(row);
+
+    let selection = market.selections.find((s) => s.label === selectionLabel);
+
+    if (!selection) {
+      selection = {
+        id: `${marketKey}::${selectionLabel}`,
+        label: selectionLabel,
+        quotes: [],
+      };
+      market.selections.push(selection);
+    }
+
+    selection.quotes.push({
+      parsedRowId: row.id,
+      sportsbook: row.sportsbook,
+      oddsAmerican: row.oddsAmerican,
+      oddsDecimal: row.oddsDecimal,
+      isSharpSource: row.isSharpSource,
+      isTargetBook: row.isTargetBook,
+      batchRole: row.batchRole || "",
+      originalEventLabelRaw: row.eventLabelRaw,
+      originalSelectionNormalized: row.selectionNormalized,
+      originalMarketType: row.marketType,
+      lineValue: row.lineValue,
+      subjectKey,
+    });
+  }
+
+  const markets = Array.from(marketMap.values()).sort((a, b) => {
+    if (a.displayName !== b.displayName) {
+      return a.displayName.localeCompare(b.displayName);
+    }
+    if (a.marketType !== b.marketType) {
+      return a.marketType.localeCompare(b.marketType);
+    }
+    if (a.subjectKey !== b.subjectKey) {
+      return a.subjectKey.localeCompare(b.subjectKey);
+    }
+    return String(a.lineValue ?? "").localeCompare(String(b.lineValue ?? ""));
+  });
+
+  return { markets, unmatchedRows };
+}
+
+function buildCanonicalEventKey(row) {
+  const away = cleanTeam(row.awayTeam || row.awayTeamRaw, row.sport);
+  const home = cleanTeam(row.homeTeam || row.homeTeamRaw, row.sport);
+
+  if (away && home) {
+    return `${away} @ ${home}`;
+  }
+
+  const parsed = splitEventLabel(row.eventLabelRaw, row.sport);
+  if (parsed.away && parsed.home) {
+    return `${parsed.away} @ ${parsed.home}`;
+  }
+
+  return cleanText(row.eventLabelRaw);
+}
+
+function buildCanonicalDisplayName(row) {
+  const away = cleanTeam(row.awayTeam || row.awayTeamRaw, row.sport);
+  const home = cleanTeam(row.homeTeam || row.homeTeamRaw, row.sport);
+
+  if (away && home) {
+    return `${away} @ ${home}`;
+  }
+
+  const parsed = splitEventLabel(row.eventLabelRaw, row.sport);
+  if (parsed.away && parsed.home) {
+    return `${parsed.away} @ ${parsed.home}`;
+  }
+
+  return cleanText(row.eventLabelRaw);
+}
+
+function splitEventLabel(eventLabelRaw = "", sport = "") {
+  const text = cleanText(eventLabelRaw);
+
+  if (!text) return { away: "", home: "" };
+
+  if (text.includes("@")) {
+    const [away, home] = text.split("@").map((s) => cleanTeam(s, sport));
+    return { away, home };
+  }
+
+  if (/\bvs\b/i.test(text)) {
+    const [away, home] = text.split(/\bvs\b/i).map((s) => cleanTeam(s, sport));
+    return { away, home };
+  }
+
+  if (/\bv\b/i.test(text)) {
+    const [away, home] = text.split(/\bv\b/i).map((s) => cleanTeam(s, sport));
+    return { away, home };
+  }
+
+  return { away: "", home: "" };
+}
+
+function normalizeSelectionLabel(row) {
+  const marketType = normalizeMarketType(row.marketType);
+  const selection = cleanText(row.selectionNormalized || row.selectionRaw);
+
+  if (marketType === "total") {
+    if (/^over$/i.test(selection)) return "Over";
+    if (/^under$/i.test(selection)) return "Under";
+  }
+
+  if (
+    marketType === "moneyline_2way" ||
+    marketType === "moneyline_3way" ||
+    marketType === "spread"
+  ) {
+    return cleanTeam(selection, row.sport);
+  }
+
+  if (isPlayerPropMarket(marketType)) {
+    if (/\bover$/i.test(selection)) return "Over";
+    if (/\bunder$/i.test(selection)) return "Under";
+  }
+
+  if (marketType === "both_teams_to_score") {
+    if (/^yes$/i.test(selection)) return "Yes";
+    if (/^no$/i.test(selection)) return "No";
+  }
+
+  return selection;
+}
+
+function normalizeLineValueForMarket(row) {
+  const marketType = normalizeMarketType(row.marketType);
+
+  if (
+    marketType === "moneyline_2way" ||
+    marketType === "moneyline_3way" ||
+    marketType === "both_teams_to_score" ||
+    marketType === "anytime_goalscorer" ||
+    marketType === "anytime_goal_scorer"
+  ) {
+    return "";
+  }
+
+  if (!Number.isFinite(row.lineValue)) {
+    return "";
+  }
+
+  return Number(row.lineValue).toFixed(1);
+}
+
+// delete the local normalizeMarketType() and isPlayerPropMarket()
+//
+// matchMarkets.js should now use the imported versions from:
+// ./marketNormalization
+
+
+function buildSubjectKey(row) {
+  const marketType = normalizeMarketType(row.marketType);
+
+  if (!isPlayerPropMarket(marketType)) return "";
+
+  const eventKey = buildCanonicalEventKey(row);
+
+  let selection = cleanText(row.selectionNormalized || row.selectionRaw);
+
+  selection = selection
+    .replace(/\b(over|under)\b/gi, "")
+    .replace(/[+-]?\d+(\.\d+)?/g, "")
+    .replace(/\bto record a\b/gi, "")
+    .replace(/\bdouble double\b/gi, "")
+    .replace(/\btriple double\b/gi, "")
+    .trim();
+
+  const resolvedName = resolvePlayerNameForGrouping(
+    selection,
+    eventKey,
+    row
+  );
+
+  return `${marketType}::${resolvedName.toLowerCase()}`;
+}
+
+const playerAliasCache = new Map();
+
+function resolvePlayerNameForGrouping(name, eventKey, row) {
+  const normalizedName = normalizeSimpleName(name);
+  const cacheKey = `${eventKey}::${normalizedName}`;
+
+  if (playerAliasCache.has(cacheKey)) {
+    return playerAliasCache.get(cacheKey);
+  }
+
+  const parts = normalizedName.split(" ").filter(Boolean);
+  if (parts.length < 2) {
+    playerAliasCache.set(cacheKey, name);
+    return name;
+  }
+
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+
+  const candidates = (row._allRowsInEvent || [])
+    .map((r) =>
+      cleanText(r.selectionNormalized || r.selectionRaw)
+        .replace(/\b(over|under)\b/gi, "")
+        .replace(/[+-]?\d+(\.\d+)?/g, "")
+        .replace(/\bto record a\b/gi, "")
+        .replace(/\bdouble double\b/gi, "")
+        .replace(/\btriple double\b/gi, "")
+        .trim()
+    )
+    .filter(Boolean);
+
+  const uniqueCandidates = [...new Set(candidates)];
+
+  const matches = uniqueCandidates.filter((candidate) => {
+    const candidateNorm = normalizeSimpleName(candidate);
+    const cParts = candidateNorm.split(" ").filter(Boolean);
+    if (cParts.length < 2) return false;
+
+    const cFirst = cParts[0];
+    const cLast = cParts[cParts.length - 1];
+
+    return cLast === last && cFirst.startsWith(first);
+  });
+
+  const longerMatches = matches.filter((candidate) => {
+    const candidateNorm = normalizeSimpleName(candidate);
+    const candidateFirst = candidateNorm.split(" ").filter(Boolean)[0] || "";
+    return candidateFirst.length > first.length;
+  });
+
+  const resolved =
+    longerMatches.length === 1
+      ? longerMatches[0]
+      : matches.length === 1
+      ? matches[0]
+      : name;
+
+  playerAliasCache.set(cacheKey, resolved);
+  return resolved;
+}
+
+function normalizeSimpleName(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanTeam(value = "", sport = "") {
+  const cleaned = cleanText(value);
+  return normalizeTeamNameBySport(cleaned, String(sport || "").toUpperCase()) || cleaned;
+}
+
+function cleanText(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+
+===== app/utils/canonicalTeamNames.js =====
+// app/utils/canonicalTeamNames.js
+
+function cleanValue(value = "") {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/[â€œâ€]/g, '"')
+    .replace(/[â€˜â€™]/g, "'")
+    .replace(/[â€“â€”]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const TEAM_ALIAS_RULES = [
+  // NBA
+  { regex: /\bGSW\b|\bGolden State\b|\bGolden St\b|\bWarriors\b/gi, canonical: "Golden State Warriors" },
+  { regex: /\bOKC\b|\bOklahoma City\b|\bThunder\b/gi, canonical: "Oklahoma City Thunder" },
+  { regex: /\bDAL\b|\bDallas\b|\bMavs\b|\bMavericks\b/gi, canonical: "Dallas Mavericks" },
+  { regex: /\bMIN\b|\bMinnesota\b|\bT[- ]?Wolves\b|\bTWolves\b|\bTimberwolves\b/gi, canonical: "Minnesota Timberwolves" },
+  { regex: /\bNY Knicks\b|\bKnicks\b/gi, canonical: "New York Knicks" },
+  { regex: /\bBKN\b|\bBrooklyn\b|\bNets\b/gi, canonical: "Brooklyn Nets" },
+  { regex: /\bPHX\b|\bPhoenix\b|\bSuns\b/gi, canonical: "Phoenix Suns" },
+  { regex: /\bLAL\b|\bLakers\b/gi, canonical: "Los Angeles Lakers" },
+  { regex: /\bLAC\b|\bClippers\b/gi, canonical: "Los Angeles Clippers" },
+  { regex: /\bMIL\b|\bBucks\b/gi, canonical: "Milwaukee Bucks" },
+  { regex: /\bBOS\b|\bCeltics\b/gi, canonical: "Boston Celtics" },
+  { regex: /\bDEN\b|\bNuggets\b/gi, canonical: "Denver Nuggets" },
+  { regex: /\bMEM\b|\bGrizzlies\b/gi, canonical: "Memphis Grizzlies" },
+  { regex: /\bNOP\b|\bPelicans\b/gi, canonical: "New Orleans Pelicans" },
+  { regex: /\bSAC\b|\bKings\b/gi, canonical: "Sacramento Kings" },
+  { regex: /\bPOR\b|\bBlazers\b|\bTrail Blazers\b/gi, canonical: "Portland Trail Blazers" },
+  { regex: /\bHOU\b|\bRockets\b/gi, canonical: "Houston Rockets" },
+  { regex: /\bSAS\b|\bSpurs\b/gi, canonical: "San Antonio Spurs" },
+  { regex: /\bUTA\b|\bJazz\b/gi, canonical: "Utah Jazz" },
+  { regex: /\bCHI\b|\bBulls\b/gi, canonical: "Chicago Bulls" },
+  { regex: /\bCLE\b|\bCavaliers\b|\bCavs\b/gi, canonical: "Cleveland Cavaliers" },
+  { regex: /\bDET\b|\bPistons\b/gi, canonical: "Detroit Pistons" },
+  { regex: /\bIND\b|\bPacers\b/gi, canonical: "Indiana Pacers" },
+  { regex: /\bMIA\b|\bHeat\b/gi, canonical: "Miami Heat" },
+  { regex: /\bORL\b|\bMagic\b/gi, canonical: "Orlando Magic" },
+  { regex: /\bATL\b|\bHawks\b/gi, canonical: "Atlanta Hawks" },
+  { regex: /\bCHA\b|\bHornets\b/gi, canonical: "Charlotte Hornets" },
+  { regex: /\bWAS\b|\bWizards\b/gi, canonical: "Washington Wizards" },
+  { regex: /\bPHI\b|\b76ers\b|\bSixers\b/gi, canonical: "Philadelphia 76ers" },
+  { regex: /\bTOR\b|\bRaptors\b/gi, canonical: "Toronto Raptors" },
+
+  // NHL
+  { regex: /\bEDM\b|\bEdmonton Oilers\b|\bOilers\b/gi, canonical: "Edmonton Oilers" },
+  { regex: /\bANA\b|\bAnaheim Ducks\b|\bDucks\b/gi, canonical: "Anaheim Ducks" },
+  { regex: /\bVGK\b|\bVegas Golden Knights\b|\bGolden Knights\b/gi, canonical: "Vegas Golden Knights" },
+  { regex: /\bUTA\b|\bUtah Mammoth\b|\bMammoth\b/gi, canonical: "Utah Mammoth" },
+  { regex: /\bUtah Mammoth\b|\bMammoth\b/gi, canonical: "Utah Mammoth" },
+  { regex: /\bSeattle Kraken\b|\bKraken\b/gi, canonical: "Seattle Kraken" },
+  { regex: /\bNashville Predators\b|\bPredators\b/gi, canonical: "Nashville Predators" },
+  { regex: /\bTampa Bay Lightning\b|\bLightning\b/gi, canonical: "Tampa Bay Lightning" },
+  { regex: /\bSan Jose Sharks\b|\bSharks\b/gi, canonical: "San Jose Sharks" },
+  { regex: /\bLA Kings\b|\bLos Angeles Kings\b/gi, canonical: "Los Angeles Kings" },
+  { regex: /\bAnaheim Ducks\b|\bDucks\b/gi, canonical: "Anaheim Ducks" },
+  { regex: /\bWinnipeg Jets\b|\bJets\b/gi, canonical: "Winnipeg Jets" },
+  { regex: /\bSt\.?\s*Louis Blues\b|\bBlues\b/gi, canonical: "St. Louis Blues" },
+  { regex: /\bMinnesota Wild\b|\bWild\b/gi, canonical: "Minnesota Wild" },
+  { regex: /\bPhiladelphia Flyers\b|\bFlyers\b/gi, canonical: "Philadelphia Flyers" },
+  { regex: /\bChicago Blackhawks\b|\bBlackhawks\b/gi, canonical: "Chicago Blackhawks" },
+  { regex: /\bOttawa Senators\b|\bSenators\b/gi, canonical: "Ottawa Senators" },
+  { regex: /\bBuffalo Sabres\b|\bSabres\b/gi, canonical: "Buffalo Sabres" },
+  { regex: /\bPittsburgh Penguins\b|\bPenguins\b/gi, canonical: "Pittsburgh Penguins" },
+  { regex: /\bCarolina Hurricanes\b|\bHurricanes\b/gi, canonical: "Carolina Hurricanes" },
+  { regex: /\bWashington Capitals\b|\bCapitals\b/gi, canonical: "Washington Capitals" },
+  { regex: /\bNY Islanders\b|\bNew York Islanders\b|\bIslanders\b/gi, canonical: "New York Islanders" },
+  { regex: /\bNew Jersey Devils\b|\bDevils\b/gi, canonical: "New Jersey Devils" },
+
+  { regex: /\bNY Rangers\b|\bRangers\b/gi, canonical: "New York Rangers" },
+  { regex: /\bPanthers\b/gi, canonical: "Florida Panthers" },
+  { regex: /\bBruins\b/gi, canonical: "Boston Bruins" },
+  { regex: /\bLeafs\b|\bMaple Leafs\b/gi, canonical: "Toronto Maple Leafs" },
+  { regex: /\bCanadiens\b|\bHabs\b/gi, canonical: "Montreal Canadiens" },
+  { regex: /\bOilers\b/gi, canonical: "Edmonton Oilers" },
+  { regex: /\bFlames\b/gi, canonical: "Calgary Flames" },
+  { regex: /\bCanucks\b/gi, canonical: "Vancouver Canucks" },
+  { regex: /\bAvalanche\b|\bAvs\b/gi, canonical: "Colorado Avalanche" },
+  { regex: /\bStars\b/gi, canonical: "Dallas Stars" },
+  { regex: /\bGolden Knights\b|\bVGK\b/gi, canonical: "Vegas Golden Knights" },
+
+  // NFL
+  { regex: /\bChiefs\b|\bKC Chiefs\b/gi, canonical: "Kansas City Chiefs" },
+  { regex: /\b49ers\b|\bNiners\b/gi, canonical: "San Francisco 49ers" },
+  { regex: /\bCowboys\b/gi, canonical: "Dallas Cowboys" },
+  { regex: /\bPackers\b/gi, canonical: "Green Bay Packers" },
+  { regex: /\bBears\b/gi, canonical: "Chicago Bears" },
+  { regex: /\bLions\b/gi, canonical: "Detroit Lions" },
+  { regex: /\bEagles\b/gi, canonical: "Philadelphia Eagles" },
+  { regex: /\bBills\b/gi, canonical: "Buffalo Bills" },
+
+  // MLB
+  { regex: /\bTEX\b|\bTexas Rangers\b|\bRangers\b/gi, canonical: "Texas Rangers" },
+  { regex: /\bARI\b|\bArizona Diamondbacks\b|\bDiamondbacks\b|\bDbacks\b/gi, canonical: "Arizona Diamondbacks" },
+  { regex: /\bCHC\b|\bCHI Cubs\b|\bChicago Cubs\b|\bCubs\b/gi, canonical: "Chicago Cubs" },
+  { regex: /\bCLE Guardians\b|\bCleveland Guardians\b|\bGuardians\b/gi, canonical: "Cleveland Guardians" },
+  { regex: /\bOAK\b|\bAthletics\b|\bA's\b/gi, canonical: "Athletics" },
+  { regex: /\bTOR Blue Jays\b|\bBlue Jays\b/gi, canonical: "Toronto Blue Jays" },
+  { regex: /\bSEA\b|\bMariners\b/gi, canonical: "Seattle Mariners" },
+  { regex: /\bMIN Twins\b|\bTwins\b/gi, canonical: "Minnesota Twins" },
+  { regex: /\bATL\b|\bBraves\b/gi, canonical: "Atlanta Braves" },
+  { regex: /\bARI\b|\bDiamondbacks\b|\bDbacks\b/gi, canonical: "Arizona Diamondbacks" },
+  { regex: /\bDET Tigers\b|\bTigers\b/gi, canonical: "Detroit Tigers" },
+  { regex: /\bPHI Phillies\b|\bPhillies\b/gi, canonical: "Philadelphia Phillies" },
+  { regex: /\bSD\b|\bPadres\b/gi, canonical: "San Diego Padres" },
+  { regex: /\bSF\b|\bGiants\b/gi, canonical: "San Francisco Giants" },
+  { regex: /\bHOU Astros\b|\bAstros\b/gi, canonical: "Houston Astros" },
+  { regex: /\bCIN\b|\bReds\b/gi, canonical: "Cincinnati Reds" },
+  { regex: /\bBAL\b|\bOrioles\b/gi, canonical: "Baltimore Orioles" },
+  { regex: /\bTB\b|\bRays\b/gi, canonical: "Tampa Bay Rays" },
+  { regex: /\bMIL Brewers\b|\bBrewers\b/gi, canonical: "Milwaukee Brewers" },
+  { regex: /\bPIT\b|\bPirates\b/gi, canonical: "Pittsburgh Pirates" },
+  { regex: /\bCOL Rockies\b|\bRockies\b/gi, canonical: "Colorado Rockies" },
+  { regex: /\bMIA Marlins\b|\bMarlins\b/gi, canonical: "Miami Marlins" },
+  { regex: /\bWSH\b|\bNationals\b|\bNats\b/gi, canonical: "Washington Nationals" },
+  { regex: /\bYankees\b/gi, canonical: "New York Yankees" },
+  { regex: /\bMets\b/gi, canonical: "New York Mets" },
+  { regex: /\bDodgers\b/gi, canonical: "Los Angeles Dodgers" },
+  { regex: /\bAngels\b/gi, canonical: "Los Angeles Angels" },
+  { regex: /\bCubs\b/gi, canonical: "Chicago Cubs" },
+  { regex: /\bWhite Sox\b/gi, canonical: "Chicago White Sox" },
+  { regex: /\bRed Sox\b/gi, canonical: "Boston Red Sox" },
+  { regex: /\bCardinals\b/gi, canonical: "St. Louis Cardinals" },
+];
+
+function replaceWholeAlias(text, regex, canonical) {
+  return text.replace(regex, canonical);
+}
+
+export function canonicalizeTeamName(name = "") {
+  const cleaned = cleanValue(name);
+  if (!cleaned) return "";
+
+  // Avoid over-normalizing long NCAA-like names that are already specific.
+  const looksSpecificCollegeName =
+    /\b(State|University|College|A&M|Tech|St\.|Saint)\b/i.test(cleaned) &&
+    cleaned.split(/\s+/).length >= 2;
+
+  if (looksSpecificCollegeName) {
+    return cleaned;
+  }
+
+  let result = cleaned;
+  for (const rule of TEAM_ALIAS_RULES) {
+    if (rule.regex.test(result)) {
+      result = replaceWholeAlias(result, rule.regex, rule.canonical);
+      break;
+    }
+  }
+
+  return cleanValue(result);
+}
+
+export function canonicalizeTeamsInText(text = "") {
+  let result = cleanValue(text);
+  if (!result) return "";
+
+  for (const rule of TEAM_ALIAS_RULES) {
+    result = replaceWholeAlias(result, rule.regex, rule.canonical);
+  }
+
+  return cleanValue(result);
+}
+
+
+===== app/utils/canonicalFixture.js =====
+// app/utils/canonicalFixture.js
+
+import { canonicalizeTeamName, canonicalizeTeamsInText } from "./canonicalTeamNames";
+
+function cleanValue(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function splitFixtureParts(fixture = "") {
+  const raw = canonicalizeTeamsInText(fixture);
+
+  const parts =
+    raw.split(/\s+@\s+|\s+vs\.?\s+|\s+v\.?\s+|\s+at\s+/i).map((x) => cleanValue(x)).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return [canonicalizeTeamName(parts[0]), canonicalizeTeamName(parts[1])];
+  }
+
+  return [];
+}
+
+export function canonicalizeFixture(fixture = "") {
+  const cleaned = cleanValue(fixture);
+  if (!cleaned) return "";
+
+  const parts = splitFixtureParts(cleaned);
+  if (parts.length >= 2) {
+    return `${parts[0]} @ ${parts[1]}`;
+  }
+
+  return canonicalizeTeamsInText(cleaned);
+}
+
+export function getCanonicalFixtureKey(fixture = "") {
+  const parts = splitFixtureParts(fixture);
+  if (parts.length >= 2) {
+    return [...parts].sort((a, b) => a.localeCompare(b)).join("|");
+  }
+
+  return canonicalizeFixture(fixture);
+}
+
+
+===== app/utils/canonicalSelection.js =====
+// app/utils/canonicalSelection.js
+
+import { canonicalizeTeamName, canonicalizeTeamsInText } from "./canonicalTeamNames";
+import { canonicalizeFixture } from "./canonicalFixture";
+import {
+  extractPeriod,
+  inferMarketFamily,
+  inferSubjectType,
+  inferResultTarget,
+  buildCanonicalSelectionKey,
+  buildCanonicalHedgeKey,
+  buildCanonicalOppositeKey,
+} from "./canonicalMarket";
+
+function cleanValue(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function toNumberString(value = "") {
+  const m = String(value || "").match(/[+-]?\d+(\.\d+)?/);
+  if (m) return m[0];
+
+  // ðŸ”¥ NEW: handle words like "five and a half"
+  const text = String(value || "").toLowerCase();
+
+  if (text.includes("half")) {
+    const base = text.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    if (base) {
+      const map = {
+        one: 1, two: 2, three: 3, four: 4, five: 5,
+        six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+      };
+      return `${map[base[1]] + 0.5}`;
+    }
+  }
+
+  return "";
+}
+
+function inferMarketLabel(selection = "", marketDetail = "", betType = "") {
+  const text = `${selection} | ${marketDetail}`.toLowerCase();
+
+  if (betType === "moneyline") return "moneyline";
+  if (betType === "spread") return "spread";
+  if (betType === "total") return "total";
+  if (betType === "parlay") return "parlay";
+  if (betType === "futures") return "futures";
+
+  if (/points \+ rebounds \+ assists|\bpra\b/.test(text)) return "pra";
+  if (/rebounds/.test(text)) return "rebounds";
+  if (/assists/.test(text)) return "assists";
+  if (/points/.test(text)) return "points";
+  if (/three pointers|threes|3-pointers|3 pointers/.test(text)) return "threes";
+  if (/shots on goal/.test(text)) return "shots on goal";
+  if (/strikeouts/.test(text)) return "strikeouts";
+  if (/hits/.test(text)) return "hits";
+  if (/rbis/.test(text)) return "rbis";
+  if (/home runs|home run/.test(text)) return "home runs";
+  if (/double-double/.test(text)) return "double-double";
+  if (/triple-double/.test(text)) return "triple-double";
+  if (/anytime goalscorer/.test(text)) return "anytime goalscorer";
+
+  return betType || "";
+}
+
+function extractOverUnder(selection = "", marketDetail = "") {
+  const joined = `${selection} ${marketDetail}`;
+  const m = joined.match(/\b(Over|Under)\s+(\d+(\.\d+)?)/i);
+
+  if (!m) {
+    return { direction: "", line: "" };
+  }
+
+  return {
+    direction: m[1].toLowerCase(),
+    line: m[2],
+  };
+}
+
+function extractSpreadLine(selection = "", marketDetail = "") {
+  const joined = `${selection} ${marketDetail}`;
+  const m = joined.match(/([+-]\d+(\.\d+)?)/);
+  return m ? m[1] : "";
+}
+
+function splitFixtureTeams(fixtureEvent = "") {
+  const canonical = canonicalizeFixture(fixtureEvent);
+  const parts = canonical
+    .split(/\s+@\s+|\s+vs\.?\s+|\s+v\.?\s+|\s+at\s+/i)
+    .map((x) => cleanValue(x))
+    .filter(Boolean);
+
+  return parts.length >= 2 ? parts : [];
+}
+
+function extractTeamFromSelection(selection = "", fixtureEvent = "") {
+  const selectionText = canonicalizeTeamsInText(selection);
+  const teams = splitFixtureTeams(fixtureEvent);
+
+  for (const team of teams) {
+    if (team && selectionText.toLowerCase().includes(team.toLowerCase())) {
+      return canonicalizeTeamName(team);
+    }
+  }
+
+  return "";
+}
+
+function normalizePlayerName(name = "") {
+  const cleaned = name
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const parts = cleaned.split(" ");
+
+  if (parts.length === 2 && parts[0].length === 1) {
+    // Convert "J Tatum" â†’ "Tatum"
+    return parts[1];
+  }
+
+  return cleaned;
+}
+
+function extractPlayerName(selection = "", marketDetail = "") {
+  const base = cleanValue(selection)
+    .replace(/\s-\s/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const market = cleanValue(marketDetail)
+    .replace(/\s-\s/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const combined = `${base} ${market}`.trim();
+
+  let candidate = base;
+
+  candidate = candidate
+    .replace(/\b(Over|Under)\b\s*\d+(\.\d+)?/gi, "")
+    .replace(/[+-]\d+(\.\d+)?/g, "")
+    .replace(/\b(Points|Pts|Rebounds|Rebs|Assists|Asts|Points \+ Rebounds \+ Assists|PRA|Three Pointers|3-Pointers|3 Pointers|Threes|Shots on Goal|Strikeouts|Hits|RBIs|RBI|Home Runs|Home Run|Double-Double|Triple-Double|Anytime Goalscorer|Anytime Scorer)\b/gi, "")
+    .replace(/\b(To Record|To Get|To Have|Alt|Alternate)\b/gi, "")
+    .replace(/[():]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (
+    candidate &&
+    candidate.split(" ").length >= 2 &&
+    !/@| vs | v | at /i.test(candidate) &&
+    !/\b(over|under|yes|no)\b/i.test(candidate)
+  ) {
+    return normalizePlayerName(candidate);
+  }
+
+  const patterns = [
+    /^(.*?)\s+(Over|Under)\s+\d+(\.\d+)?/i,
+    /^(.*?)\s+([+-]\d+(\.\d+)?)/i,
+    /^(.*?)\s+(Points|Pts|Rebounds|Rebs|Assists|Asts|Points \+ Rebounds \+ Assists|PRA|Three Pointers|3-Pointers|3 Pointers|Threes|Shots on Goal|Strikeouts|Hits|RBIs|RBI|Home Runs|Home Run|Double-Double|Triple-Double|Anytime Goalscorer|Anytime Scorer)/i,
+    /^(.*?)\s+(To Record|To Get|To Have)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const m = combined.match(pattern);
+    if (m && m[1]) {
+      const name = cleanValue(m[1])
+        .replace(/[():]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (
+        name &&
+        name.split(" ").length >= 2 &&
+        !/@| vs | v | at /i.test(name) &&
+        !/\b(over|under|yes|no)\b/i.test(name)
+      ) {
+        return normalizePlayerName(name);
+      }
+    }
+  }
+
+  return "";
+}
+
+export function canonicalizeSelectionFields(row = {}) {
+  let selection = cleanValue(row.selection || "");
+
+  selection = selection
+    .toLowerCase()
+    .replace(/\bpts\b/g, "points")
+    .replace(/\brebs\b/g, "rebounds")
+    .replace(/\basts\b/g, "assists");
+    selection = selection.replace(/\s+/g, " ").trim();
+  const marketDetail = cleanValue(row.marketDetail || "");
+  const betType = cleanValue(row.betType || "").toLowerCase();
+  const fixtureEvent = cleanValue(row.fixtureEvent || "");
+  const canonicalFixtureValue = canonicalizeFixture(fixtureEvent);
+
+  const result = {
+    canonicalBookmaker: cleanValue(row.bookmaker || "").replace(/^C-/, ""),
+    canonicalFixture: canonicalFixtureValue,
+    canonicalSelection: canonicalizeTeamsInText(selection),
+    canonicalBetType: betType,
+    canonicalMarket: inferMarketLabel(selection, marketDetail, betType),
+
+    canonicalSide: "",
+    canonicalLine: "",
+    canonicalPlayer: "",
+    canonicalTeam: "",
+
+    canonicalPeriod: "",
+    canonicalMarketFamily: "",
+    canonicalSubjectType: "",
+    canonicalResultTarget: "",
+    canonicalSelectionKey: "",
+    canonicalHedgeKey: "",
+    canonicalOppositeKey: "",
+  };
+
+  if (betType === "total") {
+    const total = extractOverUnder(selection, marketDetail);
+    result.canonicalSide = total.direction || "";
+    result.canonicalLine = total.line || "";
+    result.canonicalTeam = extractTeamFromSelection(selection, fixtureEvent);
+    result.canonicalSelection = cleanValue(
+      `${result.canonicalTeam ? `${result.canonicalTeam} ` : ""}${
+        total.direction ? total.direction[0].toUpperCase() + total.direction.slice(1) : ""
+      } ${total.line || ""}`
+    );
+  } else if (betType === "spread") {
+    result.canonicalLine = extractSpreadLine(selection, marketDetail);
+    result.canonicalTeam = extractTeamFromSelection(selection, fixtureEvent);
+    result.canonicalSide = result.canonicalTeam ? "team" : "";
+    result.canonicalSelection = cleanValue(
+      `${result.canonicalTeam || ""} ${result.canonicalLine || ""}`
+    );
+  } else if (betType === "moneyline") {
+    result.canonicalTeam = extractTeamFromSelection(selection, fixtureEvent);
+    result.canonicalSide = /\byes\b/i.test(selection)
+      ? "yes"
+      : /\bno\b/i.test(selection)
+      ? "no"
+      : result.canonicalTeam
+      ? "team"
+      : "";
+    result.canonicalSelection = cleanValue(selection);
+  } else {
+    const player = extractPlayerName(selection, marketDetail);
+    const total = extractOverUnder(selection, marketDetail);
+    const spreadLine = extractSpreadLine(selection, marketDetail);
+
+    result.canonicalPlayer = (player || "").toLowerCase();
+    result.canonicalTeam = !player ? extractTeamFromSelection(selection, fixtureEvent) : "";
+    result.canonicalSide = total.direction || (spreadLine ? "team" : "");
+    result.canonicalLine = total.line || spreadLine || "";
+    result.canonicalSelection = cleanValue(canonicalizeTeamsInText(selection));
+  }
+
+  result.canonicalPeriod = extractPeriod(selection, marketDetail, fixtureEvent);
+  result.canonicalMarketFamily = inferMarketFamily({
+    betType,
+    selection,
+    marketDetail,
+    canonicalPlayer: result.canonicalPlayer,
+    canonicalTeam: result.canonicalTeam,
+    fixtureEvent,
+  });
+  result.canonicalSubjectType = inferSubjectType({
+    canonicalPlayer: result.canonicalPlayer,
+    canonicalTeam: result.canonicalTeam,
+    canonicalMarketFamily: result.canonicalMarketFamily,
+  });
+  result.canonicalResultTarget = inferResultTarget(
+    selection,
+    marketDetail,
+    result.canonicalMarketFamily
+  );
+
+  result.canonicalSelectionKey = buildCanonicalSelectionKey({
+    ...row,
+    ...result,
+  });
+  result.canonicalHedgeKey = buildCanonicalHedgeKey({
+    ...row,
+    ...result,
+  });
+  result.canonicalOppositeKey = buildCanonicalOppositeKey({
+    ...row,
+    ...result,
+  });
+
+  return result;
+}
+
+
+===== app/utils/parser.js =====
+import { PARSER_REGISTRY } from "./parserRegistry";
+import { canonicalizeTeamsInText } from "./canonicalTeamNames";
+import { canonicalizeFixture, getCanonicalFixtureKey } from "./canonicalFixture";
+import { canonicalizeSelectionFields } from "./canonicalSelection";
+import { detectLeague } from "./detectLeague";
+import {
+  cleanTextLine,
+  normalizeOcrText,
+  formatDateMMDDYYYY,
+  normalizeDateString,
+  nextWeekdayFromDate,
+  getMatch,
+  parsePlacedDate,
+  parseMonthDayEventDate,
+  inferEventDate,
+  detectSportsbook,
+  looksLikeFanDuelText,
+  detectStatus,
+  detectLive,
+  extractBetId,
+  classifyScreenType,
+  extractReceiptWindow,
+} from "./parserShared";
+
+import {
+  singularizeStat,
+  buildPlayerPropSelection,
+  normalizeTeamNames,
+  extractParlayInfo,
+} from "./parserSelectionHelpers";
+const emptyParsed = {
+    eventDate: "",
+    betDate: "",
+    bookmaker: "",
+    sportLeague: "",
+    selection: "",
+    betType: "",
+    fixtureEvent: "",
+    stake: "",
+    oddsUS: "",
+    oddsSource: "",
+    oddsMissingReason: "",
+    live: "",
+    bonusBet: "",
+    win: "",
+    marketDetail: "",
+    payout: "",
+    toWin: "",
+    rawPlacedDate: "",
+    status: "",
+    parseWarning: "",
+    duplicateWarning: "",
+    sourceFileName: "",
+    sourceText: "",
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId: "",
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: "",
+    likelyParserIssue: "N",
+    reviewLater: "N",
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+    canonicalBookmaker: "",
+    canonicalFixture: "",
+    canonicalFixtureKey: "",
+    canonicalSelection: "",
+    canonicalBetType: "",
+    canonicalMarket: "",
+    canonicalSide: "",
+    canonicalLine: "",
+    canonicalPlayer: "",
+    canonicalTeam: "",
+    canonicalPeriod: "",
+    canonicalMarketFamily: "",
+    canonicalSubjectType: "",
+    canonicalResultTarget: "",
+    canonicalSelectionKey: "",
+    canonicalHedgeKey: "",
+    canonicalOppositeKey: ""
+};
+
+function normalizeSportLeagueValue(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+
+  if (/^mlb$/i.test(text)) return "Baseball";
+  if (/^baseball$/i.test(text)) return "Baseball";
+
+  return text;
+}
+
+function cleanLeadingOcrTokens(value = "") {
+  let text = String(value || "").replace(/\s+/g, " ").trim();
+
+  // Drop noisy short OCR prefixes:
+  // "S&S Shohei", "1p Andre", "a CLE", "Zc CLE", "fg Alex", "Lo Over", "Ww Kevin", "Qe Paul"
+  text = text.replace(
+    /^[^A-Za-z0-9]*[A-Za-z0-9&.,:;!?)'"`-]{1,4}\s+(?=[A-Z][a-z]|[A-Z][A-Za-z]+\s+[A-Z][A-Za-z]|Over\b|Under\b|Yes\b|No\b|Draw\b|\d\+\b)/,
+    ""
+  );
+
+  // Drop leading OCR score/index junk:
+  // "43 1+", "5 Michael Harris", "7 Cody Bellinger", "2, Michael Harris"
+  text = text.replace(/^\d+[,.]?\s+(?=\d\+\b|[A-Z][a-z])/, "");
+
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function normalizeOcrLineNumber(value = "") {
+  return String(value || "")
+    .replace(/Under\s*3s5/gi, "Under 3.5")
+    .replace(/Under\s*3\.s5/gi, "Under 3.5")
+    .replace(/Under\s*6s5/gi, "Under 6.5")
+    .replace(/Under\s*(\d+)(?=\d)/gi, "Under $1")
+    .replace(/Over\s*(\d+)(?=\d)/gi, "Over $1")
+    .replace(/\b(Over|Under)(\d+(?:\.\d+)?)\b/gi, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPlusMilestone(value = "") {
+  const m = String(value || "").match(/(?:^|\s)(\d+)\+(?:\s|$)/);
+  return m ? m[1] : "";
+}
+
+function extractPlayerAndStatFromMarket(marketDetail = "") {
+  let market = normalizeOcrLineNumber(cleanLeadingOcrTokens(marketDetail))
+    .replace(/[|:]+/g, " ")
+    .replace(/\bO\/U\b/gi, "")
+    .replace(/\bi\b$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const patterns = [
+    /^(.*?)\s+(Assists|Rebounds|Points|Total Bases|Strikeouts(?: Thrown)?|Home Runs?|RBIs?|Hits|Shots on Goal|Saves|Goals|Double-Double|Triple-Double)\b/i,
+    /^(.*?)\s+(Anytime Goalscorer|Anytime Goal Scorer|Goalscorer)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const m = market.match(pattern);
+    if (!m) continue;
+
+    let player = cleanLeadingOcrTokens(m[1] || "")
+      .replace(/^[^A-Za-z0-9]+/, "")
+      .replace(/^\d+\s+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const stat = String(m[2] || "").replace(/\s+/g, " ").trim();
+
+    if (player && stat) {
+      return { player, stat };
+    }
+  }
+
+  return { player: "", stat: "" };
+}
+
+function cleanSelectionDisplay(value = "", marketDetail = "") {
+  let text = normalizeOcrLineNumber(cleanLeadingOcrTokens(value));
+  const market = String(marketDetail || "").replace(/\s+/g, " ").trim();
+  const { player, stat } = extractPlayerAndStatFromMarket(market);
+
+  const sideLine = text.match(/\b(Over|Under)\s*(\d+(?:\.\d+)?)/i);
+
+  if (player && stat && sideLine) {
+    return `${player} ${sideLine[1]} ${sideLine[2]} ${stat}`.trim();
+  }
+
+  if (player && /Home Runs?/i.test(stat) && extractPlusMilestone(text)) {
+    return `${player} ${extractPlusMilestone(text)}+ Home Runs`;
+  }
+
+  if (player && /Strikeouts/i.test(stat) && extractPlusMilestone(text)) {
+    return `${player} ${extractPlusMilestone(text)}+ Strikeouts`;
+  }
+
+  // If selection OCR only found "1" or "1+" but market has the player/stat,
+  // use marketDetail to rebuild the home-run milestone.
+  if (player && /Home Runs?/i.test(stat) && /^(?:\d+[,.]?\s*)?1\+?$/.test(text)) {
+    return `${player} 1+ Home Runs`;
+  }
+
+  if (player && /Anytime Goal/i.test(stat)) {
+    return `${player} Anytime Goalscorer`;
+  }
+
+  if (player && /Double-Double/i.test(stat) && /\bYes\b/i.test(text)) {
+    return `${player} Yes Double-Double`;
+  }
+
+  if (player && /Triple-Double/i.test(stat) && /\bYes\b/i.test(text)) {
+    return `${player} Yes Triple-Double`;
+  }
+
+  // Generic DraftKings home-run OCR:
+  // "1+ 7 Cody Bellinger Home Runs" -> "Cody Bellinger 1+ Home Runs"
+  const homeRunInline = text.match(/^1\+\s+(.+?)\s+Home Runs?$/i);
+  if (homeRunInline) {
+    const tokens = String(homeRunInline[1] || "")
+      .split(/\s+/)
+      .filter(Boolean);
+
+    while (
+      tokens.length &&
+      (
+        /^\d+$/.test(tokens[0]) ||
+        /^[+-]?\d{2,5}$/.test(tokens[0]) ||
+        /^(ab|a|al|ml|nl|to|hit)$/i.test(tokens[0])
+      )
+    ) {
+      tokens.shift();
+    }
+
+    const playerName = tokens.join(" ").trim();
+
+    if (playerName.split(/\s+/).length >= 2) {
+      return `${playerName} 1+ Home Runs`;
+    }
+  }
+
+  text = text
+    .replace(/^\s*[A-Za-z]{1,3}\s+(?=CLE\b|BOS\b|DET\b|MEM\b|OKC\b|NY\b|LA\b|North Carolina\b)/, "")
+    .replace(/^\s*[#&~@Â®Â©Â»>"'`]+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text;
+}
+
+function normalizeScoreboardTeamName(value = "") {
+  let text = String(value || "")
+    .replace(/[|()[\]{}<>]/g, " ")
+    .replace(/[Â®Â©@~*]+/g, " ")
+    .replace(/[.]{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove leading seeds/ranks/short OCR junk.
+  text = text.replace(/^\d+\s+/, "").trim();
+
+  // Remove trailing scoreboard columns/scores.
+  text = text
+    .replace(/\s+(?:\d+\s*){2,}$/g, "")
+    .replace(/\s+\d+$/g, "")
+    .trim();
+
+  // Remove common scoreboard abbreviations only when they are separate leading tokens.
+  // Keep the rest of the team text, e.g. "ARI Diamond.." -> "Diamond"
+  // The canonical alias layer can later map Diamond/Diamondbacks/ARI to Arizona Diamondbacks.
+  text = text.replace(/^(ARI|ATL|BAL|BOS|CHC|CHW|CIN|CLE|COL|DET|HOU|KC|LAA|LAD|MIA|MIL|MIN|NYM|NYY|OAK|PHI|PIT|SD|SEA|SF|STL|TB|TEX|TOR|WSH)\s+/i, "");
+  text = text.replace(/^(ANA|BOS|BUF|CAR|CBJ|CGY|CHI|COL|DAL|DET|EDM|FLA|LA|MIN|MTL|NJ|NSH|NYI|NYR|OTT|PHI|PIT|SEA|SJ|STL|TB|TOR|UTA|VAN|VGK|WPG|WSH)\s+/i, "");
+  text = text.replace(/^(ATL|BOS|BKN|CHA|CHI|CLE|DAL|DEN|DET|GSW|HOU|IND|LAC|LAL|MEM|MIA|MIL|MIN|NOP|NYK|OKC|ORL|PHI|PHX|POR|SAC|SAS|TOR|UTA|WAS)\s+/i, "");
+
+  // Clean OCR fragments without trying to know every team.
+  text = text
+    .replace(/\bDiamond\b$/i, "Diamondbacks")
+    .replace(/\bDback\b$/i, "Diamondbacks")
+    .replace(/\bNvv?yankees\b/i, "Yankees")
+    .replace(/\bepM\s+oilers\b/i, "Oilers")
+    .replace(/\bcHicubs\b/i, "Cubs")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove remaining obvious OCR leading junk if a real word follows.
+  text = text.replace(/^[^A-Za-z0-9]*[A-Za-z0-9]{1,3}\s+(?=[A-Z][a-z])/, "").trim();
+
+  // Reject non-team lines.
+  if (!/[A-Za-z]{3,}/.test(text)) return "";
+
+  if (
+    /^(Final|Wager|Paid|Share|Placed|Bet ID|Market|The reward|Bonus|Live|My Bets|FOOTER OCR)$/i.test(text)
+  ) {
+    return "";
+  }
+
+  if (/\b(Wager|Paid|Share|Placed|Bet ID|Market|Boost|Payout|Reward)\b/i.test(text)) {
+    return "";
+  }
+
+  // Reject lines that are mostly numeric.
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  const digits = (text.match(/\d/g) || []).length;
+  if (digits > letters) return "";
+
+  return text;
+}
+
+function extractFixtureFromScoreboardText(sourceText = "", betType = "") {
+  const text = String(sourceText || "").replace(/\r/g, "\n");
+  const lines = text
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (!lines.length) return "";
+
+  // Avoid assigning a single scoreboard fixture to parlays with multiple legs.
+  if (/parlay/i.test(String(betType || ""))) {
+    return "";
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    const isScoreboardHeader =
+      /^Final\b/i.test(line) ||
+      /^Live\b/i.test(line) ||
+      /\b(Q1|Q2|Q3|Q4|H1|H2|P1|P2|P3|OT|HT|T)\b.*\bT\b/i.test(line);
+
+    if (!isScoreboardHeader) continue;
+
+    const candidates = [];
+
+    for (let j = i + 1; j < Math.min(lines.length, i + 10); j += 1) {
+      const nextLine = lines[j];
+
+      if (/^--- FOOTER OCR ---$/i.test(nextLine)) break;
+      if (/^<\s*Share/i.test(nextLine)) break;
+      if (/^Bet ID\b/i.test(nextLine)) break;
+      if (/^Placed:/i.test(nextLine)) break;
+
+      const team = normalizeScoreboardTeamName(nextLine);
+
+      if (!team) continue;
+
+      // Avoid duplicate accidental reads.
+      if (!candidates.includes(team)) {
+        candidates.push(team);
+      }
+
+      if (candidates.length >= 2) {
+        return `${candidates[0]} @ ${candidates[1]}`;
+      }
+    }
+  }
+
+  return "";
+}
+
+
+function cleanFixtureDisplay(value = "") {
+  let text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+
+  if (/^@+$/.test(text)) return "";
+  if (/^(share|cash out|betslip|my bets)\b/i.test(text)) return "";
+
+  const alphaCount = (text.match(/[A-Za-z]/g) || []).length;
+  if (alphaCount < 4) return "";
+
+  const hasFixtureSeparator =
+    /\s@\s/.test(text) ||
+    /\bvs\.?\b/i.test(text) ||
+    /\bv\.?\b/i.test(text) ||
+    /\bat\b/i.test(text);
+
+  if (hasFixtureSeparator) {
+    const parts = text
+      .split(/\s+@\s+|\s+vs\.?\s+|\s+v\.?\s+|\s+at\s+/i)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length >= 2) {
+      const hasBadSide = parts.some((part) => !/[A-Za-z]{2,}/.test(part));
+      if (hasBadSide) return "";
+    }
+  }
+
+  // Blank common OCR junk fixtures like "57 wl - @" or "00 al T @"
+  if (/@/.test(text) && !/[A-Za-z]{3,}.*@.*[A-Za-z]{3,}/.test(text)) {
+    return "";
+  }
+
+  return text;
+}
+
+function isWeakGenericLeagueSelection(selection = "", marketDetail = "", betType = "") {
+  const text = `${selection} ${marketDetail}`.toLowerCase().trim();
+
+  if (!text) return true;
+
+  if (/^(over|under)\s+\d+(\.\d+)?$/.test(String(selection || "").toLowerCase().trim())) {
+    return true;
+  }
+
+  if (/^draw$/i.test(String(selection || "").trim())) return false;
+
+  if (/^\d+\s+pick parlay$/i.test(String(selection || "").trim())) return false;
+
+  return false;
+}
+
+function shouldClearSuspiciousParsedLeague({ parsedLeague, coreDetectedLeague, selection, marketDetail, fixtureEvent, betType }) {
+  if (coreDetectedLeague) return false;
+  if (!parsedLeague) return false;
+  if (fixtureEvent) return false;
+
+  return isWeakGenericLeagueSelection(selection, marketDetail, betType);
+}
+
+function extractTopVisibleOutcomeStatus(sourceText = "") {
+  const lines = String(sourceText || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    // Ignore navigation/header/rules lines that can contain misleading words like Won.
+    if (
+      /\b(My Bets|Horse Bets|Betting Groups|My Pools|Live Settled|Live Won|Live Los|THE CROWN IS YOURS|DRAFTKINGS|BRAFTKINGS)\b/i.test(line) ||
+      /\b(will be settled as won|will be settled as lost|all other selections will be voided)\b/i.test(line)
+    ) {
+      continue;
+    }
+
+    // Prefer result-bearing selection lines.
+    const looksLikeSelectionResult =
+      /[|]/.test(line) ||
+      /[+-]\d{3,5}/.test(line) ||
+      /\bVoid(?:ed)?\b/i.test(line);
+
+    if (!looksLikeSelectionResult) continue;
+
+    if (/\bCashed Out\b/i.test(line)) return "Cashed Out";
+    if (/\bVoid(?:ed)?\b/i.test(line)) return "Voided";
+    if (/\bLos(?:t|!|:)?\b/i.test(line)) return "Lost";
+    if (/\bLost\b/i.test(line)) return "Lost";
+    if (/\bWon\b/i.test(line)) return "Won";
+    if (/\bOpen\b/i.test(line)) return "Open";
+  }
+
+  return "";
+}
+
+function extractTopVisibleDraftKingsResultFields(sourceText = "") {
+  const lines = String(sourceText || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  let result = {
+    selection: "",
+    oddsUS: "",
+    status: "",
+    stake: "",
+    betDate: "",
+    rawPlacedDate: "",
+  };
+
+  for (const line of lines) {
+    if (
+      /\b(My Bets|Horse Bets|Betting Groups|My Pools|Live Settled|Live Won|Live Los|THE CROWN IS YOURS|DRAFTKINGS|BRAFTKINGS)\b/i.test(line) ||
+      /\b(will be settled as won|will be settled as lost|all other selections will be voided)\b/i.test(line)
+    ) {
+      continue;
+    }
+
+    const hasPipeSelectionShape = /\|/.test(line);
+    const hasMilestoneSelectionShape = /\b\d+\+\b/.test(line) && /[+-]\d{3,5}\b|Even\b/i.test(line);
+    const hasResultShape = /\b(Won|Lost|Los!|Los:|Los|loc|l0c|Void(?:ed)?|Cashed Out|Open)\b/i.test(line);
+    const hasOddsShape = /[+-]\d{3,5}\b|Even\b/i.test(line);
+
+    if ((!hasPipeSelectionShape && !hasMilestoneSelectionShape) || (!hasResultShape && !hasOddsShape)) continue;
+
+    const left = hasPipeSelectionShape
+      ? line.split("|")[0] || ""
+      : line.replace(/[+-]\d{3,5}\b.*$/i, "");
+
+    const selection = cleanLeadingOcrTokens(left)
+      .replace(/^[^A-Za-z0-9]+/, "")
+      .trim();
+
+    const oddsTokens = line.match(/[+-]\d{3,5}\b|Even\b/gi) || [];
+    let oddsUS = oddsTokens.length ? oddsTokens[oddsTokens.length - 1] : "";
+    if (/^even$/i.test(oddsUS)) oddsUS = "+100";
+
+    let status = "";
+    if (/\bCashed Out\b/i.test(line)) status = "Cashed Out";
+    else if (/\bVoid(?:ed)?\b/i.test(line)) status = "Voided";
+    else if (/\b(loc|l0c)\b/i.test(line)) status = "Lost";
+    else if (/\bLos(?:t|!|:)?\b/i.test(line)) status = "Lost";
+    else if (/\bLost\b/i.test(line)) status = "Lost";
+    else if (/\bWon\b/i.test(line)) status = "Won";
+    else if (/\bOpen\b/i.test(line)) status = "Open";
+
+    if (selection || oddsUS || status) {
+      result = {
+        ...result,
+        selection,
+        oddsUS,
+        status,
+      };
+      break;
+    }
+  }
+
+  const stake =
+    String(sourceText || "").match(/\bWager:\s*\$?([\d,]+(?:\.\d{1,2})?)/i)?.[1] ||
+    String(sourceText || "").match(/\$([\d,]+(?:\.\d{1,2})?)\s+BONUS BET\b/i)?.[1] ||
+    "";
+
+  if (stake) {
+    result.stake = String(stake).replace(/,/g, "");
+  }
+
+  const placed = parsePlacedDate(sourceText);
+  if (placed?.dateOnly) {
+    result.betDate = placed.dateOnly;
+    result.rawPlacedDate = placed.raw || "";
+  }
+
+  return result;
+}
+
+function applySettlementMoneySafety(row = {}) {
+  const bookmaker = String(row.bookmaker || "").toLowerCase();
+
+  const dkFields =
+    bookmaker.includes("draftkings") || bookmaker.includes("dk")
+      ? extractTopVisibleDraftKingsResultFields(row.sourceText || "")
+      : {};
+
+  if (dkFields.selection && !row.selection) {
+    row = {
+      ...row,
+      selection: dkFields.selection,
+    };
+  }
+
+  if (dkFields.oddsUS && !row.oddsUS) {
+    row = {
+      ...row,
+      oddsUS: dkFields.oddsUS,
+      oddsSource: row.oddsSource || "OCR",
+    };
+  }
+
+  if (dkFields.stake && !row.stake) {
+    row = {
+      ...row,
+      stake: dkFields.stake,
+    };
+  }
+
+  if (dkFields.betDate && !row.betDate) {
+    row = {
+      ...row,
+      betDate: dkFields.betDate,
+      eventDate: row.eventDate || dkFields.betDate,
+      rawPlacedDate: row.rawPlacedDate || dkFields.rawPlacedDate,
+    };
+  }
+
+  if (dkFields.status) {
+    row = {
+      ...row,
+      status: dkFields.status,
+      win:
+        dkFields.status === "Won"
+          ? "Y"
+          : dkFields.status === "Lost"
+          ? "N"
+          : ["Voided", "Void", "Push", "Cashed Out", "Open"].includes(dkFields.status)
+          ? ""
+          : row.win || "",
+    };
+  }
+
+  const status = String(row.status || "").trim().toLowerCase();
+
+  // If a settled bet is explicitly lost, payout/toWin should be zero.
+  // This prevents lower visible cards from leaking their payout into the top lost bet.
+  if (status === "lost") {
+    return {
+      ...row,
+      payout: "0.00",
+      toWin: "0.00",
+    };
+  }
+
+  // Voided/pushed bets should not be marked win/loss.
+  if (status === "voided" || status === "void" || status === "push") {
+    return {
+      ...row,
+      win: "",
+      payout: row.payout || "0.00",
+      toWin: row.toWin || "0.00",
+    };
+  }
+
+  return row;
+}
+
+function fillMissingDatesFromSourceText(row = {}) {
+  if (row.betDate || !row.sourceText) return row;
+
+  const placed = parsePlacedDate(row.sourceText);
+
+  if (!placed?.dateOnly) return row;
+
+  return {
+    ...row,
+    betDate: placed.dateOnly,
+    eventDate: row.eventDate || placed.dateOnly,
+    rawPlacedDate: row.rawPlacedDate || placed.raw || "",
+  };
+}
+
+function cleanStaleParseWarnings(row = {}) {
+  const warnings = String(row.parseWarning || "")
+    .split("|")
+    .map((warning) => warning.trim())
+    .filter(Boolean);
+
+  if (!warnings.length) return row;
+
+  const kept = warnings.filter((warning) => {
+    const lower = warning.toLowerCase();
+
+    if (lower.includes("stake_missing") && row.stake) return false;
+    if (lower.includes("selection_missing") && row.selection) return false;
+    if (lower.includes("fixture_missing") && row.fixtureEvent) return false;
+    if (lower.includes("odds_missing") && row.oddsUS) return false;
+    if (lower.includes("receipt_detected_but_odds_missing") && row.oddsUS) return false;
+    if (lower.includes("receipt_detected_but_payout_missing") && (row.payout || row.toWin)) return false;
+    if (lower.includes("payout_missing") && (row.payout || row.toWin)) return false;
+    if (lower.includes("no_bet_date_detected") && row.betDate) return false;
+    if (lower.includes("no_league_detected") && row.sportLeague) return false;
+
+    return true;
+  });
+
+  return {
+    ...row,
+    parseWarning: kept.join(" | "),
+  };
+}
+
+
+function computeConfidenceFlag(row) {
+  let score = 0;
+
+  // positive signals
+  if (row.selection) score += 3;
+  if (row.fixtureEvent) score += 2;
+  if (row.betType) score += 1;
+  if (row.sportLeague) score += 1;
+  if (row.oddsUS) score += 2;
+
+  // negative signals
+  if (!row.selection) score -= 4;
+  if (!row.fixtureEvent) score -= 3;
+  if (!row.sportLeague) score -= 2;
+
+  if (row.parseWarning && String(row.parseWarning).trim()) score -= 2;
+
+  // noisy OCR / UI junk
+  const badText = /today|share|betslip|my bets|quick deposit|reward available/i;
+
+  if (badText.test(String(row.selection || ""))) score -= 3;
+  if (badText.test(String(row.fixtureEvent || ""))) score -= 3;
+
+  // weak / short values
+  if (String(row.selection || "").length < 4) score -= 2;
+
+  // classification
+  if (score >= 6) return "High";
+  if (score >= 3) return "Medium";
+  return "Low";
+}
+
+function computeLikelyParserIssue(row) {
+  if (!row.selection) return "Y";
+  if (!row.fixtureEvent) return "Y";
+  if (!row.sportLeague) return "Y";
+  if (!row.oddsUS && String(row.bookmaker || "") !== "Kalshi") return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.selection || ""))) return "Y";
+  if (/today|share|betslip|my bets|quick deposit|reward available/i.test(String(row.fixtureEvent || ""))) return "Y";
+  if (String(row.parseWarning || "").trim()) return "Y";
+  return "N";
+}
+
+function computeReviewPriority(row) {
+  let score = 0;
+  const warnings = String(row.parseWarning || "").trim();
+
+  if (row.likelyParserIssue === "Y") score += 5;
+  if (row.confidenceFlag === "Low") score += 4;
+  if (row.confidenceFlag === "Medium") score += 2;
+
+  if (!row.selection) score += 4;
+  if (!row.fixtureEvent) score += 3;
+  if (!row.oddsUS) score += 3;
+  if (!row.sportLeague) score += 2;
+
+  if (warnings) score += 2;
+  if (row.duplicateWarning) score += 2;
+
+  if (row.hedgeGroupId) score += 4;
+if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) score += 6;
+
+  if (row.reviewed === "Y" || row.reviewStatus === "Reviewed") score -= 4;
+  if (row.archived === "Y") score -= 10;
+
+  return score;
+}
+
+function computeReviewBucket(row) {
+  const score = Number(row.reviewPriority || 0);
+
+  if (score >= 10) return "Critical";
+  if (score >= 6) return "High";
+  if (score >= 3) return "Standard";
+  return "Later";
+}
+
+function computeReviewReasons(row) {
+  const reasons = [];
+
+  if (row.likelyParserIssue === "Y") reasons.push("Parser issue");
+  if (row.confidenceFlag === "Low") reasons.push("Low confidence");
+  else if (row.confidenceFlag === "Medium") reasons.push("Medium confidence");
+
+  if (!row.selection) reasons.push("Missing selection");
+  if (!row.fixtureEvent) reasons.push("Missing fixture");
+  if (!row.oddsUS) reasons.push("Missing odds");
+  if (!row.sportLeague) reasons.push("Missing league");
+
+  if (row.duplicateWarning) reasons.push("Possible duplicate");
+  if (row.hedgeGroupId) reasons.push("In hedge group");
+  if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) reasons.push("Guaranteed profit");
+
+  return reasons.slice(0, 4).join(" Ã¢â‚¬Â¢ ");
+}
+
+export function enrichRow(row) {
+  row = applySettlementMoneySafety(row);
+  row = fillMissingDatesFromSourceText(row);
+
+  const cleanedFixture = cleanFixtureDisplay(row.fixtureEvent);
+  const scoreboardFixture =
+    cleanedFixture ? "" : extractFixtureFromScoreboardText(row.sourceText || "", row.betType || "");
+  const cleanedSelection = cleanSelectionDisplay(row.selection, row.marketDetail || "");
+
+  const normalizedFixture = normalizeTeamNames(cleanedFixture || scoreboardFixture);
+  const normalizedSelection = normalizeTeamNames(cleanedSelection);
+  const normalizedBookmaker = String(row.bookmaker || "").replace(/^C-/, "");
+
+  const normalizedInputRow = {
+    ...row,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+    sportLeague: normalizeSportLeagueValue(row.sportLeague),
+  };
+
+  const isParlayRow = String(row.betType || "").toLowerCase() === "parlay";
+
+  const coreDetectedLeague = normalizeSportLeagueValue(
+    detectLeague({
+      cleaned: [normalizedSelection, row.marketDetail || "", normalizedFixture]
+        .filter(Boolean)
+        .join(" "),
+      selection: normalizedSelection,
+      marketDetail: row.marketDetail || "",
+      fixtureEvent: normalizedFixture,
+      isParlay: isParlayRow,
+    })
+  );
+
+  const parsedLeague = normalizeSportLeagueValue(row.sportLeague);
+
+  const resolvedSportLeague =
+    isParlayRow && parsedLeague === "Multi"
+      ? parsedLeague
+      : shouldClearSuspiciousParsedLeague({
+          parsedLeague,
+          coreDetectedLeague,
+          selection: normalizedSelection,
+          marketDetail: row.marketDetail || "",
+          fixtureEvent: normalizedFixture,
+          betType: row.betType || "",
+        })
+      ? ""
+      : coreDetectedLeague || parsedLeague;
+
+  let rowForScoring = {
+    ...normalizedInputRow,
+    sportLeague: resolvedSportLeague,
+  };
+
+  // Tennis rows with only a player name are usually moneyline/match winner,
+  // not player props.
+  if (
+    rowForScoring.sportLeague === "Tennis" &&
+    (!rowForScoring.betType || rowForScoring.betType === "player prop" || rowForScoring.betType === "straight") &&
+    rowForScoring.selection &&
+    !/\b(over|under|games|spread|total)\b/i.test(`${rowForScoring.selection} ${rowForScoring.marketDetail || ""}`)
+  ) {
+    rowForScoring = {
+      ...rowForScoring,
+      betType: "moneyline",
+      marketDetail: rowForScoring.marketDetail || "Moneyline",
+    };
+  }
+
+  rowForScoring = cleanStaleParseWarnings(rowForScoring);
+
+  const canonical = canonicalizeSelectionFields({
+    ...rowForScoring,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+  });
+
+  const confidenceFlag = computeConfidenceFlag(rowForScoring);
+  const likelyParserIssue = computeLikelyParserIssue(rowForScoring);
+
+  const needsReview =
+    rowForScoring.reviewResolved !== "Y" &&
+    (
+      rowForScoring.likelyParserIssue === "Y" ||
+      likelyParserIssue === "Y" ||
+      !resolvedSportLeague ||
+      (!rowForScoring.oddsUS && String(normalizedBookmaker || "") !== "Kalshi") ||
+      rowForScoring.oddsSource === "Calculated" ||
+      !!rowForScoring.parseWarning
+    );
+
+
+  const finalReviewLater =
+    needsReview || confidenceFlag !== "High" ? "Y" : (row.reviewLater || "N");
+
+  const scoredRow = {
+    ...rowForScoring,
+    bookmaker: normalizedBookmaker,
+    fixtureEvent: normalizedFixture,
+    selection: normalizedSelection,
+    sportLeague: resolvedSportLeague,
+    confidenceFlag,
+    likelyParserIssue,
+    reviewLater: finalReviewLater,
+    canonicalBookmaker: canonical.canonicalBookmaker || normalizedBookmaker,
+    canonicalFixture: canonical.canonicalFixture || canonicalizeFixture(normalizedFixture),
+    canonicalFixtureKey: getCanonicalFixtureKey(normalizedFixture),
+    canonicalSelection: canonical.canonicalSelection || canonicalizeTeamsInText(normalizedSelection),
+    canonicalBetType: canonical.canonicalBetType || row.betType || "",
+    canonicalMarket: canonical.canonicalMarket || "",
+    canonicalSide: canonical.canonicalSide || "",
+    canonicalLine: canonical.canonicalLine || "",
+    canonicalPlayer: canonical.canonicalPlayer || "",
+    canonicalTeam: canonical.canonicalTeam || "",
+    canonicalPeriod: canonical.canonicalPeriod || "",
+    canonicalMarketFamily: canonical.canonicalMarketFamily || "",
+    canonicalSubjectType: canonical.canonicalSubjectType || "",
+    canonicalResultTarget: canonical.canonicalResultTarget || "",
+    canonicalSelectionKey: canonical.canonicalSelectionKey || "",
+    canonicalHedgeKey: canonical.canonicalHedgeKey || "",
+    canonicalOppositeKey: canonical.canonicalOppositeKey || "",
+  };
+
+  const reviewPriority = computeReviewPriority(scoredRow);
+  const reviewBucket = computeReviewBucket({ ...scoredRow, reviewPriority });
+  const reviewReasons = computeReviewReasons({ ...scoredRow, reviewPriority });
+
+  return {
+    ...scoredRow,
+    reviewPriority,
+    reviewBucket,
+    reviewReasons,
+    reviewLater: finalReviewLater,
+    exported: row.exported || "N",
+    archived: row.archived || "N",
+  };
+}
+
+const shared = {
+  emptyParsed,
+  cleanTextLine,
+  normalizeOcrText,
+  formatDateMMDDYYYY,
+  normalizeDateString,
+  nextWeekdayFromDate,
+  getMatch,
+  parsePlacedDate,
+  parseMonthDayEventDate,
+  inferEventDate,
+  detectSportsbook,
+  singularizeStat,
+  buildPlayerPropSelection,
+  detectStatus,
+  detectLive,
+  extractBetId,
+  classifyScreenType,
+  extractReceiptWindow,
+  normalizeTeamNames,
+  extractParlayInfo,
+  enrichRow,
+};
+
+function stripBookPrefixes(bookmaker = "") {
+  return String(bookmaker || "")
+    .replace(/^C-/i, "")
+    .replace(/^(IL|IN|OH|KY|MI)-/i, "")
+    .trim();
+}
+
+function normalizeParserBookName(bookmaker = "") {
+  const base = stripBookPrefixes(bookmaker);
+  const key = base.toLowerCase();
+
+  const aliases = {
+    draftkings: "DraftKings",
+    dk: "DraftKings",
+
+    fanduel: "FanDuel",
+    fanatics: "Fanatics",
+
+    betmgm: "BetMGM",
+    caesars: "Caesars",
+    thescore: "theScore",
+    "the score": "theScore",
+    "score bet": "theScore",
+
+    bet365: "bet365",
+    circa: "Circa",
+    kalshi: "Kalshi",
+
+    "my bookie": "GenericTextTicket",
+    mybookie: "GenericTextTicket",
+    "sportsbetting.ag": "GenericTextTicket",
+    "lucky rebel": "GenericTextTicket",
+    bet105: "GenericTextTicket",
+    bovada: "GenericTextTicket",
+    betonline: "GenericTextTicket",
+    betus: "GenericTextTicket",
+    lowvig: "GenericTextTicket",
+    novig: "GenericTextTicket",
+    "prophet x": "GenericTextTicket",
+    fliff: "GenericTextTicket",
+
+    "hard rock": "GenericTextTicket",
+    betrivers: "GenericTextTicket",
+    bally: "GenericTextTicket",
+    sbk: "GenericTextTicket",
+    betr: "GenericTextTicket",
+    "prime sports": "GenericTextTicket",
+    betjack: "GenericTextTicket",
+    betly: "GenericTextTicket",
+    "golden nugget": "GenericTextTicket",
+    "four winds": "GenericTextTicket",
+    firekeepers: "GenericTextTicket",
+    "play gun lake": "GenericTextTicket",
+    playeagle: "GenericTextTicket",
+  };
+
+  return aliases[key] || base;
+}
+
+function isGenericTextTicketBook(bookmaker = "") {
+  return normalizeParserBookName(bookmaker) === "GenericTextTicket";
+}
+
+
+
+export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto") {
+  const cleaned = normalizeOcrText(text);
+  const lowerCleaned = String(cleaned || "").toLowerCase();
+
+  const detectedSportsbook = detectSportsbook(cleaned);
+
+  const sportsbook =
+    uploadBookmaker && uploadBookmaker !== "Auto"
+      ? uploadBookmaker
+      : detectedSportsbook;
+
+  const routeBook =
+    uploadBookmaker && uploadBookmaker !== "Auto"
+      ? normalizeParserBookName(uploadBookmaker)
+      : normalizeParserBookName(detectedSportsbook);
+
+  const forcedBook = String(routeBook || "").trim().toLowerCase();
+
+  let parserName = "DraftKingsLike";
+
+  if (
+    forcedBook === "fanduel" ||
+    forcedBook === "fanatics" ||
+    /\bfanduel\b/.test(lowerCleaned) ||
+    looksLikeFanDuelText(cleaned)
+  ) {
+    parserName = "FanDuel";
+  } else if (
+    forcedBook === "kalshi" ||
+    /kalshi/i.test(lowerCleaned) ||
+    /\bmarkets?\s+pay\b/i.test(lowerCleaned) ||
+    /\bcost\b/i.test(lowerCleaned) ||
+    /\bmax payout\b/i.test(lowerCleaned) ||
+    /\bodds\s+\d+% chance\b/i.test(lowerCleaned) ||
+    /\bslide to buy\b/i.test(lowerCleaned) ||
+    /\border completed\b/i.test(lowerCleaned) ||
+    /\bpro basketball\b/i.test(lowerCleaned) ||
+    /\bxx dollars\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Kalshi";
+  } else if (
+    forcedBook === "circa" ||
+    /circa/i.test(lowerCleaned) ||
+    /\bwager placed\b/i.test(lowerCleaned) ||
+    /\bthank you for playing with circa sports\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Circa";
+  } else if (
+    forcedBook === "bet365" ||
+    normalizeParserBookName(sportsbook) === "bet365" ||
+    /bet365/i.test(lowerCleaned) ||
+    (
+      /\bbet placed\b/i.test(cleaned) &&
+      /\bbet ref\b/i.test(cleaned) &&
+      /\breuse selections\b/i.test(cleaned) &&
+      /\bwager to return\b/i.test(cleaned) &&
+      /\ball sports live my bets search\b/i.test(cleaned)
+    )
+  ) {
+    parserName = "bet365";
+  } else if (
+    forcedBook === "thescore" ||
+    normalizeParserBookName(sportsbook) === "theScore" ||
+    /thescore/i.test(lowerCleaned) ||
+    /score bet/i.test(lowerCleaned)
+  ) {
+    parserName = "theScore";
+  } else if (
+    forcedBook === "caesars" ||
+    /\bcaesars\b/i.test(lowerCleaned)
+  ) {
+    parserName = "Caesars";
+  } else if (
+    forcedBook === "betmgm" ||
+    normalizeParserBookName(sportsbook) === "BetMGM"
+  ) {
+    parserName = "BetMGM";
+  } else if (
+    isGenericTextTicketBook(uploadBookmaker) ||
+    isGenericTextTicketBook(detectedSportsbook)
+  ) {
+    parserName = "GenericTextTicket";
+  }
+
+  const parser = PARSER_REGISTRY.find((entry) => entry.name === parserName);
+
+  if (!parser) {
+    const fallback = PARSER_REGISTRY.find((entry) => entry.name === "DraftKingsLike");
+
+    return fallback.run({
+      cleaned,
+      originalText: text,
+      sourceFileName,
+      sportsbook,
+      shared,
+    });
+  }
+
+  return parser.run({
+    cleaned,
+    originalText: text,
+    sourceFileName,
+    sportsbook,
+    shared,
+  });
+}
+

@@ -1,0 +1,1356 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+function ToolsPageContent() {
+  const searchParams = useSearchParams();
+
+  const [americanDecimalInput, setAmericanDecimalInput] = useState("");
+  const [impliedOddsInput, setImpliedOddsInput] = useState("-110");
+
+  const [novigA, setNovigA] = useState("-110");
+  const [novigB, setNovigB] = useState("-110");
+
+  const [singleBetOdds, setSingleBetOdds] = useState("+150");
+  const [singleBetProb, setSingleBetProb] = useState("0.43");
+  const [singleBetStake, setSingleBetStake] = useState("25");
+  const [singleBetLabel, setSingleBetLabel] = useState("");
+
+  const [singleBetBankroll, setSingleBetBankroll] = useState("6000");
+  const [singleBetKellyFraction, setSingleBetKellyFraction] = useState("0.25");
+  const [yourStake, setYourStake] = useState("25");
+
+  const [boostOdds, setBoostOdds] = useState("+200");
+  const [boostPct, setBoostPct] = useState("20");
+
+  const [parlayLegsInput, setParlayLegsInput] = useState("+150, -110, +200");
+  const [parlayBoostPct, setParlayBoostPct] = useState("0");
+  const [parlayProbInput, setParlayProbInput] = useState("0.40, 0.52, 0.33");
+  const [parlayLabelsInput, setParlayLabelsInput] = useState("Leg 1 || Leg 2 || Leg 3");
+
+  const [boostFinderBoostPct, setBoostFinderBoostPct] = useState("30");
+  const [boostFinderCandidates, setBoostFinderCandidates] = useState(
+    "Orlando Magic | +100 | 0.4666\nPhiladelphia 76ers | -118 | 0.5334\nMiami Heat | +176 | 0.3362\nCharlotte Hornets | -210 | 0.6638"
+  );
+
+  const [edgeFinderRows, setEdgeFinderRows] = useState(
+    "Miami Heat | +176 | +197\nCharlotte Hornets | -210 | -197\nOrlando Magic | +100 | +114\nPhiladelphia 76ers | -118 | -114\nGolden State Warriors | +150 | +166\nLos Angeles Clippers | -178 | -166"
+  );
+  const [edgeFinderMinPct, setEdgeFinderMinPct] = useState("0");
+
+  const [hedgeOddsA, setHedgeOddsA] = useState("+150");
+  const [hedgeStakeA, setHedgeStakeA] = useState("100");
+  const [hedgeOddsB, setHedgeOddsB] = useState("-160");
+
+  const [toolCollapseAction, setToolCollapseAction] = useState({
+    mode: "",
+    version: 0,
+  });
+
+  useEffect(() => {
+    const legsFromUrl = searchParams.get("legs");
+    const boostFromUrl = searchParams.get("boost");
+    const probsFromUrl = searchParams.get("probs");
+    const labelsFromUrl = searchParams.get("labels");
+    const edgeRowsFromUrl = searchParams.get("edgeRows");
+    const edgeMinPctFromUrl = searchParams.get("edgeMinPct");
+
+    const singleOddsFromUrl = searchParams.get("singleOdds");
+    const singleProbFromUrl = searchParams.get("singleProb");
+    const singleStakeFromUrl = searchParams.get("singleStake");
+    const singleBankrollFromUrl = searchParams.get("singleBankroll");
+    const singleKellyFractionFromUrl = searchParams.get("singleKellyFraction");
+    const singleLabelFromUrl = searchParams.get("singleLabel");
+
+    const boostCandidatesFromUrl = searchParams.get("boostCandidates");
+    const boostPctFromUrl = searchParams.get("boostPct");
+
+    if (legsFromUrl) setParlayLegsInput(legsFromUrl);
+    if (boostFromUrl) setParlayBoostPct(boostFromUrl);
+    if (probsFromUrl) setParlayProbInput(probsFromUrl);
+    if (labelsFromUrl) setParlayLabelsInput(labelsFromUrl);
+    if (edgeRowsFromUrl) setEdgeFinderRows(edgeRowsFromUrl);
+    if (edgeMinPctFromUrl) setEdgeFinderMinPct(edgeMinPctFromUrl);
+
+    if (singleOddsFromUrl) setSingleBetOdds(singleOddsFromUrl);
+    if (singleProbFromUrl) setSingleBetProb(singleProbFromUrl);
+    if (singleStakeFromUrl) setSingleBetStake(singleStakeFromUrl);
+    if (singleBankrollFromUrl) setSingleBetBankroll(singleBankrollFromUrl);
+    if (singleKellyFractionFromUrl) setSingleBetKellyFraction(singleKellyFractionFromUrl);
+    if (singleLabelFromUrl) setSingleBetLabel(singleLabelFromUrl);
+
+    if (boostCandidatesFromUrl) setBoostFinderCandidates(boostCandidatesFromUrl);
+    if (boostPctFromUrl) setBoostFinderBoostPct(boostPctFromUrl);
+  }, [searchParams]);
+
+  const convertedOdds = useMemo(
+    () => convertOddsValue(americanDecimalInput),
+    [americanDecimalInput]
+  );
+
+  const impliedResult = useMemo(() => {
+    const decimal = parseOddsToDecimal(impliedOddsInput);
+    if (!Number.isFinite(decimal) || decimal <= 1) return null;
+
+    const impliedProb = 1 / decimal;
+
+    return {
+      decimal,
+      american: decimalToAmerican(decimal),
+      impliedProb,
+      breakEvenProb: impliedProb,
+    };
+  }, [impliedOddsInput]);
+
+  const noVigResult = useMemo(() => {
+    const decA = parseOddsToDecimal(novigA);
+    const decB = parseOddsToDecimal(novigB);
+    if (!Number.isFinite(decA) || !Number.isFinite(decB)) return null;
+
+    const impA = 1 / decA;
+    const impB = 1 / decB;
+    const total = impA + impB;
+    if (!(total > 0)) return null;
+
+    const fairProbA = impA / total;
+    const fairProbB = impB / total;
+
+    return {
+      fairProbA,
+      fairProbB,
+      fairAmericanA: decimalToAmerican(1 / fairProbA),
+      fairAmericanB: decimalToAmerican(1 / fairProbB),
+      holdPct: (total - 1) * 100,
+    };
+  }, [novigA, novigB]);
+
+  const singleBetResult = useMemo(() => {
+    const decimal = parseOddsToDecimal(singleBetOdds);
+    const fairInfo = parseTrueProbabilityInput(singleBetProb);
+    const stake = Number(singleBetStake);
+    const bankroll = Number(singleBetBankroll);
+    const fraction = Number(singleBetKellyFraction);
+
+    if (
+      !Number.isFinite(decimal) ||
+      decimal <= 1 ||
+      !fairInfo ||
+      !Number.isFinite(stake) ||
+      stake < 0
+    ) {
+      return null;
+    }
+
+    const fairProbability = fairInfo.probability;
+    if (!(fairProbability > 0 && fairProbability < 1)) return null;
+
+    const evPct = fairProbability * (decimal - 1) - (1 - fairProbability);
+    const expectedProfit = stake * evPct;
+    const b = decimal - 1;
+    const q = 1 - fairProbability;
+    const fullKelly = b > 0 ? (b * fairProbability - q) / b : NaN;
+    const suggestedStake =
+      Number.isFinite(bankroll) &&
+      bankroll > 0 &&
+      Number.isFinite(fraction) &&
+      fraction >= 0
+        ? bankroll * Math.max(0, fullKelly) * fraction
+        : null;
+
+    return {
+      decimal,
+      american: decimalToAmerican(decimal),
+      fairProbability,
+      fairDecimal: 1 / fairProbability,
+      fairAmerican: decimalToAmerican(1 / fairProbability),
+      fairInputType: fairInfo.type,
+      evPct,
+      expectedProfit,
+      fullKelly,
+      suggestedStake,
+    };
+  }, [
+    singleBetOdds,
+    singleBetProb,
+    singleBetStake,
+    singleBetBankroll,
+    singleBetKellyFraction,
+  ]);
+
+  const stakeComparisonResult = useMemo(() => {
+    const decimal = parseOddsToDecimal(singleBetOdds);
+    const fairInfo = parseTrueProbabilityInput(singleBetProb);
+    const bankroll = Number(singleBetBankroll);
+    const fraction = Number(singleBetKellyFraction);
+    const stake = Number(yourStake);
+
+    if (
+      !Number.isFinite(decimal) ||
+      decimal <= 1 ||
+      !fairInfo ||
+      !Number.isFinite(bankroll) ||
+      bankroll <= 0 ||
+      !Number.isFinite(fraction) ||
+      fraction < 0 ||
+      !Number.isFinite(stake) ||
+      stake < 0
+    ) {
+      return null;
+    }
+
+    const fairProbability = fairInfo.probability;
+    if (!(fairProbability > 0 && fairProbability < 1)) return null;
+
+    const b = decimal - 1;
+    const q = 1 - fairProbability;
+    const fullKelly = b > 0 ? (b * fairProbability - q) / b : NaN;
+    const suggestedStake = bankroll * Math.max(0, fullKelly) * fraction;
+    const diff = stake - suggestedStake;
+    const diffPct = suggestedStake > 0 ? diff / suggestedStake : null;
+    const evPct = fairProbability * (decimal - 1) - (1 - fairProbability);
+
+    let label = "Aligned";
+    if (Number.isFinite(diffPct)) {
+      if (diffPct > 0.2) label = "Overbetting";
+      else if (diffPct < -0.2) label = "Underbetting";
+    } else if (suggestedStake === 0 && stake > 0) {
+      label = "No Kelly Bet";
+    }
+
+    return {
+      suggestedStake,
+      diff,
+      diffPct,
+      label,
+      fairProbability,
+      fairDecimal: 1 / fairProbability,
+      fairAmerican: decimalToAmerican(1 / fairProbability),
+      fairInputType: fairInfo.type,
+      fullKelly,
+      evPct,
+    };
+  }, [
+    singleBetOdds,
+    singleBetProb,
+    singleBetBankroll,
+    singleBetKellyFraction,
+    yourStake,
+  ]);
+
+  const boostResult = useMemo(() => {
+    const decimal = parseOddsToDecimal(boostOdds);
+    const pct = Number(boostPct);
+
+    if (!Number.isFinite(decimal) || !Number.isFinite(pct)) return null;
+
+    const boostedDecimal = applyProfitBoostToDecimal(decimal, pct);
+    const boostedAmerican = decimalToAmerican(boostedDecimal);
+
+    return {
+      baseDecimal: decimal,
+      boostedDecimal,
+      boostedAmerican,
+    };
+  }, [boostOdds, boostPct]);
+
+  const parlayResult = useMemo(() => {
+    const parts = String(parlayLegsInput || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (!parts.length) return null;
+
+    const decimals = parts.map(parseOddsToDecimal);
+    if (decimals.some((d) => !Number.isFinite(d) || d <= 1)) return null;
+
+    const rawDecimal = decimals.reduce((acc, d) => acc * d, 1);
+    const rawAmerican = decimalToAmerican(rawDecimal);
+
+    const boost = Number(parlayBoostPct);
+    const boostedDecimal = Number.isFinite(boost)
+      ? applyProfitBoostToDecimal(rawDecimal, boost)
+      : rawDecimal;
+    const boostedAmerican = decimalToAmerican(boostedDecimal);
+
+    const impliedProb = 1 / rawDecimal;
+
+    const probParts = String(parlayProbInput || "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n));
+
+    const labelParts = String(parlayLabelsInput || "")
+      .split("||")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    let fairHitProb = null;
+    let evPct = null;
+
+    if (
+      probParts.length === decimals.length &&
+      probParts.every((p) => p > 0 && p < 1)
+    ) {
+      fairHitProb = probParts.reduce((acc, p) => acc * p, 1);
+      evPct = fairHitProb * (boostedDecimal - 1) - (1 - fairHitProb);
+    }
+
+    return {
+      legCount: decimals.length,
+      rawDecimal,
+      rawAmerican,
+      boostedDecimal,
+      boostedAmerican,
+      impliedProb,
+      fairHitProb,
+      evPct,
+      labels:
+        labelParts.length === decimals.length
+          ? labelParts
+          : decimals.map((_, idx) => `Leg ${idx + 1}`),
+    };
+  }, [parlayLegsInput, parlayBoostPct, parlayProbInput, parlayLabelsInput]);
+
+  const boostFinderResult = useMemo(() => {
+    const boost = Number(boostFinderBoostPct);
+
+    return String(boostFinderCandidates || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [label, oddsRaw, fairProbRaw] = line.split("|").map((s) => s.trim());
+        const decimal = parseOddsToDecimal(oddsRaw);
+        const fairProbability = Number(fairProbRaw);
+
+        if (!label || !Number.isFinite(decimal) || !Number.isFinite(fairProbability)) {
+          return null;
+        }
+
+        const boostedDecimal = applyProfitBoostToDecimal(decimal, boost);
+        const boostedAmerican = decimalToAmerican(boostedDecimal);
+        const evPct = fairProbability * (boostedDecimal - 1) - (1 - fairProbability);
+
+        return {
+          label,
+          boostedAmerican,
+          evPct,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.evPct - a.evPct);
+  }, [boostFinderBoostPct, boostFinderCandidates]);
+
+  const edgeFinderResult = useMemo(() => {
+    const minPct = Number(edgeFinderMinPct) / 100;
+
+    return String(edgeFinderRows || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [label, targetOddsRaw, fairOddsRaw] = line.split("|").map((s) => s.trim());
+        const targetDecimal = parseOddsToDecimal(targetOddsRaw);
+        const fairDecimal = parseOddsToDecimal(fairOddsRaw);
+
+        if (!label || !Number.isFinite(targetDecimal) || !Number.isFinite(fairDecimal)) {
+          return null;
+        }
+
+        const fairProbability = 1 / fairDecimal;
+        const edgePct = targetDecimal / fairDecimal - 1;
+        const evPct = fairProbability * (targetDecimal - 1) - (1 - fairProbability);
+
+        return {
+          label,
+          edgePct,
+          evPct,
+        };
+      })
+      .filter(Boolean)
+      .filter((row) => row.edgePct >= minPct)
+      .sort((a, b) => b.edgePct - a.edgePct);
+  }, [edgeFinderRows, edgeFinderMinPct]);
+
+  const hedgeResult = useMemo(() => {
+    const decA = parseOddsToDecimal(hedgeOddsA);
+    const decB = parseOddsToDecimal(hedgeOddsB);
+    const stakeA = Number(hedgeStakeA);
+
+    if (!Number.isFinite(decA) || !Number.isFinite(decB) || !Number.isFinite(stakeA)) {
+      return null;
+    }
+
+    const payoutA = stakeA * decA;
+    const hedgeStakeB = payoutA / decB;
+    const totalStaked = stakeA + hedgeStakeB;
+    const guaranteedProfit = payoutA - totalStaked;
+
+    return {
+      hedgeStakeB,
+      guaranteedProfit,
+    };
+  }, [hedgeOddsA, hedgeStakeA, hedgeOddsB]);
+
+  return (
+    <div style={pageStyle}>
+      <div style={containerStyle}>
+        <div style={headerRowStyle}>
+          <div>
+            <h1 style={{ marginTop: 0, marginBottom: 8 }}>Betting Tools</h1>
+            <p style={{ marginTop: 0, marginBottom: 0, color: "#555" }}>
+              Quick calculators for line conversion, no-vig pricing, EV, boosts, Kelly sizing, and hedging.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/ev-parlay-lab" style={primaryLinkStyle}>
+              EV Parlay Lab
+            </Link>
+            <Link href="/" style={secondaryLinkStyle}>
+              Bet Slip App
+            </Link>
+          </div>
+        </div>
+
+        <div style={topControlsStyle}>
+          <div style={topControlsHeaderStyle}>
+            <div>
+              <div style={topControlsTitleStyle}>Kelly Stake Settings</div>
+              <div style={topControlsSubtextStyle}>
+                Used by Single Bet EV / Kelly Finder and Stake Comparison. Default is $6,000 bankroll with 0.25 Kelly.
+              </div>
+            </div>
+
+            <div style={toolVisibilityButtonRowStyle}>
+              <button
+                type="button"
+                onClick={() =>
+                  setToolCollapseAction((prev) => ({
+                    mode: "show",
+                    version: prev.version + 1,
+                  }))
+                }
+                style={smallSecondaryButtonStyle}
+              >
+                Show All
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setToolCollapseAction((prev) => ({
+                    mode: "hide",
+                    version: prev.version + 1,
+                  }))
+                }
+                style={smallSecondaryButtonStyle}
+              >
+                Hide All
+              </button>
+            </div>
+          </div>
+
+          <div style={topControlsGridStyle}>
+            <label style={labelStyle}>
+              Bankroll
+              <input
+                value={singleBetBankroll}
+                onChange={(e) => setSingleBetBankroll(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              Kelly Fraction
+              <input
+                value={singleBetKellyFraction}
+                onChange={(e) => setSingleBetKellyFraction(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div style={gridStyle}>
+          <ToolCard collapseAction={toolCollapseAction} title="American â†” Decimal" icon="ðŸ”„">
+            <label style={labelStyle}>
+              Odds
+              <input
+                value={americanDecimalInput}
+                onChange={(e) => setAmericanDecimalInput(e.target.value)}
+                placeholder="+150 or 2.50"
+                style={inputStyle}
+              />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {convertedOdds ? (
+                convertedOdds.type === "american_to_decimal" ? (
+                  <div>Decimal: <strong>{convertedOdds.decimal.toFixed(3)}</strong></div>
+                ) : (
+                  <div>American: <strong>{formatAmerican(convertedOdds.american)}</strong></div>
+                )
+              ) : (
+                <div>Enter +150, -200, 2.50, etc.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Implied Probability / Break-Even" icon="ðŸŽ²">
+            <label style={labelStyle}>
+              Odds
+              <input
+                value={impliedOddsInput}
+                onChange={(e) => setImpliedOddsInput(e.target.value)}
+                placeholder="-110 or 1.91"
+                style={inputStyle}
+              />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {impliedResult ? (
+                <>
+                  <div>American: <strong>{formatAmerican(impliedResult.american)}</strong></div>
+                  <div>Decimal: <strong>{impliedResult.decimal.toFixed(3)}</strong></div>
+                  <div>Implied Win %: <strong>{(impliedResult.impliedProb * 100).toFixed(2)}%</strong></div>
+                  <div>Break-Even %: <strong>{(impliedResult.breakEvenProb * 100).toFixed(2)}%</strong></div>
+                </>
+              ) : (
+                <div>Enter valid odds like -110, +150, or 1.91.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="No-Vig Calculator (2-way)" icon="ðŸ§®">
+            <label style={labelStyle}>
+              Side A Odds
+              <input value={novigA} onChange={(e) => setNovigA(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Side B Odds
+              <input value={novigB} onChange={(e) => setNovigB(e.target.value)} style={inputStyle} />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {noVigResult ? (
+                <>
+                  <div>Fair Prob A: <strong>{(noVigResult.fairProbA * 100).toFixed(2)}%</strong></div>
+                  <div>Fair Prob B: <strong>{(noVigResult.fairProbB * 100).toFixed(2)}%</strong></div>
+                  <div>Fair A: <strong>{formatAmerican(noVigResult.fairAmericanA)}</strong></div>
+                  <div>Fair B: <strong>{formatAmerican(noVigResult.fairAmericanB)}</strong></div>
+                  <div>
+                    Hold:{" "}
+                    <ResultValue value={-Math.abs(noVigResult.holdPct)}>
+                      {noVigResult.holdPct.toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                </>
+              ) : (
+                <div>Enter two valid prices.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Single Bet EV / Kelly Finder" icon="ðŸŽ¯">
+            {singleBetLabel ? (
+              <div style={selectedBetBannerStyle}>
+                {singleBetLabel}
+              </div>
+            ) : null}
+
+            <label style={labelStyle}>
+              Book Odds (American or decimal)
+              <input
+                value={singleBetOdds}
+                onChange={(e) => setSingleBetOdds(e.target.value)}
+                placeholder="+195 or 2.95"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              True Probability / True Odds
+              <input
+                value={singleBetProb}
+                onChange={(e) => setSingleBetProb(e.target.value)}
+                placeholder="0.43, 43%, +133, or 2.33"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              Stake
+              <input value={singleBetStake} onChange={(e) => setSingleBetStake(e.target.value)} style={inputStyle} />
+            </label>
+
+            <div style={helperTextStyle}>
+              True input accepts probability as 0.43 or 43%, American odds like +133, or decimal odds like 2.33.
+            </div>
+
+            <div style={resultBoxStyle}>
+              {singleBetResult ? (
+                <>
+                  <div>Book Odds: <strong>{formatAmerican(singleBetResult.american)}</strong> / <strong>{singleBetResult.decimal.toFixed(3)}</strong></div>
+                  <div>True Win %: <strong>{(singleBetResult.fairProbability * 100).toFixed(2)}%</strong> <span style={mutedTextStyle}>({singleBetResult.fairInputType})</span></div>
+                  <div>True Odds: <strong>{formatAmerican(singleBetResult.fairAmerican)}</strong> / <strong>{singleBetResult.fairDecimal.toFixed(3)}</strong></div>
+                  <div>
+                    EV %:{" "}
+                    <ResultValue value={singleBetResult.evPct}>
+                      {(singleBetResult.evPct * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Expected $:{" "}
+                    <ResultValue value={singleBetResult.expectedProfit}>
+                      ${singleBetResult.expectedProfit.toFixed(2)}
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Full Kelly %:{" "}
+                    <ResultValue value={singleBetResult.fullKelly}>
+                      {(Math.max(0, singleBetResult.fullKelly) * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Suggested Stake ({singleBetKellyFraction} Kelly):{" "}
+                    {Number.isFinite(singleBetResult.suggestedStake) ? (
+                      <ResultValue value={singleBetResult.suggestedStake}>
+                        ${singleBetResult.suggestedStake.toFixed(2)}
+                      </ResultValue>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div>Enter valid book odds, true probability/odds, and stake.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Stake Comparison" icon="âš–ï¸" defaultCollapsed={true}>
+            {singleBetLabel ? (
+              <div style={selectedBetBannerStyle}>
+                {singleBetLabel}
+              </div>
+            ) : null}
+
+            <label style={labelStyle}>
+              Book Odds (American or decimal)
+              <input
+                value={singleBetOdds}
+                onChange={(e) => setSingleBetOdds(e.target.value)}
+                placeholder="+195 or 2.95"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              True Probability / True Odds
+              <input
+                value={singleBetProb}
+                onChange={(e) => setSingleBetProb(e.target.value)}
+                placeholder="0.43, 43%, +133, or 2.33"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              Your Stake
+              <input value={yourStake} onChange={(e) => setYourStake(e.target.value)} style={inputStyle} />
+            </label>
+
+            <div style={helperTextStyle}>
+              Active Kelly settings: ${Number(singleBetBankroll || 0).toLocaleString()} bankroll × {singleBetKellyFraction} Kelly.
+            </div>
+
+            <div style={resultBoxStyle}>
+              {stakeComparisonResult ? (
+                <>
+                  <div>Model Label: <strong>{stakeComparisonResult.label}</strong></div>
+                  <div>True Win %: <strong>{(stakeComparisonResult.fairProbability * 100).toFixed(2)}%</strong> <span style={mutedTextStyle}>({stakeComparisonResult.fairInputType})</span></div>
+                  <div>True Odds: <strong>{formatAmerican(stakeComparisonResult.fairAmerican)}</strong> / <strong>{stakeComparisonResult.fairDecimal.toFixed(3)}</strong></div>
+                  <div>
+                    EV %:{" "}
+                    <ResultValue value={stakeComparisonResult.evPct}>
+                      {(stakeComparisonResult.evPct * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Full Kelly %:{" "}
+                    <ResultValue value={stakeComparisonResult.fullKelly}>
+                      {(Math.max(0, stakeComparisonResult.fullKelly) * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Suggested Stake:{" "}
+                    <ResultValue value={stakeComparisonResult.suggestedStake}>
+                      ${stakeComparisonResult.suggestedStake.toFixed(2)}
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Difference:{" "}
+                    <ResultValue value={stakeComparisonResult.diff}>
+                      ${stakeComparisonResult.diff.toFixed(2)}
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Difference %:{" "}
+                    {Number.isFinite(stakeComparisonResult.diffPct) ? (
+                      <ResultValue value={stakeComparisonResult.diffPct}>
+                        {(stakeComparisonResult.diffPct * 100).toFixed(2)}%
+                      </ResultValue>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div>Enter valid book odds, true probability/odds, bankroll, Kelly fraction, and stake.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Boost Calculator" icon="âš¡" defaultCollapsed={true}>
+            <label style={labelStyle}>
+              Base Odds
+              <input value={boostOdds} onChange={(e) => setBoostOdds(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Boost %
+              <input value={boostPct} onChange={(e) => setBoostPct(e.target.value)} style={inputStyle} />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {boostResult ? (
+                <>
+                  <div>Boosted Decimal: <strong>{boostResult.boostedDecimal.toFixed(3)}</strong></div>
+                  <div>Boosted American: <strong>{formatAmerican(boostResult.boostedAmerican)}</strong></div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard.writeText(formatAmerican(boostResult.boostedAmerican))
+                    }
+                    style={copyButtonStyle}
+                  >
+                    Copy Boosted American
+                  </button>
+                </>
+              ) : (
+                <div>Enter valid base odds and boost %.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Parlay EV Calculator" icon="ðŸŽ¯" defaultCollapsed={true}>
+            <label style={labelStyle}>
+              Legs (comma separated)
+              <input
+                value={parlayLegsInput}
+                onChange={(e) => setParlayLegsInput(e.target.value)}
+                placeholder="+150, -110, +200"
+                style={inputStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Fair Probabilities (comma separated)
+              <input
+                value={parlayProbInput}
+                onChange={(e) => setParlayProbInput(e.target.value)}
+                placeholder="0.40, 0.52, 0.33"
+                style={inputStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Leg Labels (separate with ||)
+              <textarea
+                value={parlayLabelsInput}
+                onChange={(e) => setParlayLabelsInput(e.target.value)}
+                placeholder="Game 1 â€” Team A ML || Game 2 â€” Team B ML"
+                style={textareaStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Boost %
+              <input
+                value={parlayBoostPct}
+                onChange={(e) => setParlayBoostPct(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {parlayResult ? (
+                <>
+                  <div>Legs: <strong>{parlayResult.legCount}</strong></div>
+                  <div>
+                    Leg Labels:
+                    <div style={parlayLabelListStyle}>
+                      {parlayResult.labels.map((label) => (
+                        <div key={label} style={parlayLabelItemStyle}>
+                          â€¢ {label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>Raw Decimal: <strong>{parlayResult.rawDecimal.toFixed(3)}</strong></div>
+                  <div>Raw American: <strong>{formatAmerican(parlayResult.rawAmerican)}</strong></div>
+                  <div>Implied Hit %: <strong>{(parlayResult.impliedProb * 100).toFixed(2)}%</strong></div>
+                  <div>Boosted Decimal: <strong>{parlayResult.boostedDecimal.toFixed(3)}</strong></div>
+                  <div>Boosted American: <strong>{formatAmerican(parlayResult.boostedAmerican)}</strong></div>
+                  <div>
+                    Fair Hit %:{" "}
+                    {Number.isFinite(parlayResult.fairHitProb) ? (
+                      <strong>{(parlayResult.fairHitProb * 100).toFixed(2)}%</strong>
+                    ) : (
+                      "â€”"
+                    )}
+                  </div>
+                  <div>
+                    EV %:{" "}
+                    {Number.isFinite(parlayResult.evPct) ? (
+                      <ResultValue value={parlayResult.evPct}>
+                        {(parlayResult.evPct * 100).toFixed(2)}%
+                      </ResultValue>
+                    ) : (
+                      "â€”"
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard.writeText(formatAmerican(parlayResult.boostedAmerican))
+                    }
+                    style={copyButtonStyle}
+                  >
+                    Copy Boosted American
+                  </button>
+                </>
+              ) : (
+                <div>Enter valid comma-separated odds like +150, -110, +200.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Boost Targeting Tool" icon="ðŸš€" defaultCollapsed={true}>
+            <label style={labelStyle}>
+              Boost %
+              <input value={boostFinderBoostPct} onChange={(e) => setBoostFinderBoostPct(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Candidates (Selection | Odds | Fair Probability)
+              <textarea
+                value={boostFinderCandidates}
+                onChange={(e) => setBoostFinderCandidates(e.target.value)}
+                style={textareaStyle}
+              />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {boostFinderResult.length ? (
+                boostFinderResult.map((row) => (
+                  <div key={row.label}>
+                    <strong>{row.label}</strong> â€” Boosted {formatAmerican(row.boostedAmerican)} â€¢ EV{" "}
+                    <ResultValue value={row.evPct}>
+                      {(row.evPct * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                ))
+              ) : (
+                <div>No valid candidates.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Edge Finder" icon="ðŸ”Ž" defaultCollapsed={true}>
+            <label style={labelStyle}>
+              Minimum Edge %
+              <input value={edgeFinderMinPct} onChange={(e) => setEdgeFinderMinPct(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Rows (Selection | Target Odds | Fair Odds)
+              <textarea
+                value={edgeFinderRows}
+                onChange={(e) => setEdgeFinderRows(e.target.value)}
+                style={textareaStyle}
+              />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {edgeFinderResult.length ? (
+                edgeFinderResult.map((row) => (
+                  <div key={row.label}>
+                    <strong>{row.label}</strong> â€” Edge{" "}
+                    <ResultValue value={row.edgePct}>
+                      {(row.edgePct * 100).toFixed(2)}%
+                    </ResultValue>
+                    {" "}â€¢ EV{" "}
+                    <ResultValue value={row.evPct}>
+                      {(row.evPct * 100).toFixed(2)}%
+                    </ResultValue>
+                  </div>
+                ))
+              ) : (
+                <div>No rows above threshold.</div>
+              )}
+            </div>
+          </ToolCard>
+
+          <ToolCard collapseAction={toolCollapseAction} title="Hedge Calculator" icon="ðŸ›¡ï¸" defaultCollapsed={true}>
+            <label style={labelStyle}>
+              Bet A Odds
+              <input value={hedgeOddsA} onChange={(e) => setHedgeOddsA(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Bet A Stake
+              <input value={hedgeStakeA} onChange={(e) => setHedgeStakeA(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Hedge Odds
+              <input value={hedgeOddsB} onChange={(e) => setHedgeOddsB(e.target.value)} style={inputStyle} />
+            </label>
+
+            <div style={resultBoxStyle}>
+              {hedgeResult ? (
+                <>
+                  <div>
+                    Hedge Stake:{" "}
+                    <ResultValue value={hedgeResult.hedgeStakeB}>
+                      ${hedgeResult.hedgeStakeB.toFixed(2)}
+                    </ResultValue>
+                  </div>
+                  <div>
+                    Guaranteed Profit:{" "}
+                    <ResultValue value={hedgeResult.guaranteedProfit}>
+                      ${hedgeResult.guaranteedProfit.toFixed(2)}
+                    </ResultValue>
+                  </div>
+                </>
+              ) : (
+                <div>Enter valid odds and stake.</div>
+              )}
+            </div>
+          </ToolCard>
+        </div>
+              </div>
+    </div>
+  );
+}
+
+function ToolCard({ title, icon, children, defaultCollapsed = false, collapseAction }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    if (!collapseAction?.version) return;
+    if (collapseAction.mode === "show") setCollapsed(false);
+    if (collapseAction.mode === "hide") setCollapsed(true);
+  }, [collapseAction]);
+
+  return (
+    <section
+        style={{
+            ...cardStyle,
+            ...(collapsed ? collapsedCardStyle : {}),
+        }}
+        >
+      <div style={toolCardHeaderStyle}>
+        <h2 style={cardTitleStyle}>
+          <span style={cardTitleIconStyle}>{icon}</span>
+          <span>{title}</span>
+        </h2>
+
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          style={collapseButtonStyle}
+        >
+          {collapsed ? "Show" : "Hide"}
+        </button>
+      </div>
+
+      {!collapsed ? (
+        <div style={{ display: "grid", gap: 10 }}>{children}</div>
+        ) : null}
+    </section>
+  );
+}
+
+function convertOddsValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  if (/^[+-]\d+(\.\d+)?$/.test(text)) {
+    const american = Number(text);
+    const decimal = americanToDecimal(american);
+    if (!Number.isFinite(decimal)) return null;
+
+    return {
+      type: "american_to_decimal",
+      american,
+      decimal,
+    };
+  }
+
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const decimal = Number(text);
+    if (!Number.isFinite(decimal) || decimal <= 1) return null;
+
+    return {
+      type: "decimal_to_american",
+      decimal,
+      american: decimalToAmerican(decimal),
+    };
+  }
+
+  return null;
+}
+
+function parseOddsToDecimal(value) {
+  const text = String(value || "").trim();
+
+  if (/^[+-]\d+(\.\d+)?$/.test(text)) {
+    return americanToDecimal(Number(text));
+  }
+
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const decimal = Number(text);
+    return Number.isFinite(decimal) && decimal > 1 ? decimal : NaN;
+  }
+
+  return NaN;
+}
+
+function parseTrueProbabilityInput(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const percentMatch = text.match(/^(\d+(?:\.\d+)?)\s*%$/);
+  if (percentMatch) {
+    const percent = Number(percentMatch[1]);
+    const probability = percent / 100;
+    return Number.isFinite(probability) && probability > 0 && probability < 1
+      ? { probability, type: "probability" }
+      : null;
+  }
+
+  if (/^[+-]\d+(\.\d+)?$/.test(text)) {
+    const decimal = parseOddsToDecimal(text);
+    return Number.isFinite(decimal) && decimal > 1
+      ? { probability: 1 / decimal, type: "American true odds" }
+      : null;
+  }
+
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const numeric = Number(text);
+
+    if (numeric > 0 && numeric < 1) {
+      return { probability: numeric, type: "probability" };
+    }
+
+    if (numeric > 1 && numeric <= 10) {
+      return { probability: 1 / numeric, type: "decimal true odds" };
+    }
+
+    if (numeric > 10 && numeric < 100) {
+      return { probability: numeric / 100, type: "probability" };
+    }
+  }
+
+  return null;
+}
+
+function americanToDecimal(american) {
+  const value = Number(american);
+  if (!Number.isFinite(value)) return NaN;
+  if (value > 0) return 1 + value / 100;
+  return 1 + 100 / Math.abs(value);
+}
+
+function decimalToAmerican(decimal) {
+  const value = Number(decimal);
+  if (!Number.isFinite(value) || value <= 1) return NaN;
+  if (value >= 2) return (value - 1) * 100;
+  return -100 / (value - 1);
+}
+
+function applyProfitBoostToDecimal(decimalOdds, boostPct) {
+  const d = Number(decimalOdds);
+  const pct = Number(boostPct);
+
+  if (!Number.isFinite(d) || d <= 1) return NaN;
+  if (!Number.isFinite(pct)) return d;
+
+  const profit = d - 1;
+  const boostedProfit = profit * (1 + pct / 100);
+  return 1 + boostedProfit;
+}
+
+function getValueColor(value) {
+  if (!Number.isFinite(value)) return "#111827";
+  if (value > 0) return "#166534";
+  if (value < 0) return "#991b1b";
+  return "#111827";
+}
+
+function ResultValue({ value, children }) {
+  const numeric = Number(value);
+
+  return (
+    <strong
+      style={{
+        color: getValueColor(numeric),
+        fontWeight: 800,
+      }}
+    >
+      {children}
+    </strong>
+  );
+}
+
+function formatAmerican(value) {
+  if (!Number.isFinite(value)) return "â€”";
+  const rounded = Math.round(value);
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+}
+
+const pageStyle = {
+  padding: 20,
+  background: "#f7f7f8",
+  minHeight: "100vh",
+  color: "#111",
+};
+
+const containerStyle = {
+  maxWidth: 1200,
+  margin: "0 auto",
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 18,
+};
+
+const primaryLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  borderRadius: 8,
+  background: "#166534",
+  color: "#f0fdf4",
+  textDecoration: "none",
+  fontWeight: 700,
+};
+
+const secondaryLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#166534",
+  border: "1px solid #86efac",
+  textDecoration: "none",
+  fontWeight: 700,
+};
+
+const topControlsStyle = {
+  background: "#ffffff",
+  border: "1px solid #bbf7d0",
+  borderRadius: 12,
+  padding: 14,
+  marginBottom: 14,
+  display: "grid",
+  gap: 12,
+};
+
+const topControlsHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const topControlsTitleStyle = {
+  fontWeight: 900,
+  color: "#14532d",
+  fontSize: 16,
+};
+
+const topControlsSubtextStyle = {
+  marginTop: 4,
+  color: "#4b5563",
+  fontSize: 13,
+};
+
+const topControlsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const toolVisibilityButtonRowStyle = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const smallSecondaryButtonStyle = {
+  background: "#ffffff",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: 8,
+  padding: "8px 10px",
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 14,
+};
+
+const toolCardHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "nowrap",
+};
+
+const collapseButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 6,
+  padding: "4px 8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 12,
+};
+
+const collapsedCardStyle = {
+  paddingTop: 16,
+  paddingRight: 16,
+  paddingBottom: 10,
+  paddingLeft: 16,
+};
+
+const cardStyle = {
+  background: "#f0fdf4",
+  border: "2px solid #166534",
+  borderRadius: 12,
+  paddingTop: 16,
+  paddingRight: 16,
+  paddingBottom: 16,
+  paddingLeft: 16,
+};
+
+const cardTitleIconStyle = {
+  marginRight: 8,
+  fontSize: 20,
+};
+
+const cardTitleStyle = {
+  marginTop: 0,
+  marginBottom: 0,
+  lineHeight: 1.2,
+  fontSize: 18,
+  color: "#14532d",
+};
+
+const selectedBetBannerStyle = {
+  background: "#ffffff",
+  border: "1px solid #bbf7d0",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#166534",
+};
+
+const labelStyle = {
+  display: "grid",
+  gap: 6,
+  fontSize: 14,
+  fontWeight: 700,
+  color: "#374151",
+};
+
+const helperTextStyle = {
+  color: "#4b5563",
+  fontSize: 12,
+  lineHeight: 1.35,
+};
+
+const mutedTextStyle = {
+  color: "#6b7280",
+  fontSize: 12,
+};
+
+const parlayLabelListStyle = {
+  marginTop: 6,
+  display: "grid",
+  gap: 4,
+};
+
+const parlayLabelItemStyle = {
+  fontSize: 13,
+  color: "#374151",
+};
+
+const textareaStyle = {
+  minHeight: 140,
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  resize: "vertical",
+  fontFamily: "inherit",
+};
+
+const inputStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+};
+
+const copyButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 10px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+export default function ToolsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 20 }}>Loading tools...</div>}>
+      <ToolsPageContent />
+    </Suspense>
+  );
+}
+
+const resultBoxStyle = {
+  background: "#ffffff",
+  border: "1px solid #bbf7d0",
+  borderRadius: 10,
+  padding: 12,
+  display: "grid",
+  gap: 6,
+  color: "#111827",
+  fontSize: 14,
+};

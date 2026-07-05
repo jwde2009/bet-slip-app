@@ -14,56 +14,104 @@ export function parseBetMGMText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
 
-  const sport = inferSport(lines, context);
+  let sport = inferSport(lines, context);
+
+  if (looksLikeBetMgmSoccerVisibleCapture(lines, rawText)) {
+    sport = "SOCCER";
+  } else if (looksLikeBetMgmWnbaPage(lines)) {
+    sport = "WNBA";
+  }
   const rows = [];
 
-  const detailEvent = findDetailEvent(lines);
-  if (detailEvent) {
-    const awayRaw = detailEvent.away;
-    const homeRaw = detailEvent.home;
-    const away = normalizeBetMgmEventTeamName(awayRaw);
-    const home = normalizeBetMgmEventTeamName(homeRaw);
-    const event = `${away} @ ${home}`;
+  const eventBlocks = findBetMgmRealEventBlocks(lines);
 
-    // Main lines are safe.
-    // Use raw team names for matching page text, but normalized event names for grouping.
-    rows.push(...parseMainLines(lines, detailEvent.startIndex, event, awayRaw, homeRaw, sport));
+  if (eventBlocks.length) {
+    for (const eventBlock of eventBlocks) {
+      const blockLines = lines.slice(eventBlock.startIndex, eventBlock.endIndex);
+      const blockSport = inferSport(blockLines, context) || sport;
+      const awayRaw = eventBlock.away;
+      const homeRaw = eventBlock.home;
+      const away = normalizeBetMgmEventTeamName(awayRaw);
+      const home = normalizeBetMgmEventTeamName(homeRaw);
+      const event = `${away} @ ${home}`;
 
-    // Full-game O/U props are allowed only when the section does not drift into
-    // quarter/half props. The parser below stops before partial-game markers.
-    rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
+      rows.push(...parseMainLines(blockLines, 0, event, awayRaw, homeRaw, blockSport));
+      rows.push(...parseOverUnderPlayerProps(blockLines, 0, event, blockSport));
+      rows.push(...parseBetMgmNbaVisibleLadders(blockLines, 0, event, blockSport));
+      rows.push(...parseBetMgmNbaBinaryProps(blockLines, 0, event, blockSport));
+      rows.push(...parseBetMgmNhlVisibleProps(blockLines, 0, event, blockSport));
+    }
+  } else {
+    const detailEvent = findDetailEvent(lines);
+    if (detailEvent) {
+      const awayRaw = detailEvent.away;
+      const homeRaw = detailEvent.home;
+      const away = normalizeBetMgmEventTeamName(awayRaw);
+      const home = normalizeBetMgmEventTeamName(homeRaw);
+      const event = `${away} @ ${home}`;
 
-    // Safe visible NBA BetMGM ladders:
-    // Player points, assists, threes, rebounds, PRA, P+R, P+A, R+A.
-    // Uses the first visible threshold after each header to avoid the old 39.5 bug.
-    rows.push(...parseBetMgmNbaVisibleLadders(lines, detailEvent.startIndex, event, sport));
-
-    // Safe visible NBA BetMGM binary sections:
-    // Player double-double and player triple-double.
-    rows.push(...parseBetMgmNbaBinaryProps(lines, detailEvent.startIndex, event, sport));
-
-    // Safe NHL visible sections:
-    // Anytime goalscorer, player shots, player assists, player points, goalie saves.
-    rows.push(...parseBetMgmNhlVisibleProps(lines, detailEvent.startIndex, event, sport));
-
-    // SAFETY LOCK:
-    // Keep these disabled for now. BetMGM ladders like 10+, 15+, 20+, 25+, 30+, 35+, 40+
-    // can create false lines like 39.5, and visible fallback sections can still mix
-    // full-game labels with 1Q/half content.
-    //
-    // rows.push(...parseYesNoPlayerProps(lines, detailEvent.startIndex, event, sport));
-    // // rows.push(...parsePlusLadders(lines, detailEvent.startIndex, event, sport));
-    // rows.push(...parseVisibleBetMgmOverUnderBlocks(lines, detailEvent.startIndex, event, sport));
+      rows.push(...parseMainLines(lines, detailEvent.startIndex, event, awayRaw, homeRaw, sport));
+      rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
+      rows.push(...parseBetMgmNbaVisibleLadders(lines, detailEvent.startIndex, event, sport));
+      rows.push(...parseBetMgmNbaBinaryProps(lines, detailEvent.startIndex, event, sport));
+      rows.push(...parseBetMgmNhlVisibleProps(lines, detailEvent.startIndex, event, sport));
+    }
   }
+
+  rows.push(...parseBetMgmManualLadderCaptureBlocks(lines, sport));
 
   // Direct visible game-line parser for BetMGM game/league selected-game cards.
   rows.push(...parseBetMgmVisibleMainLineBlocks(lines, sport));
 
+  // Fallback for manual-expanded BetMGM NHL Player Props pages.
+  // This is intentionally after the normal block parser so it fills gaps without
+  // changing the main event/main-line parser.
+  rows.push(...parseBetMgmNhlVisiblePlayerPropsFallback(lines, sport));
+
+    // Visible soccer page parser. BetMGM soccer uses labels like
+  // Match result, Total goals, Both teams to score, Double chance, and Total corners
+  // instead of NBA/NHL-style Spread/Total/Money blocks.
+  if (String(sport || "").toUpperCase() === "SOCCER") {
+    rows.push(...parseBetMgmSoccerVisibleMarkets(lines, sport));
+  }
   if (rows.length === 0) {
     rows.push(...parseLandingGames(lines, sport));
   }
 
   return dedupeRows(rows);
+}
+
+function looksLikeBetMgmSoccerVisibleCapture(lines = [], rawText = "") {
+  const pageText = `${String(rawText || "")} ${(lines || []).slice(0, 360).join(" ")}`;
+
+  return (
+    /BETMGM_SOCCER_VISIBLE_CAPTURE_COMPLETE/i.test(pageText) ||
+    (
+      /\b(Soccer|World Cup|FIFA)\b/i.test(pageText) &&
+      /\bSGP\b/i.test(pageText) &&
+      (
+        /\bMatch result\b/i.test(pageText) ||
+        /\bBoth teams to score\b/i.test(pageText) ||
+        /\bTotal goals\b/i.test(pageText) ||
+        /\bDouble chance\b/i.test(pageText) ||
+        /\bTotal corners\b/i.test(pageText)
+      )
+    )
+  );
+}
+
+function looksLikeBetMgmWnbaPage(lines = []) {
+  const text = (lines || []).slice(0, 260).join(" ");
+
+  const hasWnbaContext =
+    /\bWNBA\b/i.test(text) ||
+    /\b(Sky|Wings|Dream|Sun|Valkyries|Fever|Aces|Sparks|Lynx|Liberty|Mercury|Fire|Storm|Tempo|Mystics)\b/i.test(text);
+
+  const hasWnbaPlayerPropContext =
+    /\bPlayer props\b/i.test(text) &&
+    /\b(Player assists|Player rebounds|Player three-pointers|Alternate player points|First field goal scorer)\b/i.test(text);
+
+  return hasWnbaContext && hasWnbaPlayerPropContext;
 }
 
 function isSpreadHeader(value) {
@@ -459,6 +507,83 @@ function parseLandingMainBlock(block, away, home) {
     totalUnderOdds,
   };
 }
+
+function findBetMgmRealEventBlocks(lines) {
+  const topEventsIndex = lines.findIndex((line) => /^Top Events$/i.test(normalizeLine(line)));
+  const searchStart = topEventsIndex >= 0 ? topEventsIndex : 0;
+  const starts = [];
+
+  for (let i = searchStart; i < lines.length - 5; i += 1) {
+    const dateLine = normalizeLine(lines[i]);
+
+    if (!/^(Today|Tomorrow|\d{1,2}\/\d{1,2}\/\d{2,4})$/i.test(dateLine)) continue;
+    if (!isLikelyTimeLine(lines[i + 1])) continue;
+
+    let cursor = i + 2;
+
+    if (isLikelyBroadcastLine(lines[cursor])) {
+      cursor += 1;
+    }
+
+    const away = normalizeLine(lines[cursor]);
+    const home = normalizeLine(lines[cursor + 1]);
+
+    if (!isLikelyTeamName(away) || !isLikelyTeamName(home) || away === home) continue;
+    if (isFalseBetMgmEventTeamName(away) || isFalseBetMgmEventTeamName(home)) continue;
+
+    const postTeams = lines
+      .slice(cursor + 2, Math.min(lines.length, cursor + 42))
+      .map(normalizeLine)
+      .join(" ");
+
+    const looksLikeSelectedGame =
+      /\b(Player props|Game lines|Spread|Total|Money|Points|First FG|Assists|Rebounds|Three-pointers|Combo stats|Defense|Anytime goalscorer|Player shots|Goalie saves)\b/i.test(postTeams);
+
+    if (!looksLikeSelectedGame) continue;
+
+    starts.push({
+      away,
+      home,
+      startIndex: cursor + 2,
+      markerIndex: i,
+    });
+  }
+
+  const unique = [];
+
+  for (const item of starts) {
+    const key = `${item.away} @ ${item.home}`;
+    if (unique.some((existing) => `${existing.away} @ ${existing.home}` === key)) {
+      continue;
+    }
+
+    unique.push(item);
+  }
+
+  return unique.map((item, index) => {
+    const next = unique[index + 1];
+
+    return {
+      away: item.away,
+      home: item.home,
+      startIndex: item.startIndex,
+      endIndex: next ? next.markerIndex : lines.length,
+    };
+  });
+}
+
+function isFalseBetMgmEventTeamName(value) {
+  const text = normalizeLine(value);
+
+  return (
+    /^To Win the Tip\b/i.test(text) ||
+    /^First Stat\b/i.test(text) ||
+    /^Method of first basket\b/i.test(text) ||
+    /\bFirst Stat\b/i.test(text) ||
+    /\bMethod of first basket\b/i.test(text)
+  );
+}
+
 
 function findDetailEvent(lines) {
   // BetMGM game pages often begin like:
@@ -1047,6 +1172,238 @@ function parsePlusLadders(lines, startIndex, event, sport) {
   return rows;
 }
 
+function parseBetMgmManualLadderCaptureBlocks(lines, sport) {
+  const rows = [];
+  const resolvedSport = String(sport || "").trim().toUpperCase() || "WNBA";
+
+  const configuredThresholds = parseBetMgmLadderThresholdConfig(lines, resolvedSport);
+
+  if (configuredThresholds.length) {
+    rows.push(...parseBetMgmConfiguredLadderSections(lines, configuredThresholds, resolvedSport));
+  }
+
+  // Backward-compatible support for the older one-marker workflow.
+  // The new preferred workflow is BETMGM_LADDER_THRESHOLDS_START/END at the top of the input.
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const marker = normalizeLine(lines[idx]);
+    if (!/^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(marker)) continue;
+
+    const meta = parseBetMgmManualLadderMarker(marker);
+    if (!meta.event || !meta.marketType || meta.threshold === null) continue;
+
+    const end = findBetMgmManualLadderCaptureEnd(lines, idx + 1);
+
+    for (let i = idx + 1; i < end - 1; i += 1) {
+      const line = normalizeLine(lines[i]);
+
+      if (!line) continue;
+      if (isBetMgmManualLadderNoiseLine(line)) continue;
+      if (parsePlusToken(line) !== null) continue;
+      if (!looksLikePlayerName(line)) continue;
+
+      const odds = parseAmericanOdds(lines[i + 1]);
+      if (odds === null) continue;
+
+      rows.push(
+        buildRow({
+          sport: meta.sport || resolvedSport,
+          event: meta.event,
+          marketType: meta.marketType,
+          selection: `${line} Over`,
+          lineValue: meta.threshold - 0.5,
+          oddsAmerican: odds,
+        })
+      );
+
+      i += 1;
+    }
+  }
+
+  return rows;
+}
+
+function parseBetMgmLadderThresholdConfig(lines, fallbackSport) {
+  const configs = [];
+  let insideConfig = false;
+
+  for (const rawLine of lines || []) {
+    const line = normalizeLine(rawLine);
+
+    if (/^BETMGM_LADDER_THRESHOLDS_START$/i.test(line)) {
+      insideConfig = true;
+      continue;
+    }
+
+    if (/^BETMGM_LADDER_THRESHOLDS_END$/i.test(line)) {
+      insideConfig = false;
+      continue;
+    }
+
+    if (!insideConfig) continue;
+
+    const meta = parseBetMgmManualLadderMarker(line);
+
+    if (!meta.event || !meta.marketType || meta.threshold === null) continue;
+
+    configs.push({
+      sport: meta.sport || String(fallbackSport || "WNBA").trim().toUpperCase(),
+      event: meta.event,
+      marketType: meta.marketType,
+      threshold: meta.threshold,
+    });
+  }
+
+  return configs;
+}
+
+function parseBetMgmConfiguredLadderSections(lines, configs, fallbackSport) {
+  const rows = [];
+  const configByMarket = new Map();
+
+  for (const config of configs || []) {
+    if (!config?.marketType || config.threshold === null) continue;
+
+    // One pasted BetMGM WNBA event is expected. If duplicate market configs are present,
+    // use the latest one so the helper can replace prior choices.
+    configByMarket.set(config.marketType, config);
+  }
+
+  if (!configByMarket.size) return rows;
+
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const headerMarketType = getBetMgmManualLadderMarketTypeFromHeader(lines[idx]);
+    if (!headerMarketType) continue;
+
+    const meta = configByMarket.get(headerMarketType);
+    if (!meta || !meta.event || meta.threshold === null) continue;
+
+    const end = findBetMgmManualLadderCaptureEnd(lines, idx + 1);
+
+    for (let i = idx + 1; i < end - 1; i += 1) {
+      const player = normalizeLine(lines[i]);
+
+      if (!player) continue;
+      if (isBetMgmManualLadderNoiseLine(player)) continue;
+      if (parsePlusToken(player) !== null) continue;
+      if (!looksLikePlayerName(player)) continue;
+
+      const odds = parseAmericanOdds(lines[i + 1]);
+      if (odds === null) continue;
+
+      rows.push(
+        buildRow({
+          sport: meta.sport || fallbackSport || "WNBA",
+          event: meta.event,
+          marketType: meta.marketType,
+          selection: `${player} Over`,
+          lineValue: meta.threshold - 0.5,
+          oddsAmerican: odds,
+        })
+      );
+
+      i += 1;
+    }
+  }
+
+  return rows;
+}
+
+function parseBetMgmManualLadderMarker(marker) {
+  const inline = String(marker || "");
+
+  function getInlineValue(key) {
+    const pattern = new RegExp(`${key}\\s*=\\s*([^|]+)`, "i");
+    const match = inline.match(pattern);
+    return match ? normalizeLine(match[1]) : "";
+  }
+
+  return {
+    sport: String(getInlineValue("sport") || "").trim().toUpperCase(),
+    event: normalizeBetMgmManualEventName(getInlineValue("event")),
+    marketType: mapBetMgmManualLadderMarket(getInlineValue("market")),
+    threshold: parsePlusToken(getInlineValue("threshold")),
+  };
+}
+
+function normalizeBetMgmManualEventName(value = "") {
+  const text = normalizeLine(value);
+  const parts = text.split(/\s+@\s+/).map((part) => normalizeBetMgmEventTeamName(part)).filter(Boolean);
+
+  if (parts.length === 2) return `${parts[0]} @ ${parts[1]}`;
+
+  const vsParts = text.split(/\s+vs\.?\s+/i).map((part) => normalizeBetMgmEventTeamName(part)).filter(Boolean);
+  if (vsParts.length === 2) return `${vsParts[0]} @ ${vsParts[1]}`;
+
+  return text;
+}
+
+function mapBetMgmManualLadderMarket(value = "") {
+  const text = normalizeLine(value).toLowerCase();
+
+  if (text === "player_pra" || /points.*rebounds.*assists|pts.*reb.*ast|pra/.test(text)) return "player_pra";
+  if (text === "player_points_rebounds" || /points.*rebounds|pts.*reb/.test(text)) return "player_points_rebounds";
+  if (text === "player_points_assists" || /points.*assists|pts.*ast/.test(text)) return "player_points_assists";
+  if (text === "player_rebounds_assists" || /rebounds.*assists|reb.*ast/.test(text)) return "player_rebounds_assists";
+  if (text === "player_threes" || /three|3-?pointer|threes/.test(text)) return "player_threes";
+  if (text === "player_points" || /points/.test(text)) return "player_points";
+  if (text === "player_rebounds" || /rebounds/.test(text)) return "player_rebounds";
+  if (text === "player_assists" || /assists/.test(text)) return "player_assists";
+
+  return "";
+}
+
+function getBetMgmManualLadderMarketTypeFromHeader(value = "") {
+  const text = normalizeLine(value).toLowerCase();
+
+  if (!text) return "";
+
+  if (/^(alternate\s+)?player\s+points\s*\+\s*rebounds\s*\+\s*assists$/.test(text)) return "player_pra";
+  if (/^(alternate\s+)?player\s+points\s*\+\s*rebounds$/.test(text)) return "player_points_rebounds";
+  if (/^(alternate\s+)?player\s+points\s*\+\s*assists$/.test(text)) return "player_points_assists";
+  if (/^(alternate\s+)?player\s+rebounds\s*\+\s*assists$/.test(text)) return "player_rebounds_assists";
+
+  if (/^(alternate\s+)?player\s+(?:three-pointers|3-pointers|threes)$/.test(text)) return "player_threes";
+  if (/^(alternate\s+)?player\s+points$/.test(text)) return "player_points";
+  if (/^(alternate\s+)?player\s+rebounds$/.test(text)) return "player_rebounds";
+  if (/^(alternate\s+)?player\s+assists$/.test(text)) return "player_assists";
+
+  return "";
+}
+
+function isBetMgmManualLadderSectionHeader(value = "") {
+  return !!getBetMgmManualLadderMarketTypeFromHeader(value);
+}
+
+function findBetMgmManualLadderCaptureEnd(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const line = normalizeLine(lines[i]);
+
+    if (/^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(line)) return i;
+    if (/^BETMGM_LADDER_THRESHOLDS_(?:START|END)$/i.test(line)) return i;
+    if (isBetMgmManualLadderSectionHeader(line)) return i;
+    if (isHardStopLine(line)) return i;
+    if (/^(Moneyline|Spread|Total|Game lines|Team props|Game props|Periods|Quarters|Halves)$/i.test(line)) return i;
+  }
+
+  return lines.length;
+}
+
+function isBetMgmManualLadderNoiseLine(value = "") {
+  const text = normalizeLine(value);
+
+  return (
+    !text ||
+    /^BETMGM_(?:MANUAL_)?LADDER_CAPTURE\b/i.test(text) ||
+    /^BETMGM_LADDER_THRESHOLDS_(?:START|END)$/i.test(text) ||
+    /^sport\s*=.+\|\s*event\s*=.+\|\s*market\s*=.+\|\s*threshold\s*=/i.test(text) ||
+    isBetMgmManualLadderSectionHeader(text) ||
+    /^(Player points|Player rebounds|Player assists|Player three-pointers|Player threes|Combo stats)$/i.test(text) ||
+    /^(All|Show More|Show Less|Yes|No|Over|Under|Avg:|Missouri)$/i.test(text) ||
+    /^[-+]?\d+(?:\.\d+)?$/.test(text) ||
+    /^[OU]\s*\d+(?:\.\d+)?$/i.test(text)
+  );
+}
+
 function parseBetMgmNbaVisibleLadders(lines, startIndex, event, sport) {
   // SAFETY LOCK:
   // BetMGM ladder rows lose horizontal column context in raw text.
@@ -1094,7 +1451,7 @@ function parseBetMgmNbaBinaryProps(lines, startIndex, event, sport) {
           if (yesOdds !== null) {
             rows.push(
               buildRow({
-                sport: "NBA",
+                sport,
                 event,
                 marketType,
                 selection: `${player} Yes`,
@@ -1108,7 +1465,7 @@ function parseBetMgmNbaBinaryProps(lines, startIndex, event, sport) {
           if (noOdds !== null) {
             rows.push(
               buildRow({
-                sport: "NBA",
+                sport,
                 event,
                 marketType,
                 selection: `${player} No`,
@@ -1135,7 +1492,7 @@ function parseBetMgmNbaBinaryProps(lines, startIndex, event, sport) {
 
         rows.push(
           buildRow({
-            sport: "NBA",
+            sport,
             event,
             marketType,
             selection: `${player} Yes`,
@@ -1155,15 +1512,19 @@ function parseBetMgmNbaBinaryProps(lines, startIndex, event, sport) {
 
 function looksLikeBetMgmNbaText(lines, sport) {
   const text = (lines || []).slice(0, 260).join(" ");
+  const sportKey = String(sport || "").toUpperCase();
 
   return (
-    String(sport || "").toUpperCase() === "NBA" ||
+    sportKey === "NBA" ||
+    sportKey === "WNBA" ||
     /\bNBA\b/i.test(text) ||
+    /\bWNBA\b/i.test(text) ||
     /\bPlayer props\b/i.test(text) ||
     /\bPlayer points\b/i.test(text) ||
     /\bPlayer rebounds\b/i.test(text) ||
     /\bPlayer assists\b/i.test(text) ||
-    /(knicks|hawks|celtics|76ers|nuggets|timberwolves|pistons|magic|cavaliers|raptors|lakers|rockets)/i.test(text)
+    /\bPlayer three-pointers\b/i.test(text) ||
+    /(knicks|hawks|celtics|76ers|nuggets|timberwolves|pistons|magic|cavaliers|raptors|lakers|rockets|dream|sky|sun|wings|valkyries|fever|aces|sparks|lynx|liberty|mercury|fire|storm|tempo|mystics)/i.test(text)
   );
 }
 
@@ -1238,6 +1599,480 @@ function isBetMgmNbaVisibleSectionBoundary(value) {
     isBetMgmPartialGameHeader(text)
   );
 }
+
+function parseBetMgmSoccerVisibleMarkets(lines, sport) {
+  const pageText = (lines || []).join(" ");
+
+  if (!/\b(Soccer|World Cup|FIFA)\b/i.test(pageText)) {
+    return [];
+  }
+
+  const detailEvent = findBetMgmSoccerVisibleSelectedEvent(lines);
+  if (!detailEvent) return [];
+
+  const away = normalizeBetMgmEventTeamName(detailEvent.away);
+  const home = normalizeBetMgmEventTeamName(detailEvent.home);
+  const event = `${away} @ ${home}`;
+  const resolvedSport = "SOCCER";
+  const startIndex = detailEvent.startIndex;
+
+  const rows = [];
+
+  rows.push(...parseBetMgmSoccerMatchResult(lines, startIndex, event, away, home, resolvedSport));
+  rows.push(...parseBetMgmSoccerTotalSection(lines, startIndex, event, resolvedSport, /^Total goals$/i, "total"));
+  rows.push(...parseBetMgmSoccerYesNoSection(lines, startIndex, event, resolvedSport, /^Both teams to score$/i, "both_teams_to_score"));
+  rows.push(...parseBetMgmSoccerDoubleChance(lines, startIndex, event, resolvedSport));
+  rows.push(...parseBetMgmSoccerTotalSection(lines, startIndex, event, resolvedSport, /^Total corners$/i, "corner_total"));
+
+  return rows;
+}
+
+function findBetMgmSoccerVisibleSelectedEvent(lines) {
+  function looksLikeBetMgmSelectedSoccerMarketText(value = "") {
+    return (
+      /\bSGP\b/i.test(value) &&
+      (
+        /\bMatch result\b/i.test(value) ||
+        /\bTotal goals\b/i.test(value) ||
+        /\bBoth teams to score\b/i.test(value) ||
+        /\bDouble chance\b/i.test(value) ||
+        /\bTotal corners\b/i.test(value)
+      )
+    );
+  }
+
+  function isBetMgmSoccerTeamSkipLine(value = "") {
+    const text = normalizeLine(value);
+
+    return (
+      !text ||
+      /^SGP$/i.test(text) ||
+      /^(Today|Tomorrow|\d{1,2}\/\d{1,2}\/\d{2,4})$/i.test(text) ||
+      /^Starting in\b/i.test(text) ||
+      isLikelyTimeLine(text) ||
+      /^(FOX|FS1|FS2|ESPN|ESPN2|ABC|CBS|NBC|TNT|TBS|USA|Peacock|Apple TV|Prime Video)$/i.test(text) ||
+      /^World Cup/i.test(text) ||
+      /^World \| World Cup/i.test(text) ||
+      /^All Countries$/i.test(text) ||
+      /^Top Events$/i.test(text)
+    );
+  }
+
+  function getTwoTeamsBeforeSgp(sgpIndex) {
+    const teams = [];
+
+    for (let j = sgpIndex - 1; j >= Math.max(0, sgpIndex - 14); j -= 1) {
+      const candidate = normalizeLine(lines[j]);
+
+      if (isBetMgmSoccerTeamSkipLine(candidate)) continue;
+      if (!isLikelyTeamName(candidate)) continue;
+
+      teams.unshift(candidate);
+
+      if (teams.length >= 2) {
+        return {
+          away: teams[0],
+          home: teams[1],
+        };
+      }
+    }
+
+    return null;
+  }
+
+  // Most reliable selected soccer page shape:
+  // Starting in 16 min / FS1 / Turkiye / Paraguay / SGP / Totals / ...
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^SGP$/i.test(normalizeLine(lines[i]))) continue;
+
+    const after = lines
+      .slice(i, Math.min(lines.length, i + 260))
+      .map(normalizeLine)
+      .join(" ");
+
+    if (!looksLikeBetMgmSelectedSoccerMarketText(after)) continue;
+
+    const teams = getTwoTeamsBeforeSgp(i);
+    if (!teams?.away || !teams?.home || teams.away === teams.home) continue;
+
+    return {
+      away: teams.away,
+      home: teams.home,
+      startIndex: i + 1,
+    };
+  }
+
+  // Fallback for pages where the SGP marker is missing from copied text.
+  for (let i = 0; i < lines.length - 8; i += 1) {
+    const line = normalizeLine(lines[i]);
+
+    if (!/^(Starting in .+|Today|Tomorrow|\d{1,2}\/\d{1,2}\/\d{2,4})$/i.test(line)) {
+      continue;
+    }
+
+    let cursor = i + 1;
+
+    while (
+      cursor < lines.length &&
+      isBetMgmSoccerTeamSkipLine(lines[cursor])
+    ) {
+      cursor += 1;
+    }
+
+    const away = normalizeLine(lines[cursor]);
+    const home = normalizeLine(lines[cursor + 1]);
+
+    if (!isLikelyTeamName(away) || !isLikelyTeamName(home) || away === home) continue;
+
+    const after = lines
+      .slice(cursor + 2, Math.min(lines.length, cursor + 260))
+      .map(normalizeLine)
+      .join(" ");
+
+    if (!looksLikeBetMgmSelectedSoccerMarketText(`SGP ${after}`)) continue;
+
+    return {
+      away,
+      home,
+      startIndex: cursor + 2,
+    };
+  }
+
+  return null;
+}
+
+function findBetMgmSoccerSectionIndex(lines, startIndex, headerPattern) {
+  for (let i = Math.max(0, startIndex); i < lines.length; i += 1) {
+    if (headerPattern.test(normalizeLine(lines[i]))) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function findBetMgmSoccerSectionEnd(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const text = normalizeLine(lines[i]);
+
+    if (!text) continue;
+    if (isHardStopLine(text)) return i;
+
+    // Show More / Show Less usually marks the end of the visible rows for the currently opened
+    // parent market. Stop here so we do not spill into player/team/period markets below it.
+    if (/^Show (More|Less)$/i.test(text)) return i;
+
+    // Exact parent-market headers. If another parent starts, stop.
+    if (
+      /^(Match result|Both teams to score|Total goals|Double chance|Total corners)$/i.test(text)
+    ) {
+      return i;
+    }
+
+    // Hard soccer submarket boundaries. These may contain the same words as the markets we want,
+    // but they are not the full-time parent markets.
+    if (
+      /^(Pre-Built SGPs|Player total shots|Player total shots on target|Player total assists|Player total tackles|Goalscorers|Correct score|Halftime and fulltime|Halftime or fulltime|First team to score|Draw no bet|Most corners|Winning margin|Exact total goals|Total shots|Total shots on target)$/i.test(text)
+    ) {
+      return i;
+    }
+
+    // Team-specific props/totals.
+    if (
+      /^[A-Za-zÀ-ÿ .'`’&-]+:\s+Total\s+(goals|shots|shots on target|corners|corner bands)/i.test(text) ||
+      /^[A-Za-zÀ-ÿ .'`’&-]+:\s+No bet$/i.test(text)
+    ) {
+      return i;
+    }
+
+    // Period / time-window / combo markets.
+    if (
+      /\b(1st half|2nd half|halftime|half-time|00:00\s*-\s*15:00|first 10 minutes|first 15 minutes)\b/i.test(text) &&
+      !/^(Regular time|1st half|2nd half)$/i.test(text)
+    ) {
+      return i;
+    }
+
+    if (
+      /^(3-way spread|2-way spread|Gap between teams|Match result and|Both teams to score and|Both teams to score &|Double chance and|Total goal bands|Total corner bands|Both teams to have|Both teams to score both halves|Goal to be scored|Run of play|Win from behind|Win either half|Half with|Half to produce|To happen|Multi goal|Multiple correct score|Match won by|Any team to come|Player to score|Shots on target)$/i.test(text)
+    ) {
+      return i;
+    }
+
+    if (
+      /\b(to score in both halves|to win to nil|to lead at anytime|to score$|No bet$)\b/i.test(text)
+    ) {
+      return i;
+    }
+  }
+
+  return lines.length;
+}
+
+function isBetMgmSoccerDisplayOnlyLine(value = "") {
+  const text = normalizeLine(value);
+
+  return (
+    /^(Regular time|1st half|2nd half|Over|Under|Show More|Show Less)$/i.test(text)
+  );
+}
+
+function parseBetMgmSoccerOdds(value) {
+  const text = normalizeLine(value);
+
+  if (/^EVEN$/i.test(text)) return 100;
+
+  return parseAmericanOdds(text);
+}
+
+function normalizeBetMgmSoccerSelection(value = "") {
+  return normalizeLine(value)
+    .replace(/\btie\b/gi, "Draw")
+    .replace(/\bor\b/gi, "Or")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseBetMgmSoccerMatchResult(lines, startIndex, event, away, home, sport) {
+  const rows = [];
+  const idx = findBetMgmSoccerSectionIndex(lines, startIndex, /^Match result$/i);
+  if (idx === -1) return rows;
+
+  const end = findBetMgmSoccerSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const label = normalizeLine(lines[i]);
+    if (isBetMgmSoccerDisplayOnlyLine(label)) continue;
+
+    const odds = parseBetMgmSoccerOdds(lines[i + 1]);
+
+    if (odds === null) continue;
+
+    if (normalizeLine(label).toLowerCase() === normalizeLine(away).toLowerCase()) {
+      rows.push(buildRow({ sport, event, marketType: "moneyline_3way", selection: away, lineValue: null, oddsAmerican: odds }));
+      i += 1;
+      continue;
+    }
+
+    if (/^(Tie|Draw)$/i.test(label)) {
+      rows.push(buildRow({ sport, event, marketType: "moneyline_3way", selection: "Draw", lineValue: null, oddsAmerican: odds }));
+      i += 1;
+      continue;
+    }
+
+    if (normalizeLine(label).toLowerCase() === normalizeLine(home).toLowerCase()) {
+      rows.push(buildRow({ sport, event, marketType: "moneyline_3way", selection: home, lineValue: null, oddsAmerican: odds }));
+      i += 1;
+      continue;
+    }
+  }
+
+  return rows;
+}
+
+function parseBetMgmSoccerTotalSection(lines, startIndex, event, sport, headerPattern, marketType) {
+  const rows = [];
+  const idx = findBetMgmSoccerSectionIndex(lines, startIndex, headerPattern);
+  if (idx === -1) return rows;
+
+  const end = findBetMgmSoccerSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 3; i += 1) {
+    const current = normalizeLine(lines[i]);
+    if (isBetMgmSoccerDisplayOnlyLine(current)) continue;
+
+    const overMatch = current.match(/^Over\s+(\d+(?:\.\d+)?)$/i);
+    if (!overMatch) continue;
+
+    const overLine = Number(overMatch[1]);
+    const overOdds = parseBetMgmSoccerOdds(lines[i + 1]);
+    const underMatch = normalizeLine(lines[i + 2]).match(/^Under\s+(\d+(?:\.\d+)?)$/i);
+    const underOdds = parseBetMgmSoccerOdds(lines[i + 3]);
+
+    if (
+      overOdds === null ||
+      !underMatch ||
+      underOdds === null
+    ) {
+      continue;
+    }
+
+    const underLine = Number(underMatch[1]);
+
+    if (!Number.isFinite(overLine) || !Number.isFinite(underLine) || Math.abs(overLine - underLine) > 0.0001) {
+      continue;
+    }
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType,
+        selection: "Over",
+        lineValue: overLine,
+        oddsAmerican: overOdds,
+      }),
+      buildRow({
+        sport,
+        event,
+        marketType,
+        selection: "Under",
+        lineValue: underLine,
+        oddsAmerican: underOdds,
+      })
+    );
+
+    i += 3;
+  }
+
+  return rows;
+}
+
+function parseBetMgmSoccerYesNoSection(lines, startIndex, event, sport, headerPattern, marketType) {
+  const rows = [];
+  const idx = findBetMgmSoccerSectionIndex(lines, startIndex, headerPattern);
+  if (idx === -1) return rows;
+
+  const end = findBetMgmSoccerSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const label = normalizeLine(lines[i]);
+    if (isBetMgmSoccerDisplayOnlyLine(label)) continue;
+
+    const odds = parseBetMgmSoccerOdds(lines[i + 1]);
+
+    if (!/^(Yes|No)$/i.test(label) || odds === null) continue;
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType,
+        selection: /^Yes$/i.test(label) ? "Yes" : "No",
+        lineValue: null,
+        oddsAmerican: odds,
+      })
+    );
+
+    i += 1;
+  }
+
+  return rows;
+}
+
+function parseBetMgmSoccerDoubleChance(lines, startIndex, event, sport) {
+  const rows = [];
+  const idx = findBetMgmSoccerSectionIndex(lines, startIndex, /^Double chance$/i);
+  if (idx === -1) return rows;
+
+  const end = findBetMgmSoccerSectionEnd(lines, idx + 1);
+
+  for (let i = idx + 1; i < end - 1; i += 1) {
+    const label = normalizeBetMgmSoccerSelection(lines[i]);
+    if (isBetMgmSoccerDisplayOnlyLine(label)) continue;
+
+    const odds = parseBetMgmSoccerOdds(lines[i + 1]);
+
+    if (odds === null) continue;
+    if (!/\bOr\b/i.test(label)) continue;
+
+    rows.push(
+      buildRow({
+        sport,
+        event,
+        marketType: "double_chance",
+        selection: label,
+        lineValue: null,
+        oddsAmerican: odds,
+      })
+    );
+
+    i += 1;
+  }
+
+  return rows;
+}
+
+function parseBetMgmNhlVisiblePlayerPropsFallback(lines, sport) {
+  const text = (lines || []).join(" ");
+
+  if (
+    !/\bBETMGM_/i.test(text) &&
+    !/\bPlayer props\b/i.test(text) &&
+    !/\bAnytime goalscorer\b/i.test(text)
+  ) {
+    return [];
+  }
+
+  const looksLikeNhl =
+    String(sport || "").toUpperCase() === "NHL" ||
+    /\bHockey\b/i.test(text) ||
+    /\bNHL\b/i.test(text) ||
+    /\bAnytime goalscorer\b/i.test(text) ||
+    /\bPlayer shots\b/i.test(text) ||
+    /\bGoalie saves\b/i.test(text);
+
+  if (!looksLikeNhl) return [];
+
+  const detailEvent = findBetMgmVisibleSelectedEvent(lines);
+  if (!detailEvent) return [];
+
+  const away = normalizeBetMgmEventTeamName(detailEvent.away);
+  const home = normalizeBetMgmEventTeamName(detailEvent.home);
+  const event = `${away} @ ${home}`;
+  const startIndex = detailEvent.startIndex;
+
+  const rows = [];
+
+  rows.push(...parseBetMgmNhlAnytimeGoalscorer(lines, startIndex, event));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player shots", "player_shots_on_goal"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player assists", "player_assists"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Player points", "player_points"));
+  rows.push(...parseBetMgmNhlOverUnderSection(lines, startIndex, event, "Goalie saves", "player_saves"));
+
+  return rows;
+}
+
+function findBetMgmVisibleSelectedEvent(lines) {
+  for (let i = 0; i < lines.length - 8; i += 1) {
+    if (!/^(Today|Tomorrow|\d{1,2}\/\d{1,2}\/\d{2,4})$/i.test(normalizeLine(lines[i]))) continue;
+    if (!isLikelyTimeLine(lines[i + 1])) continue;
+
+    let cursor = i + 2;
+
+    if (isLikelyBroadcastLine(lines[cursor])) {
+      cursor += 1;
+    }
+
+    const away = normalizeLine(lines[cursor]);
+    const home = normalizeLine(lines[cursor + 1]);
+
+    if (!isLikelyTeamName(away) || !isLikelyTeamName(home) || away === home) continue;
+
+    const after = lines.slice(cursor + 2, Math.min(lines.length, cursor + 120)).join(" ");
+
+    if (
+      /\bSGP\b/i.test(after) &&
+      /\bPlayer props\b/i.test(after) &&
+      (
+        /\bAnytime goalscorer\b/i.test(after) ||
+        /\bPlayer shots\b/i.test(after) ||
+        /\bPlayer assists\b/i.test(after) ||
+        /\bPlayer points\b/i.test(after) ||
+        /\bGoalie saves\b/i.test(after)
+      )
+    ) {
+      return {
+        away,
+        home,
+        startIndex: cursor + 2,
+      };
+    }
+  }
+
+  return null;
+}
+
 
 function parseBetMgmNhlVisibleProps(lines, startIndex, event, sport) {
   const rows = [];
@@ -1369,15 +2204,28 @@ function isBetMgmNhlVisibleSectionBoundary(value) {
   const text = normalizeLine(value);
 
   if (!text) return false;
-  if (/^Show Less$/i.test(text)) return false;
-  if (/^(All|Canadiens|Lightning|Over|Under)$/i.test(text)) return false;
 
-  return (
+  if (
     isHardStopLine(text) ||
     /^Missouri$/i.test(text) ||
     /^Current time:/i.test(text) ||
     /^Bet slip$/i.test(text) ||
-    /^My Bets$/i.test(text) ||
+    /^My Bets$/i.test(text)
+  ) {
+    return true;
+  }
+
+  if (/^Show Less$/i.test(text)) return false;
+  if (/^(All|Over|Under)$/i.test(text)) return false;
+
+  // BetMGM puts team-filter labels inside each market:
+  // All / Canadiens / Hurricanes / Over / Under
+  // or All / Avalanche / Golden Knights / Over / Under.
+  // These are not section boundaries. Use generic team-name detection instead
+  // of hard-coding team names.
+  if (isLikelyTeamName(text)) return false;
+
+  return (
     /^Anytime goalscorer: Either player$/i.test(text) ||
     /^First goalscorer$/i.test(text) ||
     /^First goalscorer: Either player$/i.test(text) ||
@@ -1386,6 +2234,7 @@ function isBetMgmNhlVisibleSectionBoundary(value) {
     /^Player assists$/i.test(text) ||
     /^Player points$/i.test(text) ||
     /^Player blocked shots$/i.test(text) ||
+    /^Player power play points$/i.test(text) ||
     /^Goalie saves$/i.test(text) ||
     /^Goalie shutouts$/i.test(text) ||
     /^Goals against$/i.test(text) ||
@@ -1395,6 +2244,7 @@ function isBetMgmNhlVisibleSectionBoundary(value) {
     /^.+ : Goalie props$/i.test(text)
   );
 }
+
 
 function normalizeBetMgmEventTeamName(value) {
   const text = normalizeLine(value);
@@ -1430,6 +2280,44 @@ function normalizeBetMgmEventTeamName(value) {
     ["LAL Lakers", "Los Angeles Lakers"],
     ["Rockets", "Houston Rockets"],
     ["HOU Rockets", "Houston Rockets"],
+
+    ["ATL Dream", "Atlanta Dream"],
+    ["Dream", "Atlanta Dream"],
+    ["CHI Sky", "Chicago Sky"],
+    ["Sky", "Chicago Sky"],
+    ["CON Sun", "Connecticut Sun"],
+    ["CT Sun", "Connecticut Sun"],
+    ["Sun", "Connecticut Sun"],
+    ["DAL Wings", "Dallas Wings"],
+    ["Wings", "Dallas Wings"],
+    ["GS Valkyries", "Golden State Valkyries"],
+    ["GSV Valkyries", "Golden State Valkyries"],
+    ["Valkyries", "Golden State Valkyries"],
+    ["IND Fever", "Indiana Fever"],
+    ["Fever", "Indiana Fever"],
+    ["LV Aces", "Las Vegas Aces"],
+    ["LVA Aces", "Las Vegas Aces"],
+    ["Aces", "Las Vegas Aces"],
+    ["LA Sparks", "Los Angeles Sparks"],
+    ["Sparks", "Los Angeles Sparks"],
+    ["MIN Lynx", "Minnesota Lynx"],
+    ["Lynx", "Minnesota Lynx"],
+    ["NY Liberty", "New York Liberty"],
+    ["NYL Liberty", "New York Liberty"],
+    ["Liberty", "New York Liberty"],
+    ["PHO Mercury", "Phoenix Mercury"],
+    ["PHX Mercury", "Phoenix Mercury"],
+    ["Mercury", "Phoenix Mercury"],
+    ["POR Fire", "Portland Fire"],
+    ["Fire", "Portland Fire"],
+    ["SEA Storm", "Seattle Storm"],
+    ["Storm", "Seattle Storm"],
+    ["TOR Tempo", "Toronto Tempo"],
+    ["Tempo", "Toronto Tempo"],
+    ["WAS Mystics", "Washington Mystics"],
+    ["WSH Mystics", "Washington Mystics"],
+    ["Mystics", "Washington Mystics"],
+
   ]);
 
   return aliases.get(text) || text;
@@ -1452,9 +2340,16 @@ function inferSport(lines, context) {
   const text = lines.slice(0, 120).join(" ");
 
   // direct keywords (fallback)
+  if (/\b(Soccer|FIFA|World Cup|UEFA|CONCACAF|CONMEBOL|MLS|Premier League|La Liga|Bundesliga|Serie A|Ligue 1)\b/i.test(text)) return "SOCCER";
+  if (/WNBA/i.test(text)) return "WNBA";
   if (/NBA/i.test(text)) return "NBA";
   if (/NHL/i.test(text)) return "NHL";
   if (/MLB/i.test(text)) return "MLB";
+
+  // WNBA team detection
+  if (/(dream|chicago sky|connecticut sun|dallas wings|golden state valkyries|valkyries|indiana fever|las vegas aces|aces|los angeles sparks|sparks|minnesota lynx|lynx|new york liberty|liberty|phoenix mercury|mercury|portland fire|toronto tempo|seattle storm|washington mystics|mystics)/i.test(text)) {
+    return "WNBA";
+  }
 
   // NBA team detection
   if (/(hornets|magic|lakers|celtics|knicks|warriors|suns|bucks|heat|nets|raptors|pistons|hawks|spurs|rockets|nuggets|timberwolves|cavaliers|76ers|trail blazers)/i.test(text)) {
@@ -1475,6 +2370,10 @@ function normalizeLine(value) {
     .replace(/−|\u2212|âˆ’/g, "-")
     .replace(/\u00A0/g, " ")
     .replace(/\s+/g, " ")
+    // BetMGM/FanDuel can append team codes to player names:
+    // Sebastian Aho (CAR), Connor McDavid (EDM), etc.
+    // Strip only simple trailing uppercase team codes.
+    .replace(/\s+\([A-Z]{2,4}\)$/g, "")
     .trim();
 }
 
@@ -1482,6 +2381,7 @@ function isLikelyTeamName(value) {
   const text = normalizeLine(value);
   if (!text || !/[A-Za-z]/.test(text)) return false;
   if (/\d{1,2}:\d{2}/.test(text) || /\b(am|pm)\b/i.test(text)) return false;
+  if (isFalseBetMgmEventTeamName(text)) return false;
   if (/^(today|tomorrow|starts in:?|all odds|sgp|builder|stats|quick sgp|popular|game lines|player props|points|rebounds|assists|threes|combos|team props|game props|betting news|view full article|author|more bets)$/i.test(text)) return false;
   if (/^[+-]?\d+(\.\d+)?$/.test(text)) return false;
   if (/^[OU]\s*\d+(\.\d+)?$/i.test(text)) return false;
@@ -1499,6 +2399,7 @@ function isAtMarker(value) {
 
 function isLikelyVsLine(value) {
   const text = normalizeLine(value);
+  if (isFalseBetMgmEventTeamName(text)) return false;
   return /^.+\s+vs\.?\s+.+$/i.test(text);
 }
 
@@ -1578,7 +2479,12 @@ function findNextTeamPair(lines, startIndex) {
 }
 
 function isHardStopLine(value) {
-  return /^(betting news|view full article|author|about|privacy policy|responsible gaming|terms of use|if you or someone you know)/i.test(normalizeLine(value));
+  const text = normalizeLine(value);
+
+  if (/^To Win the Tip\s*\(/i.test(text)) return true;
+  if (/^To Win the Tip\b/i.test(text)) return true;
+
+  return /^(betting news|view full article|author|about|privacy policy|responsible gaming|terms of use|if you or someone you know)/i.test(text);
 }
 
 function parseAmericanOdds(value) {

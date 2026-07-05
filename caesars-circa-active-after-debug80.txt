@@ -1,0 +1,1202 @@
+
+
+===== app/utils/parseCaesars.js =====
+import { detectLeague } from "./detectLeague";
+import {
+  americanOddsFromStakeAndProfit,
+  detectOddsMissingReason,
+  extractBestOdds,
+} from "./oddsHelpers";
+
+function toDateOnly(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value.dateOnly) return value.dateOnly;
+  return "";
+}
+
+function formatDateToMMDDYYYY(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function parseDateFromScreenshotFileName(sourceFileName = "") {
+  const s = String(sourceFileName || "");
+
+  let m = s.match(/Screenshot_(\d{4})(\d{2})(\d{2})-\d{6}/i);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  m = s.match(/(\d{4})(\d{2})(\d{2})[-_]\d{6}/);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  return "";
+}
+
+function parseCaesarsBetDate(text = "") {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+
+  let m = s.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b/i
+  );
+  if (m) {
+    const d = new Date(m[0]);
+    const formatted = formatDateToMMDDYYYY(d);
+    if (formatted) return formatted;
+  }
+
+  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (m) {
+    const mm = String(m[1]).padStart(2, "0");
+    const dd = String(m[2]).padStart(2, "0");
+    const yyyy = m[3];
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  return "";
+}
+
+function getMatch(text, regex, group = 1) {
+  const m = String(text || "").match(regex);
+  return m ? String(m[group] || "").trim() : "";
+}
+
+function toMoneyNumber(value) {
+  if (!value) return "";
+  const cleaned = String(value).replace(/[^0-9.]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num.toFixed(2) : "";
+}
+
+function cleanRawLine(line = "") {
+  return String(line || "")
+    .replace(/\r/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanLine(line = "") {
+  return String(line).replace(/[|]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeCaesarsText(text = "") {
+  return String(text)
+    .replace(/\$\s+/g, "$")
+    .replace(/\+\s+(\d{2,5})\b/g, "+$1")
+    .replace(/-\s+(\d{2,5})\b/g, "-$1");
+}
+
+function buildFallbackRowId({
+  sourceFileName = "",
+  betId = "",
+  fixture = "",
+  selection = "",
+  stake = "",
+  odds = "",
+}) {
+  return [sourceFileName, betId, fixture, selection, stake, odds]
+    .filter(Boolean)
+    .join("|");
+}
+
+function splitTrailingOdds(text = "") {
+  const s = cleanLine(text);
+
+  let m = s.match(/^(.*?)(\s[+-]\d{3,5})\)?\s*$/);
+  if (m) {
+    return {
+      text: m[1].trim(),
+      odds: m[2].trim(),
+    };
+  }
+
+  return { text: s, odds: "" };
+}
+
+function cleanCaesarsPrimarySelectionLine(text = "") {
+  return cleanLine(text)
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/^\d+\s+/, "")
+    .replace(/\s+\d+\s+v$/i, "")
+    .replace(/\s+in\s+v$/i, "")
+    .replace(/\s+v$/i, "")
+    .replace(/\s+[vV]$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function cleanCaesarsSelection(text = "") {
+  let s = cleanLine(text);
+
+  s = s.replace(/^[^A-Za-z0-9]+/, "");
+  s = s.replace(/([A-Za-z])([+-]\d)/g, "$1 $2");
+  s = s.replace(/\s+[+-]\d{2,5}(?=\s|$)/g, "");
+
+  s = s.replace(/\s[+-]\d{2,5}\)?\s*$/i, "");
+  s = s.replace(/\s["“”']?\d{3}\)?\s*$/i, "");
+  s = s.replace(/\s+-\s+(Over|Under)\b/i, " $1");
+  s = s.replace(/^\d+\s+(?=[A-Z][a-z])/, "");
+  s = s.replace(/[\[\(\{].*?[\]\)\}]/g, "");
+  s = s.replace(/["'=~®©]/g, "");
+
+  // remove short trailing OCR junk like M12, A, Ml2, +1, -10
+  s = s.replace(/\s+[A-Za-z]{1,3}\d{1,3}\s*$/i, "");
+  s = s.replace(/\s+[A-Za-z]\s*$/i, "");
+  s = s.replace(/\s+[+-]\d{1,2}\s*$/i, "");
+
+  s = s.replace(/\s{2,}/g, " ").trim();
+
+  return s;
+}
+
+function isLikelyEventLine(line = "") {
+  if (!line || line.length < 8) return false;
+
+  const cleaned = cleanLine(line);
+  const lower = cleaned.toLowerCase();
+
+  // ❌ reject betting/financial lines
+  if (
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|reward credits|tier credits|rewards|caesars rewards|quick deposit|deposit)\b/i.test(cleaned)
+  ) {
+    return false;
+  }
+
+  // ❌ reject player prop / market lines
+  if (
+    /-/.test(cleaned) &&
+    /\b(total|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(cleaned)
+  ) {
+    return false;
+  }
+
+  // ❌ reject currency lines
+  if (/\$/.test(cleaned)) return false;
+
+  // ❌ reject weak OCR (not enough real words)
+  if (!/[a-z]{3,}/i.test(cleaned)) return false;
+
+  // ❌ reject numeric-heavy junk
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount >= 4 && !/\s@\s/.test(cleaned)) return false;
+
+  // ❌ reject pure symbols
+  if (/^[^a-z0-9]+$/i.test(cleaned)) return false;
+
+  // ✅ must look like matchup
+  const hasMatchupShape =
+    /\s@\s/.test(cleaned) ||
+    /\bvs\.?\b/i.test(cleaned) ||
+    /\bv\b/i.test(cleaned) ||
+    /\bat\b/i.test(cleaned);
+
+  if (!hasMatchupShape) return false;
+
+  // ❌ final safeguard: reject very short sides
+  const parts = cleaned.split(/@|vs\.?|v|at/i);
+  if (parts.length >= 2) {
+    const [left, right] = parts.map((p) => p.trim());
+    if (left.length < 3 || right.length < 3) return false;
+  }
+
+  return true;
+}
+
+function cleanEventLine(line = "") {
+  return cleanLine(line)
+    .replace(/\b\d{1,2}:\d{2}\s*(AM|PM)\s*(ET|CT|MT|PT)?\b/gi, "")
+    .replace(/\b(today|tomorrow)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTopCaesarsBetText(text = "") {
+  const rawLines = String(text || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const startIndex = rawLines.findIndex((line) => /CAESARS|SPORTSBOOK/i.test(line));
+  const start = startIndex === -1 ? 0 : startIndex;
+
+  let end = rawLines.length;
+
+  for (let i = start + 1; i < rawLines.length; i += 1) {
+    if (/<\s*Share Bet/i.test(rawLines[i]) || /^Share Bet$/i.test(rawLines[i])) {
+      end = i + 1;
+      break;
+    }
+  }
+
+  return rawLines.slice(start, end).join("\n");
+}
+
+function extractCaesarsFinancials(cleaned = "", rawSelection = "") {
+  const text = normalizeCaesarsText(cleaned);
+  const compact = text.replace(/\s+/g, " ");
+
+  const stake =
+    toMoneyNumber(getMatch(text, /\b(wager|stake|risk)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)) ||
+    toMoneyNumber(getMatch(text, /\b(bonus bet|amount wagered|bet amount|total stake|wagered|risked)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)) ||
+    toMoneyNumber(getMatch(text, /\$([0-9]+(?:\.[0-9]{1,2})?)\s*(risk|stake|wager|wagered|risked)\b/i, 1)) ||
+    toMoneyNumber(getMatch(compact, /\bWager\s+\$?([0-9]+(?:\.[0-9]{1,2})?)\b/i));
+  const toWin =
+    toMoneyNumber(
+      getMatch(text, /\bto win\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bwin\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bprofit\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    );
+
+  const payout =
+    toMoneyNumber(
+      getMatch(text, /\b(total payout|payout)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\b(total return|return|returns|returned|paid)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bPaid\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    );
+
+  const bestOdds = extractBestOdds({
+    receiptText: text,
+    rawSelection,
+    payout,
+    stake,
+  });
+
+  const odds =
+    (bestOdds && typeof bestOdds === "object" ? bestOdds.oddsUS : bestOdds) ||
+    getMatch(text, /\bodds\s*:?\s*([+-]\d{3,5})\b/i) ||
+    getMatch(text, /\b([+-]\d{3,5})\b/i);
+
+  return { stake, toWin, payout, odds };
+}
+
+function inferBetType(selection = "", marketDetail = "") {
+  const s = `${selection} ${marketDetail}`.toLowerCase();
+
+  const hasOverUnder = /\b(over|under)\b/.test(s);
+  const hasLine = /[+-]\d+(\.\d+)?/.test(selection);
+  const hasNamedSelection = /\b[a-z][a-z'.-]+\s+[a-z][a-z'.-]+\b/i.test(selection);
+
+  const hasPropWords =
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|goal scorer|goalscorer|anytime goal scorer|by ko\/tko|by points|bout betting|method of victory)\b/.test(
+      s
+    ) ||
+    /^\d+\+\s+(made threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|goal scorer|goalscorer)\b/i.test(
+      selection
+    ) ||
+    /^player\s+\d+\+/i.test(selection);
+
+  if ((hasOverUnder && (hasNamedSelection || hasPropWords)) || hasPropWords) {
+    return "player prop";
+  }
+
+  if (hasOverUnder) return "total";
+  if (hasLine) return "spread";
+  if (selection) return "moneyline";
+
+  return "";
+}
+
+function extractCaesarsTopSettledFields(lines = []) {
+  const result = {
+    selection: "",
+    status: "",
+    marketDetail: "",
+    fixture: "",
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = cleanLine(lines[i]);
+
+    // Example: "Alex Bolt Won o", "Under 14.5 Won Vv", "Daniel Altmaier A" with Lost elsewhere
+    const m = line.match(/^(.+?)\s+(Won|Lost|Void(?:ed)?|Push|Cashed Out|Open)\b/i);
+    if (!m) continue;
+
+    const rawSelection = cleanCaesarsPrimarySelectionLine(m[1] || "");
+    const statusWord = String(m[2] || "");
+
+    if (
+      !rawSelection ||
+      /\b(CAESARS|SPORTSBOOK|Betslip|Open Bets|Settled|Reward Credits|Tier Credits|REWARDS|Pending Credits)\b/i.test(rawSelection) ||
+      /\$/.test(rawSelection)
+    ) {
+      continue;
+    }
+
+    result.selection = rawSelection;
+    result.status =
+      /won/i.test(statusWord)
+        ? "Won"
+        : /lost/i.test(statusWord)
+        ? "Lost"
+        : /void|push/i.test(statusWord)
+        ? "Voided"
+        : /cashed out/i.test(statusWord)
+        ? "Cashed Out"
+        : /open/i.test(statusWord)
+        ? "Open"
+        : "";
+
+    // Look immediately after selection for market | fixture | date.
+    for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
+      const next = cleanLine(lines[j]);
+
+      if (!next || /\b(Pending Credits|Reward Credits|Tier Credits|REWARDS|Odds|Cash Wager|Paid|To Win|Share Bet)\b/i.test(next)) {
+        continue;
+      }
+
+      const parts = next.split("|").map((part) => cleanLine(part)).filter(Boolean);
+
+      if (parts.length >= 2) {
+        result.marketDetail = parts[0] || "";
+        result.fixture = cleanEventLine(parts[1] || "");
+        break;
+      }
+
+      if (!result.fixture && isLikelyEventLine(next)) {
+        result.fixture = cleanEventLine(next);
+      }
+
+      if (!result.marketDetail && /\b(Match Betting|Moneyline|Spread|Total|Puck Line|Run Line|Bout Betting|Anytime Goal Scorer|90 Minutes|Handicap)\b/i.test(next)) {
+        result.marketDetail = next;
+      }
+    }
+
+    return result;
+  }
+
+  return result;
+}
+
+function extractCaesarsMarketPipeFields(lines = []) {
+  const marketRegex = /\b(Money Line|Moneyline|Match Betting|Spread|Total|Puck Line|Run Line|90 Minutes|Draw No Bet|Bout Betting|Anytime Goal Scorer|Anytime Goalscorer|Goal Scorer|Goalscorer|Handicap)\b/i;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = cleanLine(lines[i]);
+    if (!marketRegex.test(line) || !line.includes("|")) continue;
+
+    const parts = line.split("|").map((part) => cleanLine(part)).filter(Boolean);
+    if (parts.length < 2) continue;
+
+    let selection = "";
+
+    for (let j = i - 1; j >= Math.max(0, i - 4); j -= 1) {
+      const prev = cleanCaesarsPrimarySelectionLine(lines[j]);
+
+      if (
+        prev &&
+        !/\b(CAESARS|SPORTSBOOK|Open Bets|Settled Bets|Home|Rewards|Reward Credits|Tier Credits|Pending Credits|Betslip|Cash Wager|Odds|To Win|Paid)\b/i.test(prev) &&
+        !/\$/.test(prev)
+      ) {
+        selection = prev
+          .replace(/\b(Won|Lost|Void(?:ed)?|Push|Cashed Out|Open)\b.*$/i, "")
+          .trim();
+        break;
+      }
+    }
+
+    return {
+      selection,
+      marketDetail: parts[0] || "",
+      fixture: cleanEventLine(parts[1] || ""),
+    };
+  }
+
+  return {
+    selection: "",
+    marketDetail: "",
+    fixture: "",
+  };
+}
+
+function scoreSelectionLine(line = "") {
+  const l = line.toLowerCase();
+  let score = 0;
+
+  if (!line || line.length < 2) return -100;
+
+  if (/\b(over|under)\b/.test(l)) score += 4;
+  if (
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|by ko\/tko|by points)\b/.test(
+      l
+    )
+  ) {
+    score += 5;
+  }
+  if (/[+-]\d+(\.\d+)?/.test(line)) score += 3;
+
+  if (/\b(reward credits|tier credits|rewards|caesars rewards|quick deposit|deposit|available balance)\b/i.test(line)) {
+    score -= 12;
+  }
+  if (/\b(wager|risk|stake|odds|to win|total payout|payout|cash out)\b/.test(l)) {
+    score -= 5;
+  }
+  if (isLikelyEventLine(line)) score -= 4;
+
+  return score;
+}
+
+export function parseCaesarsSlip({
+  cleaned,
+  originalText,
+  sourceFileName = "",
+  sportsbook = "Caesars",
+  shared,
+  debug = false,
+}) {
+  const debugTrace = [];
+  const {
+    detectStatus,
+    detectLive,
+    extractBetId,
+    enrichRow,
+    parsePlacedDate,
+  } = shared || {};
+
+  const fullText = normalizeCaesarsText(cleaned);
+  const text = extractTopCaesarsBetText(fullText);
+  const rawLines = text.split("\n").map(cleanRawLine).filter(Boolean);
+  const lines = text.split("\n").map(cleanLine).filter(Boolean);
+
+  const topSettled = extractCaesarsTopSettledFields(rawLines);
+  const topPipe = extractCaesarsMarketPipeFields(rawLines);
+
+
+  const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
+  let status =
+    topSettled.status ||
+    (typeof detectStatus === "function" ? detectStatus(text) : "");
+
+  if (!status && /\bWon\b/i.test(text)) status = "Won";
+  if (!status && /\bLost\b/i.test(text)) status = "Lost";
+  if (!status && /\bCashed Out\b/i.test(text)) status = "Cashed Out";
+
+  if (!status && /\bPaid\s*:?\s*\$?0(?:\.00)?\b/i.test(text)) {
+    status = "Lost";
+  }
+
+  if (!status && /\bPaid\s*:?\s*\$?(?!0(?:\.00)?\b)([0-9]+(?:\.[0-9]{1,2})?)/i.test(text)) {
+    status = "Won";
+  }
+
+  const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
+  const liveFlag = typeof detectLive === "function" ? detectLive(text) : "N";
+
+  const parsedBetDate =
+    typeof parsePlacedDate === "function" ? parsePlacedDate(fullText) : "";
+  const betDate =
+    toDateOnly(parsedBetDate) ||
+    parseCaesarsBetDate(fullText) ||
+    parseDateFromScreenshotFileName(sourceFileName);
+
+  let fixture = topSettled.fixture || topPipe.fixture || "";
+let bestFixtureScore = -1;
+
+for (const line of lines) {
+  if (!isLikelyEventLine(line)) continue;
+
+  const cleaned = cleanEventLine(line);
+  let score = 0;
+
+  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 3) score += 2;
+
+  if (/\s@\s/.test(cleaned)) score += 3;
+  if (/\bvs\.?\b/i.test(cleaned)) score += 2;
+  if (/\bv\b/i.test(cleaned)) score += 1;
+  if (/\bat\b/i.test(cleaned)) score += 1;
+
+  if (cleaned.length < 15) score -= 2;
+
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount > 2) score -= 2;
+
+  if (score > bestFixtureScore) {
+    bestFixtureScore = score;
+    fixture = cleaned;
+  }
+}
+
+let usedFixtureFallback = false;
+
+if (!fixture) {
+  for (let i = 0; i < lines.length; i++) {
+    const cleaned = cleanEventLine(lines[i]);
+
+    const hasMatchupShape =
+      /\s@\s/.test(cleaned) ||
+      /\bvs\.?\b/i.test(cleaned) ||
+      /\bv\b/i.test(cleaned) ||
+      /\bat\b/i.test(cleaned);
+
+    if (!hasMatchupShape) continue;
+
+    const parts = cleaned.split(/@|vs\.?|v|at/i).map((p) => p.trim());
+    if (parts.length < 2) continue;
+
+    const [left, right] = parts;
+
+    if (!left || !right) continue;
+    if (left.length < 3 || right.length < 3) continue;
+    if (!/[a-z]{3,}/i.test(left) || !/[a-z]{3,}/i.test(right)) continue;
+
+    if (
+      /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(
+        cleaned
+      )
+    ) {
+      continue;
+    }
+
+    fixture = cleaned;
+    usedFixtureFallback = true;
+    break;
+  }
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "fixture",
+    fixture,
+    bestFixtureScore,
+    usedFixtureFallback,
+  });
+}
+  let selectionCandidate = topSettled.selection || topPipe.selection || "";
+  let bestScore = selectionCandidate ? 100 : -100;
+
+  if (!selectionCandidate) {
+    for (const line of lines) {
+      const score = scoreSelectionLine(line);
+      if (score > bestScore) {
+        bestScore = score;
+        selectionCandidate = line;
+      }
+    }
+  }
+
+  if (bestScore < 2) {
+    selectionCandidate = "";
+  }
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_candidate",
+    selectionCandidate,
+    bestScore,
+  });
+}
+
+  if (!selectionCandidate) {
+    const anchorIndex = lines.findIndex((line) =>
+      /\b(wager|risk|stake|cash wager|odds|to win|total payout|payout)\b/i.test(line)
+    );
+
+    if (anchorIndex > 0) {
+      const candidate = cleanLine(lines[anchorIndex - 1]);
+      if (
+        candidate &&
+        !isLikelyEventLine(candidate) &&
+        !/\$/.test(candidate) &&
+        !/\b(Reward Credits|Tier Credits|REWARDS|Pending Credits|Caesars Rewards)\b/i.test(candidate)
+      ) {
+        selectionCandidate = candidate;
+      }
+    }
+  }
+if (!selectionCandidate) {
+  const marketLineIndex = lines.findIndex((line) =>
+    /\b(Anytime Goal Scorer|Goal Scorer|Goalscorer|Bout Betting|Method Of Victory|90 Minutes|Moneyline|Puck Line|Run Line|Spread|Total|Handicap)\b/i.test(line)
+  );
+
+  if (marketLineIndex > 0) {
+    const previousLine = cleanCaesarsPrimarySelectionLine(lines[marketLineIndex - 1]);
+
+    if (
+      previousLine &&
+      !/\b(CAESARS|SPORTSBOOK|Open Bets|Settled Bets|Home|Rewards|Bets|Reward Credits|Tier Credits|Quick Deposit|Deposit)\b/i.test(previousLine) &&
+      !/\$/.test(previousLine)
+    ) {
+      selectionCandidate = previousLine;
+    }
+  }
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "selection_after_fallback",
+    selectionCandidate,
+  });
+}
+  const splitSelection = splitTrailingOdds(selectionCandidate);
+let selection = cleanCaesarsSelection(splitSelection.text || selectionCandidate);
+
+selection = selection
+  .replace(/[»›>]+$/g, "")
+  .replace(/\s+[+-]?\d{2,5}(\.\d+)?$/g, "")
+  .trim();
+
+if (/\b(Reward Credits|Tier Credits|REWARDS|Pending Credits|Caesars Rewards)\b/i.test(selection)) {
+  selection = "";
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "selection_cleaned",
+    rawSelectionCandidate: selectionCandidate,
+    splitSelection,
+    cleanedSelection: selection,
+  });
+}
+
+const { stake, toWin, payout, odds } = extractCaesarsFinancials(
+  text,
+  selectionCandidate
+);
+
+let finalToWin = toWin;
+let finalPayout = payout;
+let payoutEstimated = false;
+let payoutMismatch = false;
+let calculatedToWin = "";
+let calculatedPayout = "";
+
+if (debug) {
+  debugTrace.push({
+    stage: "financials",
+    stake,
+    toWin,
+    payout,
+    odds,
+    calculatedToWin,
+    calculatedPayout,
+    payoutEstimated,
+    payoutMismatch,
+  });
+}
+
+let impliedOdds = splitSelection.odds || odds;
+if (!impliedOdds && stake && toWin) {
+  impliedOdds = americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
+}
+
+if (stake && impliedOdds) {
+  const stakeNum = Number(stake);
+  const oddsNum = Number(impliedOdds);
+
+  if (Number.isFinite(stakeNum) && Number.isFinite(oddsNum) && stakeNum > 0) {
+    if (oddsNum > 0) {
+      calculatedToWin = ((stakeNum * oddsNum) / 100).toFixed(2);
+    } else if (oddsNum < 0) {
+      calculatedToWin = ((stakeNum * 100) / Math.abs(oddsNum)).toFixed(2);
+    }
+
+    if (calculatedToWin) {
+      calculatedPayout = (stakeNum + Number(calculatedToWin)).toFixed(2);
+    }
+  }
+}
+
+if (!finalToWin && calculatedToWin) {
+  finalToWin = calculatedToWin;
+  payoutEstimated = true;
+}
+
+if (!finalPayout && calculatedPayout) {
+  finalPayout = calculatedPayout;
+  payoutEstimated = true;
+}
+
+if (payout && calculatedPayout) {
+  const payoutNum = Number(payout);
+  const calcNum = Number(calculatedPayout);
+
+  if (
+    Number.isFinite(payoutNum) &&
+    Number.isFinite(calcNum) &&
+    Math.abs(payoutNum - calcNum) > 0.15
+  ) {
+    payoutMismatch = true;
+  }
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "implied_odds",
+    splitOdds: splitSelection.odds,
+    extractedOdds: odds,
+    finalImpliedOdds: impliedOdds,
+    calculatedToWin,
+    calculatedPayout,
+    finalToWin,
+    finalPayout,
+    payoutEstimated,
+    payoutMismatch,
+  });
+}
+
+let marketDetail = topSettled.marketDetail || topPipe.marketDetail || selection;
+
+if (/^(over|under)\b/i.test(selection) && fixture && !selection.includes("(") && !topSettled.selection) {
+  selection = `${selection} (${fixture})`;
+  marketDetail = selection;
+}
+
+const betType = inferBetType(selection, marketDetail);
+const league =
+  detectLeague({
+    cleaned: text,
+    marketDetail,
+    fixtureEvent: fixture,
+    selection,
+    isParlay: /\bparlay\b|\bsgp\b|\bsame game parlay\b/i.test(text),
+  }) || "";
+
+  const warnings = [];
+  if (!stake) warnings.push("stake_missing");
+  if (!finalPayout && !finalToWin) warnings.push("payout_missing");
+  if (!selection) warnings.push("selection_missing");
+  if (!fixture) warnings.push("fixture_missing");
+  if (!betDate) warnings.push("no_bet_date_detected");
+  if (payoutEstimated) warnings.push("payout_estimated");
+  if (payoutMismatch) warnings.push("payout_mismatch");
+
+  const oddsNote = impliedOdds
+    ? ""
+    : detectOddsMissingReason({
+        oddsUS: impliedOdds,
+        stake,
+        payout: finalPayout,
+        toWin: finalToWin,
+        screenType: "",
+      });
+
+  const fallbackId = buildFallbackRowId({
+    sourceFileName,
+    betId,
+    fixture,
+    selection,
+    stake,
+    odds: impliedOdds,
+  });
+
+  const baseRow =
+    shared?.emptyParsed && typeof shared.emptyParsed === "object"
+      ? { ...shared.emptyParsed, sourceFileName }
+      : {
+          sourceFileName,
+          id: fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
+        };
+
+  const row = {
+  ...baseRow,
+  id: baseRow.id || fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
+  bookmaker: sportsbook,
+  betId,
+  eventDate: betDate,
+  betDate,
+  sportLeague: league,
+  selection,
+  betType,
+  betSourceTag: "",
+  fixtureEvent: fixture,
+  stake,
+  oddsUS: impliedOdds,
+  oddsMissingReason: oddsNote,
+  marketDetail,
+  payout: finalPayout,
+  toWin: finalToWin,
+  live: liveFlag === "Y" ? "Y" : "N",
+  bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
+  win,
+  reviewLater: warnings.length >= 2 ? "Y" : "N",  parseWarning: warnings.join(" | "),
+  rawText: originalText || cleaned,
+  sourceText: originalText || cleaned,
+  status,
+  ...(debug ? { debugTrace } : {}),
+};
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}
+
+
+===== app/utils/parseCirca.js =====
+// app/utils/parseCirca.js
+
+function clean(text = "") {
+  return String(text)
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanDocument(text = "") {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00A0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function getLines(text) {
+  return text.split("\n").map((l) => clean(l)).filter(Boolean);
+}
+
+function extractOdds(text) {
+  const m = text.match(/\b(Yes|No)\s+([+-]\d{2,5})/i);
+  if (!m) return { selection: "", odds: "" };
+
+  return {
+    selection: m[1],
+    odds: m[2],
+  };
+}
+
+function extractStakeWinPayout(text) {
+  const source = String(text || "");
+
+  // Handles:
+  // Risk Won Payout
+  // $469.00 $275.89 $744.89
+  const m = source.match(/Risk\s+Won\s+Payout\s+\$?([\d,.]+)\s+\$?([\d,.]+)\s+\$?([\d,.]+)/i);
+
+  if (m) {
+    return {
+      stake: m[1].replace(/,/g, ""),
+      toWin: m[2].replace(/,/g, ""),
+      payout: m[3].replace(/,/g, ""),
+    };
+  }
+
+  const singleLine = source.match(/RISK\s+WIN\s+([\d,.]+)\s+([\d,.]+)/i);
+
+  if (singleLine) {
+    return {
+      stake: singleLine[1].replace(/,/g, ""),
+      toWin: singleLine[2].replace(/,/g, ""),
+      payout: "",
+    };
+  }
+
+  const straightWager = source.match(/\bStraight Wager\s+-?\$?([\d,.]+)/i);
+
+  if (straightWager) {
+    return {
+      stake: straightWager[1].replace(/,/g, ""),
+      toWin: "",
+      payout: "",
+    };
+  }
+
+  return { stake: "", toWin: "", payout: "" };
+}
+
+function americanOddsFromStakeAndWin(stake = "", toWin = "") {
+  const s = Number(String(stake || "").replace(/,/g, ""));
+  const w = Number(String(toWin || "").replace(/,/g, ""));
+
+  if (!Number.isFinite(s) || !Number.isFinite(w) || s <= 0 || w <= 0) return "";
+
+  if (w >= s) return `+${Math.round((w / s) * 100)}`;
+  return `${Math.round(-(s / w) * 100)}`;
+}
+
+function extractFixture(text) {
+  const m = text.match(/([A-Z]{2,5}\/[A-Z]{2,5})\s+(.+?)\?/i);
+  if (!m) return "";
+
+  const matchup = m[1].replace("/", " @ ");
+  const detail = m[2].trim();
+
+  return `${matchup} (${detail})`;
+}
+
+function classifyBetType(fixture = "") {
+  const lower = fixture.toLowerCase();
+
+  if (lower.includes("over") || lower.includes("under") || lower.includes("total")) {
+    return "total";
+  }
+
+  return "moneyline";
+}
+
+function getDateFromSourceFileName(sourceFileName = "") {
+  const m = String(sourceFileName || "").match(/Screenshot_(\d{4})(\d{2})(\d{2})-/i);
+  if (!m) return "";
+
+  const [, y, mo, d] = m;
+  return `${mo}/${d}/${y}`;
+}
+
+function detectCircaStatus(text = "") {
+  const lower = String(text || "").toLowerCase();
+
+  if (/\bwon\b|\bpaid\b/.test(lower)) return "Won";
+  if (/\blost\b/.test(lower)) return "Lost";
+  if (/\bvoid\b|\bpush\b|cancelled|canceled/.test(lower)) return "Voided";
+  if (/\bopen\b|pending|straight wager\b/i.test(lower)) return "Open";
+
+  return "";
+}
+
+function extractCircaPayout(text = "") {
+  const s = String(text || "");
+
+  const paid =
+    s.match(/\bPaid:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bPayout:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] ||
+    s.match(/\bTotal Payout:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] ||
+    "";
+
+  return paid ? paid.replace(/,/g, "") : "";
+}
+
+function extractCircaBetId(text = "") {
+  return (
+    String(text || "").match(/\b(?:Ticket|Ticket #|Bet ID|Wager ID)[:# ]+([A-Z0-9-]+)/i)?.[1] ||
+    ""
+  );
+}
+
+function extractCircaTopTicket(text = "") {
+  const lines = getLines(cleanDocument(text || ""));
+
+  const placedIndex = lines.findIndex((line) => /^Placed:/i.test(line));
+  const start = placedIndex === -1 ? 0 : placedIndex;
+
+  let end = lines.length;
+
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^Placed:/i.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+
+  return lines.slice(start, end).join("\n");
+}
+
+function extractCircaFixtureFromTicket(ticketText = "") {
+  const lines = getLines(ticketText);
+
+  const fixtureLine = lines.find((line) =>
+    /\bvs\b|\s@\s|\bat\b/i.test(line) &&
+    !/\b(Risk|Won|Payout|Placed|Straight)\b/i.test(line)
+  );
+
+  if (!fixtureLine) return "";
+
+  return fixtureLine
+    .replace(/\b[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}.*$/i, "")
+    .replace(/\b\d{1,2}:\d{2}\s*(AM|PM)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractCircaSelectionFromTicket(ticketText = "") {
+  const lines = getLines(ticketText);
+
+  const resultLine = lines.find((line) =>
+    /\b(WON|LOST|VOID|PUSH)\b/i.test(line) &&
+    !/\bRisk\s+Won\s+Payout\b/i.test(line) &&
+    !/^\$?[\d,.]+\s+\$?[\d,.]+\s+\$?[\d,.]+$/.test(line)
+  );
+
+  if (!resultLine) return { selection: "", oddsUS: "" };
+
+  let oddsUS = "";
+
+  const explicitOdds = resultLine.match(/([+-]\d{2,5})(?=\s|$)/);
+  if (explicitOdds) {
+    oddsUS = explicitOdds[1];
+  } else {
+    // Common OCR shape: "WON AY 170" means likely -170.
+    const trailing = resultLine.match(/\b(?:A|AY|AT|@)?\s*(\d{2,4})\s*$/i);
+    if (trailing) oddsUS = `-${trailing[1]}`;
+  }
+
+  let selection = resultLine
+    .replace(/^\d+\s+/, "")
+    .replace(/\|/g, " ")
+    .replace(/\b(WON|LOST|VOID|PUSH)\b.*$/i, "")
+    .replace(/[+-]\d{2,5}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove remaining ticket/team number prefix, e.g. "928 RANGERS" -> "RANGERS"
+  selection = selection.replace(/^\d+\s+/, "").trim();
+
+  if (!selection || /^(won|lost|void|push)$/i.test(selection)) {
+    const fallback = lines.find((line) =>
+      /\b[A-Z0-9 ]+\s+(?:vs|VS|@|at)\s+[A-Z0-9 ]+\b/.test(line) &&
+      !/\b(Placed|Straight|Risk|Won|Payout)\b/i.test(line)
+    );
+
+    if (fallback) {
+      selection = fallback
+        .replace(/\b[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}.*$/i, "")
+        .replace(/\b\d{1,2}:\d{2}\s*(AM|PM)\b.*$/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+  }
+
+  return { selection, oddsUS };
+}
+
+function extractCircaOldListSelection(ticketText = "") {
+  const lines = getLines(ticketText);
+
+  const yesNoLine = lines.find((line) =>
+    /\b(Yes|No)\s+[+-]\d{2,5}\b/i.test(line)
+  );
+
+  if (!yesNoLine) return { selection: "", oddsUS: "" };
+
+  const m = yesNoLine.match(/\b(Yes|No)\s+([+-]\d{2,5})\b/i);
+
+  if (!m) return { selection: "", oddsUS: "" };
+
+  return {
+    selection: m[1],
+    oddsUS: m[2],
+  };
+}
+
+export function parseCircaSlip(cleaned, shared = {}, sourceFileName = "", originalText = "") {
+  const { enrichRow, parsePlacedDate, detectStatus, extractBetId } = shared || {};
+
+  const fullText = cleanDocument(originalText || cleaned || "");
+  const text = extractCircaTopTicket(fullText);
+  const lines = getLines(text);
+
+  // --- Extract pieces ---
+  const topSelection = extractCircaSelectionFromTicket(text);
+  const oldListSelection = extractCircaOldListSelection(text);
+  const oddsMatch = extractOdds(text);
+
+  let selection =
+    topSelection.selection ||
+    oldListSelection.selection ||
+    oddsMatch.selection;
+
+  let odds =
+    topSelection.oddsUS ||
+    oldListSelection.oddsUS ||
+    oddsMatch.odds;
+
+  // Improve selection using fixture context
+  const fixture = extractCircaFixtureFromTicket(text) || extractFixture(text);
+
+  selection = String(selection || "")
+    .replace(/\s*\[\s*$/g, "")
+    .replace(/\s+@\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (selection && fixture) {
+    selection = `${fixture} → ${selection}`;
+  }
+  const money = extractStakeWinPayout(text);
+  const stake = money.stake;
+  const toWin = money.toWin;
+  let payout = money.payout;
+
+  if (!odds && stake && toWin) {
+    odds = americanOddsFromStakeAndWin(stake, toWin);
+  }
+  const fixtureEvent = fixture;
+
+  const betType = classifyBetType(fixtureEvent);
+
+  const placed =
+    typeof parsePlacedDate === "function"
+      ? parsePlacedDate(text)
+      : { raw: "", dateOnly: "" };
+
+  const status =
+    detectCircaStatus(text) ||
+    (typeof detectStatus === "function" ? detectStatus(text) : "");
+
+  const win =
+    status === "Won"
+      ? "Y"
+      : status === "Lost"
+      ? "N"
+      : "";
+
+  payout =
+    status === "Lost"
+      ? "0.00"
+      : payout || extractCircaPayout(text);
+
+  const betId =
+    extractCircaBetId(text) ||
+    (typeof extractBetId === "function" ? extractBetId(text) : "");
+
+  const betDate = placed.dateOnly || getDateFromSourceFileName(sourceFileName);
+
+  const row = {
+    eventDate: betDate,
+    betDate,
+    bookmaker: "Circa",
+    sportLeague: "", // let your global detection handle this
+    selection: selection || fixtureEvent,
+    betType,
+    fixtureEvent,
+    stake,
+    oddsUS: odds,
+    oddsSource: "OCR",
+    oddsMissingReason: odds ? "" : "missing",
+    live: "N",
+    bonusBet: "N",
+    win,
+    marketDetail: fixtureEvent,
+    payout,
+    toWin,
+    rawPlacedDate: placed.raw || "",
+    status,
+    parseWarning: [
+      selection ? "" : "circa_selection_missing",
+      !status || status === "Open" ? "circa_result_needs_review" : "",
+      !stake ? "circa_stake_missing" : "",
+    ]
+      .filter(Boolean)
+      .join(" | "),
+    duplicateWarning: "",
+    sourceFileName,
+    sourceText: originalText || cleaned,
+    sourceImageUrl: "",
+    reviewNotes: "",
+    betId,
+    accountOwner: "Me",
+    betSourceTag: "",
+    impliedProbability: "",
+    confidenceFlag: selection && odds ? "Medium" : "Low",
+    likelyParserIssue: selection ? "N" : "Y",
+    reviewLater: selection && status && status !== "Open" && stake ? "N" : "Y",
+    duplicateIgnored: "N",
+    reviewResolved: "N",
+  };
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 const SPORTSBOOK_OPTIONS = [
   "Auto",
   "DraftKings",
@@ -31,9 +33,105 @@ export default function ImportPanel({
   importMode = "append",
   setImportMode,
   defaultCollapsed = true,
+  ladderHelperEvents = [],
 }) {
+  const safeLadderEvents = Array.isArray(ladderHelperEvents) ? ladderHelperEvents : [];
+  const defaultBetMgmLadderEvent = safeLadderEvents[0]?.eventName || "";
+  const [betMgmLadderEvent, setBetMgmLadderEvent] = useState("");
+  const [betMgmThresholds, setBetMgmThresholds] = useState({
+    player_points: "",
+    player_assists: "",
+    player_rebounds: "",
+    player_threes: "",
+  });
+  const [betMgmComboLines, setBetMgmComboLines] = useState([
+    { marketType: "player_pra", threshold: "" },
+  ]);
+
+  const resolvedBetMgmLadderEvent = betMgmLadderEvent || defaultBetMgmLadderEvent;
+
+  function updateBetMgmThreshold(marketType, threshold) {
+    setBetMgmThresholds((prev) => ({
+      ...prev,
+      [marketType]: threshold,
+    }));
+  }
+
+  function updateBetMgmComboLine(index, patch) {
+    setBetMgmComboLines((prev) =>
+      prev.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, ...patch } : line
+      )
+    );
+  }
+
+  function addBetMgmComboLine() {
+    setBetMgmComboLines((prev) => [
+      ...prev,
+      { marketType: "player_points_rebounds", threshold: "" },
+    ]);
+  }
+
+  function buildBetMgmThresholdConfigLines() {
+    const event = String(resolvedBetMgmLadderEvent || "").trim();
+
+    if (!event) {
+      window.alert("Choose an event before adding BetMGM thresholds.");
+      return [];
+    }
+
+    const configRows = [];
+
+    for (const market of BETMGM_PRIMARY_LADDER_MARKETS) {
+      const threshold = String(betMgmThresholds[market.marketType] || "").trim();
+      if (!threshold) continue;
+
+      configRows.push(
+        `sport=WNBA | event=${event} | market=${market.marketType} | threshold=${threshold}`
+      );
+    }
+
+    for (const comboLine of betMgmComboLines) {
+      const marketType = String(comboLine.marketType || "").trim();
+      const threshold = String(comboLine.threshold || "").trim();
+
+      if (!marketType || !threshold) continue;
+
+      configRows.push(
+        `sport=WNBA | event=${event} | market=${marketType} | threshold=${threshold}`
+      );
+    }
+
+    if (!configRows.length) {
+      window.alert("Choose at least one threshold before adding BetMGM thresholds.");
+      return [];
+    }
+
+    return [
+      "BETMGM_LADDER_THRESHOLDS_START",
+      ...configRows,
+      "BETMGM_LADDER_THRESHOLDS_END",
+    ];
+  }
+
+  function insertBetMgmLadderThresholdConfig() {
+    const configLines = buildBetMgmThresholdConfigLines();
+    if (!configLines.length) return;
+
+    const current = String(rawText || "");
+    const withoutOldConfig = current
+      .replace(/\n?BETMGM_LADDER_THRESHOLDS_START[\s\S]*?BETMGM_LADDER_THRESHOLDS_END\n?/gi, "\n")
+      .trim();
+
+    const nextText = withoutOldConfig
+      ? `${configLines.join("\n")}\n\n${withoutOldConfig}`
+      : `${configLines.join("\n")}\n`;
+
+    setRawText(nextText);
+  }
+
   return (
-    <details style={sectionStyle} open={!defaultCollapsed}>
+    <details style={sectionStyle}>
       <summary style={summaryStyle}>
         <span>1. Import Odds</span>
         <span style={summaryMetaStyle}>
@@ -81,6 +179,114 @@ export default function ImportPanel({
             <option value="fair_odds">Fair odds / sharp source</option>
           </select>
         </label>
+      </div>
+
+      <div style={soccerImportReminderStyle}>
+        <div style={soccerImportReminderTitleStyle}>Soccer parlay import reminder</div>
+        <div style={soccerImportReminderTextStyle}>
+          Target full-time / Regular Time only. For BetMGM, manually open <strong>All</strong> or <strong>Totals</strong>, click <strong>Show More</strong> when available, then run the extension.
+        </div>
+        <div style={soccerImportReminderTextStyle}>
+          Prioritize: <strong>3-Way Moneyline / Match Result</strong>, <strong>Total Goals</strong>, <strong>Both Teams To Score</strong>, <strong>Double Chance</strong>, and <strong>Total Corners</strong>.
+        </div>
+        <div style={soccerImportReminderSkipStyle}>
+          Skip for now: 1st half / 2nd half, 00:00-15:00, team totals, team shots, player props, goalscorers, correct score, goal bands, and combo markets like BTTS + total goals.
+        </div>
+      </div>
+
+      <div style={betMgmLadderHelperStyle}>
+        <div style={betMgmLadderTitleStyle}>BetMGM WNBA Ladder Threshold Helper</div>
+        <div style={betMgmLadderSubtleStyle}>
+          Use this when BetMGM shows ladder-only WNBA props. Pick the event and active thresholds, then add the config to the top of the raw input before parsing.
+        </div>
+
+        <div style={betMgmLadderGridStyle}>
+          <label style={fieldStyle}>
+            <span style={fieldLabelStyle}>Event</span>
+            <select
+              value={resolvedBetMgmLadderEvent}
+              onChange={(event) => setBetMgmLadderEvent(event.target.value)}
+              style={inputStyle}
+            >
+              {safeLadderEvents.length ? (
+                safeLadderEvents.map((eventOption) => (
+                  <option key={eventOption.eventName} value={eventOption.eventName}>
+                    {eventOption.eventName}
+                  </option>
+                ))
+              ) : (
+                <option value="">Load FanDuel/Pinnacle/BetMGM main lines first</option>
+              )}
+            </select>
+          </label>
+
+          {BETMGM_PRIMARY_LADDER_MARKETS.map((market) => (
+            <label key={market.marketType} style={fieldStyle}>
+              <span style={fieldLabelStyle}>{market.label}</span>
+              <select
+                value={betMgmThresholds[market.marketType] || ""}
+                onChange={(event) => updateBetMgmThreshold(market.marketType, event.target.value)}
+                style={inputStyle}
+              >
+                <option value="">Skip</option>
+                {BETMGM_LADDER_THRESHOLD_OPTIONS.map((threshold) => (
+                  <option key={`${market.marketType}_${threshold}`} value={threshold}>
+                    {threshold}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+
+        <div style={comboHelperStyle}>
+          <div style={comboHelperTitleStyle}>Combos</div>
+
+          {betMgmComboLines.map((comboLine, index) => (
+            <div key={`betmgm_combo_${index}`} style={comboLineStyle}>
+              <label style={fieldStyle}>
+                <span style={fieldLabelStyle}>Combo market</span>
+                <select
+                  value={comboLine.marketType}
+                  onChange={(event) => updateBetMgmComboLine(index, { marketType: event.target.value })}
+                  style={inputStyle}
+                >
+                  {BETMGM_COMBO_LADDER_MARKETS.map((market) => (
+                    <option key={market.marketType} value={market.marketType}>
+                      {market.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={fieldLabelStyle}>Value</span>
+                <select
+                  value={comboLine.threshold}
+                  onChange={(event) => updateBetMgmComboLine(index, { threshold: event.target.value })}
+                  style={inputStyle}
+                >
+                  <option value="">Skip</option>
+                  {BETMGM_LADDER_THRESHOLD_OPTIONS.map((threshold) => (
+                    <option key={`combo_${index}_${threshold}`} value={threshold}>
+                      {threshold}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ))}
+
+          <div style={betMgmLadderButtonRowStyle}>
+            <button type="button" onClick={addBetMgmComboLine} style={secondaryButtonStyle}>
+              Add another combo line
+            </button>
+
+            <button type="button" onClick={insertBetMgmLadderThresholdConfig} style={primaryActionButtonStyle}>
+              Add thresholds
+            </button>
+          </div>
+        </div>
       </div>
 
       <textarea
@@ -172,6 +378,22 @@ export default function ImportPanel({
     </details>
   );
 }
+
+const BETMGM_PRIMARY_LADDER_MARKETS = [
+  { marketType: "player_points", label: "Points" },
+  { marketType: "player_assists", label: "Assists" },
+  { marketType: "player_rebounds", label: "Rebounds" },
+  { marketType: "player_threes", label: "3-Pointers" },
+];
+
+const BETMGM_COMBO_LADDER_MARKETS = [
+  { marketType: "player_pra", label: "Points + Rebounds + Assists" },
+  { marketType: "player_points_rebounds", label: "Points + Rebounds" },
+  { marketType: "player_points_assists", label: "Points + Assists" },
+  { marketType: "player_rebounds_assists", label: "Rebounds + Assists" },
+];
+
+const BETMGM_LADDER_THRESHOLD_OPTIONS = Array.from({ length: 40 }, (_, index) => `${index + 1}+`);
 
 const sectionStyle = {
   background: "#f0fdf4",
@@ -336,4 +558,97 @@ const pendingActionRowStyle = {
   gap: 10,
   flexWrap: "wrap",
   alignItems: "center",
+};
+
+const soccerImportReminderStyle = {
+  marginTop: 12,
+  marginBottom: 12,
+  padding: 12,
+  borderRadius: 10,
+  background: "#eff6ff",
+  border: "1px solid #93c5fd",
+};
+
+const soccerImportReminderTitleStyle = {
+  fontWeight: 900,
+  color: "#1d4ed8",
+  marginBottom: 6,
+};
+
+const soccerImportReminderTextStyle = {
+  fontSize: 12,
+  color: "#1e3a8a",
+  fontWeight: 700,
+  lineHeight: 1.45,
+  marginBottom: 6,
+};
+
+const soccerImportReminderSkipStyle = {
+  fontSize: 12,
+  color: "#475569",
+  fontWeight: 700,
+  lineHeight: 1.45,
+};
+
+const betMgmLadderHelperStyle = {
+  marginTop: 12,
+  marginBottom: 12,
+  padding: 12,
+  borderRadius: 10,
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+};
+
+const betMgmLadderTitleStyle = {
+  fontWeight: 900,
+  color: "#7c2d12",
+  marginBottom: 4,
+};
+
+const betMgmLadderSubtleStyle = {
+  fontSize: 12,
+  color: "#9a3412",
+  fontWeight: 700,
+  marginBottom: 10,
+};
+
+const betMgmLadderGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 10,
+  alignItems: "end",
+};
+
+const comboHelperStyle = {
+  marginTop: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const comboHelperTitleStyle = {
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#7c2d12",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
+const comboLineStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 10,
+};
+
+const betMgmLadderButtonRowStyle = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const primaryActionButtonStyle = {
+  ...secondaryButtonStyle,
+  background: "#7c2d12",
+  borderColor: "#7c2d12",
+  color: "white",
 };

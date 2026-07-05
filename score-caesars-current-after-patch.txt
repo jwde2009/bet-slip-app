@@ -1,0 +1,1642 @@
+﻿
+
+===== app/utils/parseTheScore.js =====
+// app/utils/parseTheScore.js
+
+import { detectLeague } from "./detectLeague";
+import {
+  detectOddsMissingReason,
+  extractBestOdds,
+  extractPayouts,
+} from "./oddsHelpers";
+
+function clean(value = "") {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/[|]+/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanLine(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getLines(text = "") {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => cleanLine(line))
+    .filter(Boolean);
+}
+
+function repairCommonOcrPlayerNoise(text = "") {
+  return cleanLine(text)
+    .replace(/\b0ver\b/gi, "Over")
+    .replace(/\bUnd3r\b/gi, "Under")
+    .replace(/\b0\b/g, "O")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function isLikelyUiNoise(line = "") {
+  const s = cleanLine(line);
+  if (!s) return true;
+
+  return (
+    /^(home|my bets|live|search|share|betslip|open|settled)$/i.test(s) ||
+    /^(straight|parlay|teaser)$/i.test(s) ||
+    /^(quick deposit|reward available|keep picks in betslip)$/i.test(s) ||
+    /^id:\s*[a-z0-9]+$/i.test(s) ||
+    /^placed:/i.test(s) ||
+    /^bet to win\b/i.test(s) ||
+    /^bonus bet to win\b/i.test(s) ||
+    /^credits to win\b/i.test(s) ||
+    /^[xÃ—]$/i.test(s) ||
+    /^[+-]?\d{2,5}$/.test(s) ||
+    /^\$?\d+(?:\.\d{1,2})?$/.test(s)
+  );
+}
+
+function isLikelyFixtureLine(line = "") {
+  const s = cleanLine(line);
+  if (!s || isLikelyUiNoise(s)) return false;
+  if (/\d/.test(s)) return false;
+
+  return (
+    /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s*@\s*[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\b/.test(s) ||
+    /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s+vs\.?\s+[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\b/i.test(s)
+  );
+}
+
+function normalizeFixtureLine(line = "") {
+  const s = cleanLine(line)
+    .replace(/\s+[xÃ—]\s*$/i, "")
+    .replace(/\bToday\b.*$/i, "")
+    .trim();
+    if (!/[A-Za-z]{3,}/.test(s)) return "";
+    if (/\d/.test(s)) return "";
+
+  let m = s.match(/\b(.+?)\s*@\s*(.+?)\b/i);
+  if (m) return `${cleanLine(m[1])} @ ${cleanLine(m[2])}`;
+
+  m = s.match(/\b(.+?)\s+vs\.?\s+(.+?)\b/i);
+  if (m) return `${cleanLine(m[1])} @ ${cleanLine(m[2])}`;
+
+  return "";
+}
+
+function isLikelySelectionLine(line = "") {
+  const s = cleanLine(line);
+  if (!s || isLikelyUiNoise(s)) return false;
+
+  return (
+    /\b(over|under)\b/i.test(s) ||
+    /\b\d+\+\b/.test(s) ||
+    /\bmoneyline\b/i.test(s) ||
+    /\bgame spread\b/i.test(s) ||
+    /\b(points|rebounds|assists|pra|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases)\b/i.test(s)
+  );
+}
+
+function scoreSelectionLine(line = "") {
+  const s = cleanLine(line);
+  let score = 0;
+
+  if (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(s)) score += 2;
+  if (/\b(over|under)\b/i.test(s)) score += 3;
+  if (/\b\d+(?:\.\d+)?\b/.test(s)) score += 2;
+  if (/\b[+-]\d{2,5}\b|\bEven\b/i.test(s)) score += 2;
+
+  if (
+    /\b(points|rebounds|assists|pra|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases|moneyline|game spread)\b/i.test(s)
+  ) {
+    score += 3;
+  }
+
+  if (/^[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+){0,4}\b/.test(s)) {
+    score += 1;
+  }
+
+  if (/\bplaced:|bet to win|credits to win|quick deposit|my bets|share\b/i.test(s)) {
+    score -= 5;
+  }
+
+  return score;
+}
+
+function findBestFixtureLine(lines = []) {
+  const fixtures = lines
+    .filter(isLikelyFixtureLine)
+    .map((line) => ({
+      line,
+      fixture: normalizeFixtureLine(line),
+      score: /\bvs\.?\b/i.test(line) ? 2 : 3,
+    }))
+    .filter((x) => x.fixture);
+
+  fixtures.sort((a, b) => b.score - a.score || a.line.length - b.line.length);
+  return fixtures[0]?.fixture || "";
+}
+
+function findBestSelectionChunk(lines = []) {
+  const scored = lines
+    .map((line, idx) => ({ idx, line: cleanLine(line), score: scoreSelectionLine(line) }))
+    .filter((x) => x.score >= 2);
+
+  if (!scored.length) return "";
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const next = lines[best.idx + 1] ? cleanLine(lines[best.idx + 1]) : "";
+  const prev = lines[best.idx - 1] ? cleanLine(lines[best.idx - 1]) : "";
+
+  // Sometimes player + market are split across adjacent lines.
+  const candidates = [
+  `${best.line} ${next}`.trim(),
+  `${prev} ${best.line}`.trim(),
+  `${prev} ${best.line} ${next}`.trim(),
+  `${next} ${best.line}`.trim(),
+  best.line,
+];
+
+  candidates.sort((a, b) => b.length - a.length);
+  return candidates[0];
+}
+
+function stripNoise(text = "") {
+  return clean(text)
+    .replace(/\bQuick Deposit\b/gi, " ")
+    .replace(/\bKeep picks in betslip\b/gi, " ")
+    .replace(/\bHome My Bets Live Search\b/gi, " ")
+    .replace(/\bShare\b/gi, " ")
+    .replace(/\bBetslip\b/gi, " ")
+    .replace(/\bSTRAIGHT PARLAY TEASER\b/gi, " ")
+    .replace(/\bReward Available\b/gi, " ")
+    .replace(/\bBonus Bets?\b/gi, " ")
+    .replace(/\bCredits To Win\b/gi, " ")
+    .replace(/\bCredits:\s*\d+(?:\.\d+)?\b/gi, " ")
+    .replace(/\bOpen Settled\b/gi, " ")
+    .replace(/\bOPEN SETTLED\b/gi, " ")
+    .replace(/\bMy Bets\b/gi, " ")
+    .replace(/\bLive Search\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractBetId(text = "") {
+  const m = text.match(/\bID:\s*([A-Za-z0-9]+)/i);
+  return m ? m[1] : "";
+}
+
+function extractBetDate(text = "", parsePlacedDate) {
+  if (typeof parsePlacedDate === "function") {
+    const placed = parsePlacedDate(text);
+    if (placed?.dateOnly) return { raw: placed.raw || "", dateOnly: placed.dateOnly };
+  }
+
+  const m = text.match(/\bPlaced:\s*([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}[^|]*)/i);
+  return {
+    raw: m ? m[1].trim() : "",
+    dateOnly: "",
+  };
+}
+
+function extractStake(text = "") {
+  const candidates = [
+    text.match(/\bBet To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+    text.match(/\bBonus Bet To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+    text.match(/\bCredits To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+
+    text.match(/\bWager\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+    text.match(/\bStake\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+    text.match(/\bRisk\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+    text.match(/\bBet\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+
+    text.match(/\$?([\d,]+(?:\.\d{1,2})?)\s+(?:Bet To Win|Bonus Bet To Win|Credits To Win)\b/i),
+  ];
+
+  for (const m of candidates) {
+    if (m) return String(m[1] || "").replace(/,/g, "");
+  }
+
+  return "";
+}
+
+
+function extractToWin(text = "") {
+  const candidates = [
+    text.match(/\bBet To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+    text.match(/\bBonus Bet To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+    text.match(/\bCredits To Win\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\b/i),
+
+    text.match(/\bTo Win\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+    text.match(/\bWin\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+    text.match(/\bProfit\s*:?\s*\$?([\d,]+(?:\.\d{1,2})?)/i),
+  ];
+
+  for (const m of candidates) {
+    if (m) return String(m[2] || m[1] || "").replace(/,/g, "");
+  }
+
+  return "";
+}
+
+function extractSelectionAndMarket(text = "") {
+  const statPattern =
+    "(?:Points|Player Total Points|Total Points|Rebounds|Player Total Rebounds|Total Rebounds|Assists|Player Total Assists|Total Assists|Points, Rebounds And Assists|Pts \\+ Reb \\+ Ast|PRA|3-Pointers Made|Total 3-Pointers Made|Three Pointers Made|Hits|Total Hits|RBIs|Total RBIs|Home Runs|Total Home Runs|Shots on Goal|Total Shots on Goal|Saves|Total Saves|Goals|Total Goals|Points/Assists|Total Bases)";
+
+  const patterns = [
+    new RegExp(`\\b(Over|Under|\\d\\+)\\s*(\\d+(?:\\.\\d+)?)?\\s*[vV]?\\s*([+-]\\d{2,5}|Even)\\s+([A-Z][A-Za-z.'\\-]+(?:\\s+[A-Z][A-Za-z.'\\-]+){0,3})\\s+(${statPattern})\\b`, "i"),
+    new RegExp(`\\b([A-Z][A-Za-z.'\\-]+(?:\\s+[A-Z][A-Za-z.'\\-]+){0,3})\\s+(${statPattern})\\s+(Over|Under|\\d\\+)\\s*(\\d+(?:\\.\\d+)?)?\\s*[vV]?\\s*([+-]\\d{2,5}|Even)\\b`, "i"),
+    /\b([A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+){0,3})\s+(Moneyline|Game Spread)\s+([+-]\d{2,5}|Even)\b/i,
+  ];
+
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (!m) continue;
+
+    if (m.length >= 6 && /Moneyline|Game Spread/i.test(m[2] || "")) {
+      const playerOrTeam = cleanLine(m[1]);
+      const marketDetail = cleanLine(m[2]);
+      const oddsUS = m[3] === "Even" ? "+100" : m[3];
+      return {
+        rawSelection: playerOrTeam,
+        marketDetail,
+        oddsUS,
+      };
+    }
+
+    if (/Over|Under|\d\+/i.test(m[1])) {
+      const side = cleanLine(m[1]);
+      const line = cleanLine(m[2] || "");
+      const player = cleanLine(m[4]);
+      const stat = cleanLine(m[5]);
+      const oddsUS = m[3] === "Even" ? "+100" : m[3];
+
+      return {
+        rawSelection: `${side} ${line} ${player} ${stat}`.trim(),
+        marketDetail: stat,
+        oddsUS,
+      };
+    } else {
+      const player = cleanLine(m[1]);
+      const stat = cleanLine(m[2]);
+      const side = cleanLine(m[3]);
+      const line = cleanLine(m[4] || "");
+      const oddsUS = m[5] === "Even" ? "+100" : m[5];
+
+      return {
+        rawSelection: `${side} ${line} ${player} ${stat}`.trim(),
+        marketDetail: stat,
+        oddsUS,
+      };
+    }
+  }
+
+  const genericOU = text.match(/\b(Over|Under)\s+(\d+(?:\.\d+)?)\s*[vV]?\s*([+-]\d{2,5}|Even)\b/i);
+  if (genericOU) {
+    return {
+      rawSelection: `${genericOU[1]} ${genericOU[2]}`,
+      marketDetail: "",
+      oddsUS: genericOU[3] === "Even" ? "+100" : genericOU[3],
+    };
+  }
+
+  const moneyline = text.match(/\b([A-Z][A-Za-z.'& -]+?)\s+Moneyline\b.*?\b([+-]\d{2,5}|Even)\b/i);
+  if (moneyline) {
+    return {
+      rawSelection: cleanLine(moneyline[1]),
+      marketDetail: "Moneyline",
+      oddsUS: moneyline[2] === "Even" ? "+100" : moneyline[2],
+    };
+  }
+
+  return {
+    rawSelection: "",
+    marketDetail: "",
+    oddsUS: "",
+  };
+}
+
+function classifyBetType(selection = "", marketDetail = "", fixtureEvent = "") {
+  const text = clean(`${selection} ${marketDetail} ${fixtureEvent}`).toLowerCase();
+
+  if (/moneyline/.test(text)) return "moneyline";
+  if (/spread/.test(text)) return "spread";
+  if (/over|under|total|o\/u|saves|hits|rbis|rebounds|assists|points|3-pointers|threes|shots on goal|goals|total bases/.test(text)) {
+    if (
+      /points|rebounds|assists|hits|rbis|home runs|3-pointers|threes|shots on goal|saves|goals|total bases|pra/.test(text)
+    ) {
+      return "player prop";
+    }
+    return "total";
+  }
+
+  return "straight";
+}
+
+export function parseTheScoreSlip({
+  cleaned,
+  originalText,
+  sourceFileName,
+  shared,
+  debug = true,
+}) {
+  const {
+    emptyParsed,
+    cleanTextLine,
+    parsePlacedDate,
+    inferEventDate,
+    buildPlayerPropSelection,
+    detectStatus,
+    detectLive,
+    enrichRow,
+  } = shared;
+
+  const cleanedForLines = cleaned
+  .replace(/\s-\s/g, " ")
+  .replace(/\r/g, "\n");
+
+  const cleanedAdjusted = cleanedForLines
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const betId = extractBetId(cleanedAdjusted);
+  const placed = extractBetDate(cleanedAdjusted, parsePlacedDate);
+
+  const text = stripNoise(cleanedAdjusted);
+const lines = getLines(cleanedForLines).filter((line) => !isLikelyUiNoise(line));
+
+let finalFixture = findBestFixtureLine(lines);
+
+if (finalFixture) {
+  const parts = finalFixture.split("@").map((s) => s.trim());
+
+  if (parts.length !== 2 || parts.some((p) => p.length < 3)) {
+    finalFixture = "";
+  }
+}
+
+const selectionChunk = findBestSelectionChunk(lines);
+
+let finalSelectionChunk = selectionChunk;
+
+if (!finalSelectionChunk) {
+  const fallback = lines.find((line) =>
+  /\b(over|under|moneyline|spread|total|points|rebounds|assists|3-pointers|three pointers|hits|rbis|home runs|shots on goal|saves|goals|total bases)\b/i.test(line)
+  ||
+  /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(line)
+);
+
+  finalSelectionChunk = fallback || "";
+}
+
+const extracted = extractSelectionAndMarket(
+  repairCommonOcrPlayerNoise(finalSelectionChunk || text)
+);
+
+let rawSelection = cleanTextLine(extracted.rawSelection || "");
+let marketDetail = cleanTextLine(extracted.marketDetail || "");
+
+if (!rawSelection && finalFixture) {
+  const [teamA, teamB] = finalFixture.split("@").map((s) => s.trim());
+
+  if (teamA && teamB) {
+    const matchingLine = lines.find((line) => {
+      const lower = line.toLowerCase();
+      const aKey = teamA.toLowerCase().split(" ")[0];
+      const bKey = teamB.toLowerCase().split(" ")[0];
+      return lower.includes(aKey) || lower.includes(bKey);
+    });
+
+    if (matchingLine) {
+      const lowerLine = matchingLine.toLowerCase();
+      const aKey = teamA.toLowerCase().split(" ")[0];
+      const bKey = teamB.toLowerCase().split(" ")[0];
+
+      const hasA = lowerLine.includes(aKey);
+      const hasB = lowerLine.includes(bKey);
+
+      if (hasA && !hasB) rawSelection = teamA;
+      else if (hasB && !hasA) rawSelection = teamB;
+      else rawSelection = teamA;
+    } else {
+      rawSelection = teamA;
+    }
+
+    if (/[+-]\d{2,5}/.test(text) && !/over|under/i.test(text)) {
+      marketDetail = "Game Spread";
+    } else if (/over|under|total/i.test(text)) {
+      marketDetail = "Total";
+    } else {
+      marketDetail = "Moneyline";
+    }
+  }
+}
+
+if (!rawSelection && finalSelectionChunk) {
+  rawSelection = finalSelectionChunk.split(" ")[0];
+}
+
+  let oddsUS = cleanTextLine(extracted.oddsUS || "");
+
+  const financialText = cleanedAdjusted;
+
+  const payoutInfo = extractPayouts(financialText);
+  const payout = payoutInfo.payout || "";
+  const toWin = extractToWin(financialText) || payoutInfo.toWin || "";
+  const stake = extractStake(financialText) || "";
+
+  const betType = classifyBetType(rawSelection, marketDetail, finalFixture);
+
+  let selection =
+    betType === "player prop"
+      ? buildPlayerPropSelection(rawSelection, marketDetail)
+      : rawSelection;
+
+  selection = cleanTextLine(selection)
+    .replace(/\bToday\b.*$/i, "")
+    .replace(/\bBetslip\b.*$/i, "")
+    .trim();
+
+  const eventDate = inferEventDate({
+    cleaned: text,
+    fixtureEvent: finalFixture,
+    betDate: placed.dateOnly || "",
+  });
+
+  const sportLeague = detectLeague({
+    cleaned: text,
+    marketDetail,
+    fixtureEvent: finalFixture,
+    selection,
+    isParlay: false,
+  });
+
+  const status =
+    /\bOpen\b|\bAccepted\b/i.test(cleanedAdjusted) && !/\bSettled\b|\bWon\b|\bLost\b/i.test(cleanedAdjusted)
+      ? "Open"
+      : detectStatus(cleanedAdjusted, cleanedAdjusted);
+
+  const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
+  const bonusBet =
+    /\bbonus bet\b/i.test(cleanedAdjusted) ||
+    /\bpenn play\b/i.test(cleanedAdjusted) ||
+    /\bpenn play credits?\b/i.test(cleanedAdjusted) ||
+    /\bcredits?:/i.test(cleanedAdjusted) ||
+    /\bcredits to win\b/i.test(cleanedAdjusted)
+      ? "Y"
+      : "N";
+  let oddsSource = oddsUS ? "OCR" : "";
+
+  const bestOdds = extractBestOdds(text, rawSelection, marketDetail);
+
+  if (!oddsUS) {
+    if (typeof bestOdds === "string") {
+      oddsUS = bestOdds;
+      oddsSource = oddsUS ? "Derived" : "";
+    } else if (bestOdds && typeof bestOdds === "object") {
+      oddsUS = bestOdds.oddsUS || "";
+      oddsSource = bestOdds.oddsSource || (oddsUS ? "Derived" : "");
+    }
+  }
+
+  const oddsMissingReason = detectOddsMissingReason({
+    oddsUS,
+    stake,
+    payout,
+    toWin,
+    screenType: "receipt",
+  });
+
+  const additionalWarnings = [];
+  if (finalSelectionChunk && !rawSelection) additionalWarnings.push("thescore_selection_unparsed");
+  if (finalFixture && !/@/.test(finalFixture)) additionalWarnings.push("thescore_fixture_shape_suspect");
+  if (rawSelection && /today|share|betslip|my bets/i.test(rawSelection)) additionalWarnings.push("thescore_selection_contains_ui_noise");
+  if (!betId) additionalWarnings.push("thescore_bet_id_missing");
+  if (!selection) additionalWarnings.push("thescore_selection_missing");
+  if (!finalFixture) additionalWarnings.push("thescore_fixture_missing");
+  if (!oddsUS) additionalWarnings.push("receipt_detected_but_odds_missing");
+  if (!payout && !toWin) additionalWarnings.push("receipt_detected_but_payout_missing");
+  if (!stake) additionalWarnings.push("stake_missing");
+  if (!placed.dateOnly) additionalWarnings.push("no_bet_date_detected");
+  if (!sportLeague) additionalWarnings.push("no_league_detected");
+
+  const parseWarning = additionalWarnings.join(" | ");
+
+  return enrichRow({
+    ...emptyParsed,
+    eventDate,
+    betDate: placed.dateOnly || "",
+    bookmaker: "theScore",
+    sportLeague,
+    selection,
+    betType,
+    fixtureEvent: finalFixture,
+    stake,
+    oddsUS,
+    oddsSource,
+    oddsMissingReason,
+    live: detectLive(text),
+    bonusBet,
+    win,
+    marketDetail,
+    payout,
+    toWin,
+    rawPlacedDate: placed.raw || "",
+    status,
+    parseWarning,
+    sourceFileName,
+    sourceText: originalText,
+    reviewNotes: "",
+    betId,
+  });
+}
+
+
+===== app/utils/parseCaesars.js =====
+import { detectLeague } from "./detectLeague";
+import {
+  americanOddsFromStakeAndProfit,
+  detectOddsMissingReason,
+  extractBestOdds,
+} from "./oddsHelpers";
+
+function toDateOnly(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value.dateOnly) return value.dateOnly;
+  return "";
+}
+
+function formatDateToMMDDYYYY(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function parseDateFromScreenshotFileName(sourceFileName = "") {
+  const s = String(sourceFileName || "");
+
+  let m = s.match(/Screenshot_(\d{4})(\d{2})(\d{2})-\d{6}/i);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  m = s.match(/(\d{4})(\d{2})(\d{2})[-_]\d{6}/);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  return "";
+}
+
+function parseCaesarsBetDate(text = "") {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+
+  let m = s.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i
+  );
+  if (m) {
+    const d = new Date(m[0]);
+    const formatted = formatDateToMMDDYYYY(d);
+    if (formatted) return formatted;
+  }
+
+  m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (m) {
+    const mm = String(m[1]).padStart(2, "0");
+    const dd = String(m[2]).padStart(2, "0");
+    const yyyy = m[3];
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+
+  return "";
+}
+
+function getMatch(text, regex, group = 1) {
+  const m = String(text || "").match(regex);
+  return m ? String(m[group] || "").trim() : "";
+}
+
+function toMoneyNumber(value) {
+  if (!value) return "";
+  const cleaned = String(value).replace(/[^0-9.]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num.toFixed(2) : "";
+}
+
+function cleanLine(line = "") {
+  return String(line).replace(/[|]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeCaesarsText(text = "") {
+  return String(text)
+    .replace(/\$\s+/g, "$")
+    .replace(/\+\s+(\d{2,5})\b/g, "+$1")
+    .replace(/-\s+(\d{2,5})\b/g, "-$1");
+}
+
+function buildFallbackRowId({
+  sourceFileName = "",
+  betId = "",
+  fixture = "",
+  selection = "",
+  stake = "",
+  odds = "",
+}) {
+  return [sourceFileName, betId, fixture, selection, stake, odds]
+    .filter(Boolean)
+    .join("|");
+}
+
+function splitTrailingOdds(text = "") {
+  const s = cleanLine(text);
+
+  let m = s.match(/^(.*?)(\s[+-]\d{3,5})\)?\s*$/);
+  if (m) {
+    return {
+      text: m[1].trim(),
+      odds: m[2].trim(),
+    };
+  }
+
+  return { text: s, odds: "" };
+}
+
+function cleanCaesarsSelection(text = "") {
+  let s = cleanLine(text);
+
+  s = s.replace(/^[^A-Za-z0-9]+/, "");
+  s = s.replace(/([A-Za-z])([+-]\d)/g, "$1 $2");
+  s = s.replace(/\s+[+-]\d{2,5}(?=\s|$)/g, "");
+
+  s = s.replace(/\s[+-]\d{2,5}\)?\s*$/i, "");
+  s = s.replace(/\s["â€œâ€']?\d{3}\)?\s*$/i, "");
+  s = s.replace(/\s+-\s+(Over|Under)\b/i, " $1");
+  s = s.replace(/^\d+\s+(?=[A-Z][a-z])/, "");
+  s = s.replace(/[\[\(\{].*?[\]\)\}]/g, "");
+  s = s.replace(/["'=~Â®Â©]/g, "");
+
+  // remove short trailing OCR junk like M12, A, Ml2, +1, -10
+  s = s.replace(/\s+[A-Za-z]{1,3}\d{1,3}\s*$/i, "");
+  s = s.replace(/\s+[A-Za-z]\s*$/i, "");
+  s = s.replace(/\s+[+-]\d{1,2}\s*$/i, "");
+
+  s = s.replace(/\s{2,}/g, " ").trim();
+
+  return s;
+}
+
+function isLikelyEventLine(line = "") {
+  if (!line || line.length < 8) return false;
+
+  const cleaned = cleanLine(line);
+  const lower = cleaned.toLowerCase();
+
+  // âŒ reject betting/financial lines
+  if (
+    /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp)\b/i.test(cleaned)
+  ) {
+    return false;
+  }
+
+  // âŒ reject player prop / market lines
+  if (
+    /-/.test(cleaned) &&
+    /\b(total|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(cleaned)
+  ) {
+    return false;
+  }
+
+  // âŒ reject currency lines
+  if (/\$/.test(cleaned)) return false;
+
+  // âŒ reject weak OCR (not enough real words)
+  if (!/[a-z]{3,}/i.test(cleaned)) return false;
+
+  // âŒ reject numeric-heavy junk
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount >= 4 && !/\s@\s/.test(cleaned)) return false;
+
+  // âŒ reject pure symbols
+  if (/^[^a-z0-9]+$/i.test(cleaned)) return false;
+
+  // âœ… must look like matchup
+  const hasMatchupShape =
+    /\s@\s/.test(cleaned) ||
+    /\bvs\.?\b/i.test(cleaned) ||
+    /\bv\b/i.test(cleaned) ||
+    /\bat\b/i.test(cleaned);
+
+  if (!hasMatchupShape) return false;
+
+  // âŒ final safeguard: reject very short sides
+  const parts = cleaned.split(/@|vs\.?|v|at/i);
+  if (parts.length >= 2) {
+    const [left, right] = parts.map((p) => p.trim());
+    if (left.length < 3 || right.length < 3) return false;
+  }
+
+  return true;
+}
+
+function cleanEventLine(line = "") {
+  return cleanLine(line)
+    .replace(/\b\d{1,2}:\d{2}\s*(AM|PM)\s*(ET|CT|MT|PT)?\b/gi, "")
+    .replace(/\b(today|tomorrow)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractCaesarsFinancials(cleaned = "", rawSelection = "") {
+  const text = normalizeCaesarsText(cleaned);
+  const compact = text.replace(/\s+/g, " ");
+
+  const stake =
+    toMoneyNumber(getMatch(text, /\b(wager|stake|risk)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)) ||
+    toMoneyNumber(getMatch(text, /\b(amount wagered|bet amount|total stake|wagered|risked)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)) ||
+    toMoneyNumber(getMatch(text, /\$([0-9]+(?:\.[0-9]{1,2})?)\s*(risk|stake|wager|wagered|risked)\b/i, 1)) ||
+    toMoneyNumber(getMatch(compact, /\bWager\s+\$?([0-9]+(?:\.[0-9]{1,2})?)\b/i));
+
+  const toWin =
+    toMoneyNumber(
+      getMatch(text, /\bto win\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bwin\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bprofit\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    );
+
+  const payout =
+    toMoneyNumber(
+      getMatch(text, /\b(total payout|payout)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\b(total return|return|returns|returned|paid)\s*:?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i, 2)
+    ) ||
+    toMoneyNumber(
+      getMatch(text, /\bPaid\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)
+    );
+
+  const bestOdds = extractBestOdds({
+    receiptText: text,
+    rawSelection,
+    payout,
+    stake,
+  });
+
+  const odds =
+    (bestOdds && typeof bestOdds === "object" ? bestOdds.oddsUS : bestOdds) ||
+    getMatch(text, /\bodds\s*:?\s*([+-]\d{3,5})\b/i) ||
+    getMatch(text, /\b([+-]\d{3,5})\b/i);
+
+  return { stake, toWin, payout, odds };
+}
+
+function inferBetType(selection = "", marketDetail = "") {
+  const s = `${selection} ${marketDetail}`.toLowerCase();
+
+  const hasOverUnder = /\b(over|under)\b/.test(s);
+  const hasLine = /[+-]\d+(\.\d+)?/.test(selection);
+  const hasNamedSelection = /\b[a-z][a-z'.-]+\s+[a-z][a-z'.-]+\b/i.test(selection);
+
+  const hasPropWords =
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|by ko\/tko|by points)\b/.test(
+      s
+    ) ||
+    /^\d+\+\s+(made threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals)\b/i.test(
+      selection
+    ) ||
+    /^player\s+\d+\+/i.test(selection);
+
+  if ((hasOverUnder && (hasNamedSelection || hasPropWords)) || hasPropWords) {
+    return "player prop";
+  }
+
+  if (hasOverUnder) return "total";
+  if (hasLine) return "spread";
+  if (selection) return "moneyline";
+
+  return "";
+}
+
+function scoreSelectionLine(line = "") {
+  const l = line.toLowerCase();
+  let score = 0;
+
+  if (!line || line.length < 2) return -100;
+
+  if (/\b(over|under)\b/.test(l)) score += 4;
+  if (
+    /\b(player|made threes|threes|shots on goal|assists|rebounds|points|hits|rbis|home runs|strikeouts|touchdowns|goals|by ko\/tko|by points)\b/.test(
+      l
+    )
+  ) {
+    score += 5;
+  }
+  if (/[+-]\d+(\.\d+)?/.test(line)) score += 3;
+
+  if (/\$/.test(line)) score -= 5;
+  if (/\b(wager|risk|stake|odds|to win|total payout|payout|cash out)\b/.test(l)) {
+    score -= 5;
+  }
+  if (isLikelyEventLine(line)) score -= 4;
+
+  return score;
+}
+
+export function parseCaesarsSlip({
+  cleaned,
+  originalText,
+  sourceFileName = "",
+  sportsbook = "Caesars",
+  shared,
+  debug = false,
+}) {
+  const debugTrace = [];
+  const {
+    detectStatus,
+    detectLive,
+    extractBetId,
+    enrichRow,
+    parsePlacedDate,
+  } = shared || {};
+
+  const text = normalizeCaesarsText(cleaned);
+  const lines = text.split("\n").map(cleanLine).filter(Boolean);
+
+  const betId = typeof extractBetId === "function" ? extractBetId(text) : "";
+  let status = typeof detectStatus === "function" ? detectStatus(text) : "";
+
+  if (!status && /\bWon\b/i.test(text)) status = "Won";
+  if (!status && /\bLost\b/i.test(text)) status = "Lost";
+  if (!status && /\bCashed Out\b/i.test(text)) status = "Cashed Out";
+
+  const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
+  const liveFlag = typeof detectLive === "function" ? detectLive(text) : "N";
+
+  const parsedBetDate =
+    typeof parsePlacedDate === "function" ? parsePlacedDate(text) : "";
+  const betDate =
+    toDateOnly(parsedBetDate) ||
+    parseCaesarsBetDate(text) ||
+    parseDateFromScreenshotFileName(sourceFileName);
+
+  let fixture = "";
+let bestFixtureScore = -1;
+
+for (const line of lines) {
+  if (!isLikelyEventLine(line)) continue;
+
+  const cleaned = cleanEventLine(line);
+  let score = 0;
+
+  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 3) score += 2;
+
+  if (/\s@\s/.test(cleaned)) score += 3;
+  if (/\bvs\.?\b/i.test(cleaned)) score += 2;
+  if (/\bv\b/i.test(cleaned)) score += 1;
+  if (/\bat\b/i.test(cleaned)) score += 1;
+
+  if (cleaned.length < 15) score -= 2;
+
+  const digitCount = (cleaned.match(/\d/g) || []).length;
+  if (digitCount > 2) score -= 2;
+
+  if (score > bestFixtureScore) {
+    bestFixtureScore = score;
+    fixture = cleaned;
+  }
+}
+
+let usedFixtureFallback = false;
+
+if (!fixture) {
+  for (let i = 0; i < lines.length; i++) {
+    const cleaned = cleanEventLine(lines[i]);
+
+    const hasMatchupShape =
+      /\s@\s/.test(cleaned) ||
+      /\bvs\.?\b/i.test(cleaned) ||
+      /\bv\b/i.test(cleaned) ||
+      /\bat\b/i.test(cleaned);
+
+    if (!hasMatchupShape) continue;
+
+    const parts = cleaned.split(/@|vs\.?|v|at/i).map((p) => p.trim());
+    if (parts.length < 2) continue;
+
+    const [left, right] = parts;
+
+    if (!left || !right) continue;
+    if (left.length < 3 || right.length < 3) continue;
+    if (!/[a-z]{3,}/i.test(left) || !/[a-z]{3,}/i.test(right)) continue;
+
+    if (
+      /\b(wager|risk|stake|odds|to win|total payout|cash out|same game parlay|sgp|points|rebounds|assists|shots|goals|strikeouts|hits|rbis|home runs|3pt|three pointers)\b/i.test(
+        cleaned
+      )
+    ) {
+      continue;
+    }
+
+    fixture = cleaned;
+    usedFixtureFallback = true;
+    break;
+  }
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "fixture",
+    fixture,
+    bestFixtureScore,
+    usedFixtureFallback,
+  });
+}
+  let selectionCandidate = "";
+  let bestScore = -100;
+
+  for (const line of lines) {
+    const score = scoreSelectionLine(line);
+    if (score > bestScore) {
+      bestScore = score;
+      selectionCandidate = line;
+    }
+  }
+
+  if (bestScore < 2) {
+    selectionCandidate = "";
+  }
+  if (debug) {
+  debugTrace.push({
+    stage: "selection_candidate",
+    selectionCandidate,
+    bestScore,
+  });
+}
+
+  if (!selectionCandidate) {
+    const anchorIndex = lines.findIndex((line) =>
+      /\b(wager|risk|stake|odds|to win|total payout|payout)\b/i.test(line)
+    );
+
+    if (anchorIndex > 0) {
+      const candidate = cleanLine(lines[anchorIndex - 1]);
+      if (candidate && !isLikelyEventLine(candidate) && !/\$/.test(candidate)) {
+        selectionCandidate = candidate;
+      }
+    }
+  }
+if (debug) {
+  debugTrace.push({
+    stage: "selection_after_fallback",
+    selectionCandidate,
+  });
+}
+  const splitSelection = splitTrailingOdds(selectionCandidate);
+let selection = cleanCaesarsSelection(splitSelection.text || selectionCandidate);
+
+selection = selection
+  .replace(/[Â»â€º>]+$/g, "")
+  .replace(/\s+[+-]?\d{2,5}(\.\d+)?$/g, "")
+  .trim();
+
+if (debug) {
+  debugTrace.push({
+    stage: "selection_cleaned",
+    rawSelectionCandidate: selectionCandidate,
+    splitSelection,
+    cleanedSelection: selection,
+  });
+}
+
+const { stake, toWin, payout, odds } = extractCaesarsFinancials(
+  text,
+  selectionCandidate
+);
+
+let finalToWin = toWin;
+let finalPayout = payout;
+let payoutEstimated = false;
+let payoutMismatch = false;
+let calculatedToWin = "";
+let calculatedPayout = "";
+
+if (debug) {
+  debugTrace.push({
+    stage: "financials",
+    stake,
+    toWin,
+    payout,
+    odds,
+    calculatedToWin,
+    calculatedPayout,
+    payoutEstimated,
+    payoutMismatch,
+  });
+}
+
+let impliedOdds = splitSelection.odds || odds;
+if (!impliedOdds && stake && toWin) {
+  impliedOdds = americanOddsFromStakeAndProfit(Number(stake), Number(toWin)) || "";
+}
+
+if (stake && impliedOdds) {
+  const stakeNum = Number(stake);
+  const oddsNum = Number(impliedOdds);
+
+  if (Number.isFinite(stakeNum) && Number.isFinite(oddsNum) && stakeNum > 0) {
+    if (oddsNum > 0) {
+      calculatedToWin = ((stakeNum * oddsNum) / 100).toFixed(2);
+    } else if (oddsNum < 0) {
+      calculatedToWin = ((stakeNum * 100) / Math.abs(oddsNum)).toFixed(2);
+    }
+
+    if (calculatedToWin) {
+      calculatedPayout = (stakeNum + Number(calculatedToWin)).toFixed(2);
+    }
+  }
+}
+
+if (!finalToWin && calculatedToWin) {
+  finalToWin = calculatedToWin;
+  payoutEstimated = true;
+}
+
+if (!finalPayout && calculatedPayout) {
+  finalPayout = calculatedPayout;
+  payoutEstimated = true;
+}
+
+if (payout && calculatedPayout) {
+  const payoutNum = Number(payout);
+  const calcNum = Number(calculatedPayout);
+
+  if (
+    Number.isFinite(payoutNum) &&
+    Number.isFinite(calcNum) &&
+    Math.abs(payoutNum - calcNum) > 0.15
+  ) {
+    payoutMismatch = true;
+  }
+}
+
+if (debug) {
+  debugTrace.push({
+    stage: "implied_odds",
+    splitOdds: splitSelection.odds,
+    extractedOdds: odds,
+    finalImpliedOdds: impliedOdds,
+    calculatedToWin,
+    calculatedPayout,
+    finalToWin,
+    finalPayout,
+    payoutEstimated,
+    payoutMismatch,
+  });
+}
+
+let marketDetail = selection;
+
+if (/^(over|under)\b/i.test(selection) && fixture && !selection.includes("(")) {
+  selection = `${selection} (${fixture})`;
+  marketDetail = selection;
+}
+
+const betType = inferBetType(selection, marketDetail);
+const league = detectLeague(fixture, selection, marketDetail) || "";
+
+  const warnings = [];
+  if (!stake) warnings.push("stake_missing");
+  if (!finalPayout && !finalToWin) warnings.push("payout_missing");
+  if (!selection) warnings.push("selection_missing");
+  if (!fixture) warnings.push("fixture_missing");
+  if (!betDate) warnings.push("no_bet_date_detected");
+  if (payoutEstimated) warnings.push("payout_estimated");
+  if (payoutMismatch) warnings.push("payout_mismatch");
+
+  const oddsNote = impliedOdds
+    ? ""
+    : detectOddsMissingReason({
+        oddsUS: impliedOdds,
+        stake,
+        payout: finalPayout,
+        toWin: finalToWin,
+        screenType: "",
+      });
+
+  const fallbackId = buildFallbackRowId({
+    sourceFileName,
+    betId,
+    fixture,
+    selection,
+    stake,
+    odds: impliedOdds,
+  });
+
+  const baseRow =
+    shared?.emptyParsed && typeof shared.emptyParsed === "object"
+      ? { ...shared.emptyParsed, sourceFileName }
+      : {
+          sourceFileName,
+          id: fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
+        };
+
+  const row = {
+  ...baseRow,
+  id: baseRow.id || fallbackId || `caesars|${sourceFileName}|${Date.now()}`,
+  bookmaker: sportsbook,
+  betId,
+  eventDate: "",
+  betDate,
+  sportLeague: league,
+  selection,
+  betType,
+  betSourceTag: "",
+  fixtureEvent: fixture,
+  stake,
+  oddsUS: impliedOdds,
+  oddsMissingReason: oddsNote,
+  marketDetail,
+  payout: finalPayout,
+  toWin: finalToWin,
+  live: liveFlag === "Y" ? "Y" : "N",
+  bonusBet: /\bbonus bet\b/i.test(text) ? "Y" : "N",
+  win,  reviewLater: warnings.length >= 2 ? "Y" : "N",
+  parseWarning: warnings.join(" | "),
+  rawText: originalText || cleaned,
+  status,
+  ...(debug ? { debugTrace } : {}),
+};
+
+  return typeof enrichRow === "function" ? enrichRow(row) : row;
+}
+
+
+===== app/utils/parserShared.js =====
+// app/utils/parserShared.js
+
+export function cleanTextLine(value) {
+  return String(value || "")
+    .replace(/\bCASH\s*OUT\b/gi, "")
+    .replace(/\bASH\s*OUT\b/gi, "")
+    .replace(/\bASHOUT\b/gi, "")
+    .replace(/\bCASHOUT\b/gi, "")
+    .replace(/[Â®â„¢Â«Â»Â©]/g, "")
+    .replace(/[()\[\]{}]/g, "")
+    .replace(/[|]/g, " ")
+    .replace(/[^\w\s@.+\-/:&'#,]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function normalizeOcrText(text) {
+  return String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[â€œâ€]/g, '"')
+    .replace(/[â€˜â€™]/g, "'")
+    .replace(/[â€“â€”]/g, "-")
+    .replace(/O\/\s*U/gi, "O/U")
+    .replace(/([+-])\s+(\d{2,5})\b/g, "$1$2")
+    .replace(/\bCASH\s+OUT\b/gi, "CASH OUT")
+    .replace(/\bASH\s+OUT\b/gi, "ASH OUT")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function formatDateMMDDYYYY(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const y = String(dateObj.getFullYear());
+  return `${m}/${d}/${y}`;
+}
+
+export function normalizeDateString(raw) {
+  if (!raw) return "";
+  return raw
+    .replace(/,\s*/g, ", ")
+    .replace(/(\d)(AM|PM)$/i, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function nextWeekdayFromDate(baseDate, weekdayIndex) {
+  const result = new Date(baseDate);
+  result.setHours(0, 0, 0, 0);
+  const current = result.getDay();
+  let diff = weekdayIndex - current;
+  if (diff < 0) diff += 7;
+  result.setDate(result.getDate() + diff);
+  return result;
+}
+
+export function getMatch(text, regex) {
+  const match = String(text || "").match(regex);
+  return match ? (match[1] || "").trim() : "";
+}
+
+export function parsePlacedDate(cleaned) {
+  const raw =
+    getMatch(
+      cleaned,
+      /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4},\s*\d{1,2}:\d{2}:\d{2}(?:AM|PM))/i
+    ) ||
+    getMatch(
+      cleaned,
+      /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4},\s*\d{1,2}:\d{2}(?:AM|PM))/i
+    ) ||
+    getMatch(cleaned, /([A-Z][a-z]{2}\s+\d{1,2},\s*\d{4})/i) ||
+    "";
+
+  if (!raw) return { raw: "", normalized: "", dateObj: null, dateOnly: "" };
+
+  const normalized = normalizeDateString(raw);
+  const parsed = new Date(normalized);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return { raw, normalized, dateObj: null, dateOnly: "" };
+  }
+
+  return {
+    raw,
+    normalized,
+    dateObj: parsed,
+    dateOnly: formatDateMMDDYYYY(parsed),
+  };
+}
+
+export function parseMonthDayEventDate(cleaned, placedDateObj) {
+  if (!placedDateObj) return "";
+  const monthDayMatch = cleaned.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
+  );
+  if (!monthDayMatch) return "";
+  const parsed = new Date(
+    `${monthDayMatch[1]} ${monthDayMatch[2]} ${placedDateObj.getFullYear()}`
+  );
+  if (Number.isNaN(parsed.getTime())) return "";
+  return formatDateMMDDYYYY(parsed);
+}
+
+export function inferEventDate(cleaned, placedDateObj) {
+  if (!placedDateObj) return "";
+  const monthDay = parseMonthDayEventDate(cleaned, placedDateObj);
+  if (monthDay) return monthDay;
+  if (/\bToday\b/i.test(cleaned)) return formatDateMMDDYYYY(placedDateObj);
+  if (/\bTomorrow\b/i.test(cleaned)) {
+    const next = new Date(placedDateObj);
+    next.setDate(next.getDate() + 1);
+    return formatDateMMDDYYYY(next);
+  }
+  const weekdayMatch = cleaned.match(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i);
+  if (weekdayMatch) {
+    const map = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const idx = map[weekdayMatch[1].toLowerCase()];
+    if (idx !== undefined) {
+      return formatDateMMDDYYYY(nextWeekdayFromDate(placedDateObj, idx));
+    }
+  }
+  return "";
+}
+
+export function detectSportsbook(cleaned) {
+  const text = String(cleaned || "");
+
+  const isDraftKings =
+    /draftkings/i.test(text) ||
+    /braftkings/i.test(text) ||
+    /\bDK\d{6,}\b/i.test(text) ||
+    /the crown is yours/i.test(text);
+
+  const isBet365 =
+    /bet365/i.test(text) ||
+    (
+      /\bBet Placed\b/i.test(text) &&
+      /\bBet Ref\b/i.test(text) &&
+      /\bReuse Selections\b/i.test(text) &&
+      /\bWager To Return\b/i.test(text) &&
+      /\bAll Sports Live My Bets Search\b/i.test(text)
+    );
+
+  const isBetMGM = /betmgm/i.test(text);
+  const isCaesars = /caesars/i.test(text);
+  const isFanDuel = /fanduel/i.test(text);
+  const isFanatics = /fanatics/i.test(text);
+  const isTheScore = /thescore|score bet/i.test(text);
+  const isCirca = /circa/i.test(text);
+  const isKalshi = /kalshi/i.test(text);
+
+  if (isBet365) return "bet365";
+  if (isDraftKings) return "DraftKings";
+  if (isBetMGM) return "BetMGM";
+  if (isCaesars) return "Caesars";
+  if (isFanDuel) return "FanDuel";
+  if (isFanatics) return "Fanatics";
+  if (isTheScore) return "theScore";
+  if (isCirca) return "Circa";
+  if (isKalshi) return "Kalshi";
+
+  return "";
+}
+
+export function looksLikeFanDuelText(text = "") {
+  const t = String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/[|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  let score = 0;
+
+  if (/\bfanduel\b/.test(t)) score += 10;
+  if (/\bshare bet\b/.test(t)) score += 4;
+  if (/\bwager\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\bodds\s*[+-]\s*\d{2,4}\b/.test(t)) score += 3;
+  if (/\bto win\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\btotal payout\s*\$?\s*\d/.test(t)) score += 3;
+  if (/\bbetslip close\b/.test(t)) score += 1;
+  if (/\bbalance\s*:/.test(t)) score += 1;
+  if (/\bremove all selections\b/.test(t)) score += 1;
+  if (/\baccept odds movements\b/.test(t)) score += 1;
+
+  if (/@/.test(t) && /\b\d{1,2}:\d{2}\s*(am|pm)\s*(ct|et|mt|pt)?\b/i.test(t)) {
+    score += 2;
+  }
+
+  const hasCoreReceiptShape =
+    /\bwager\s*\$?\s*\d/i.test(t) &&
+    /\bodds\s*[+-]\s*\d{2,4}\b/i.test(t) &&
+    /\bto win\s*\$?\s*\d/i.test(t);
+
+  if (hasCoreReceiptShape) score += 2;
+
+  return score >= 8;
+}
+
+export function detectStatus(cleaned, receiptWindowText) {
+  const windowText = receiptWindowText || cleaned;
+
+  if (/\bCashed Out\b/i.test(windowText)) {
+    return "Cashed Out";
+  }
+
+  const hasExplicitSettledShape =
+    /\b(Bet Settled|Settled|Final|Graded|Complete)\b/i.test(windowText) ||
+    /\b(Straight|Parlay|Same Game Parlay|SGP)\s+(Won|Lost)\b/i.test(windowText) ||
+    /\b(Won|Lost)\s+(?:Straight|Parlay|Same Game Parlay|SGP)\b/i.test(windowText);
+
+  if (hasExplicitSettledShape) {
+    if (/\b(Straight|Parlay|Same Game Parlay|SGP)\s+Won\b/i.test(windowText)) return "Won";
+    if (/\bWon\s+(?:Straight|Parlay|Same Game Parlay|SGP)\b/i.test(windowText)) return "Won";
+    if (/\bWon\b/i.test(windowText)) return "Won";
+
+    if (/\b(Straight|Parlay|Same Game Parlay|SGP)\s+Lost\b/i.test(windowText)) return "Lost";
+    if (/\bLost\s+(?:Straight|Parlay|Same Game Parlay|SGP)\b/i.test(windowText)) return "Lost";
+    if (/\bLost\b/i.test(windowText)) return "Lost";
+  }
+
+  if (/\bOpen\b/i.test(windowText) && !hasExplicitSettledShape) {
+    return "Open";
+  }
+
+  return "";
+}
+
+export function detectLive(text) {
+  const livePatterns = [
+    /\bLive\b/i,
+    /\bLive Moneyline\b/i,
+    /\b1st Quarter\b/i,
+    /\b2nd Quarter\b/i,
+    /\b3rd Quarter\b/i,
+    /\b4th Quarter\b/i,
+    /\bQ1\b/i,
+    /\bQ2\b/i,
+    /\bQ3\b/i,
+    /\bQ4\b/i,
+    /\b1st Period\b/i,
+    /\b2nd Period\b/i,
+    /\b3rd Period\b/i,
+    /\b1st Inning\b/i,
+    /\b2nd Inning\b/i,
+    /\b3rd Inning\b/i,
+    /\b4th Inning\b/i,
+    /\b5th Inning\b/i,
+    /\b6th Inning\b/i,
+    /\b7th Inning\b/i,
+    /\b8th Inning\b/i,
+    /\b9th Inning\b/i,
+    /\bSet 1\b/i,
+    /\bSet 2\b/i,
+    /\bSet 3\b/i,
+    /\bQuarter\b/i,
+    /\bPeriod\b/i,
+    /\binnings?\b/i,
+  ];
+  return livePatterns.some((re) => re.test(text)) ? "Y" : "N";
+}
+
+export function extractBetId(text) {
+  return (
+    getMatch(text, /\b(DK\d{12,})\b/i) ||
+    getMatch(text, /\b(ID:?\s*[A-Z0-9\-]{8,})\b/i) ||
+    ""
+  );
+}
+
+export function classifyScreenType(cleaned) {
+  const hasReceipt =
+    /\bBet Placed\b/i.test(cleaned) ||
+    /\bBet Settled\b/i.test(cleaned) ||
+    /\bReceipt\b/i.test(cleaned);
+
+  const hasMyBets = /\bMy Bets\b/i.test(cleaned);
+  const hasAddMore = /\bAdd More\b/i.test(cleaned);
+  const hasBetSlip = /\bBet Slip\b/i.test(cleaned);
+  const wagerCount =
+    (cleaned.match(/\bWager Amount:/gi) || []).length +
+    (cleaned.match(/\bWager:/gi) || []).length;
+
+  if (hasBetSlip && hasAddMore && !hasReceipt) return "active_bet_slip";
+  if (wagerCount > 1 && hasMyBets) return "multi_bet_screenshot";
+  if (hasReceipt) return "receipt";
+  if (hasMyBets) return "my_bets_card";
+  if (/\bCash Out\b/i.test(cleaned) && /\bOpen\b|\bCashed Out\b|\bPaid:\b/i.test(cleaned))
+    return "live_open_card";
+  return "unknown";
+}
+
+export function extractReceiptWindow(lines) {
+  const receiptIndex = lines.findIndex((line) => /^Bet Placed$|^Bet Settled$/i.test(line));
+  if (receiptIndex !== -1) {
+    return {
+      receiptIndex,
+      receiptBlock: lines.slice(receiptIndex, Math.min(lines.length, receiptIndex + 30)),
+    };
+  }
+  return {
+    receiptIndex: -1,
+    receiptBlock: lines,
+  };
+}
+
+
+===== app/utils/oddsHelpers.js =====
+function getMatch(text, regex) {
+  const match = String(text || "").match(regex);
+  return match ? (match[1] || "").trim() : "";
+}
+
+function isLikelyAmericanOddsToken(token) {
+  const s = String(token || "").trim();
+  if (!/^[+-]\d{3,5}$/.test(s)) return false;
+
+  const num = Number(s);
+  if (!Number.isFinite(num)) return false;
+
+  return Math.abs(num) >= 100;
+}
+
+export function americanOddsFromStakeAndReturn(stakeValue, totalReturnValue) {
+  const stake = Number(String(stakeValue || "").replace(/,/g, ""));
+  const payout = Number(String(totalReturnValue || "").replace(/,/g, ""));
+  if (!Number.isFinite(stake) || !Number.isFinite(payout) || stake <= 0 || payout <= stake) {
+    return "";
+  }
+
+  const decimalOdds = payout / stake;
+  if (!Number.isFinite(decimalOdds) || decimalOdds <= 1) return "";
+
+  if (decimalOdds >= 2) return `+${Math.round((decimalOdds - 1) * 100)}`;
+  return `${Math.round(-100 / (decimalOdds - 1))}`;
+}
+
+export function americanOddsFromStakeAndProfit(stakeValue, profitValue) {
+  const stake = Number(String(stakeValue || "").replace(/,/g, ""));
+  const profit = Number(String(profitValue || "").replace(/,/g, ""));
+  if (!Number.isFinite(stake) || !Number.isFinite(profit) || stake <= 0 || profit <= 0) {
+    return "";
+  }
+
+  if (profit >= stake) return `+${Math.round((profit / stake) * 100)}`;
+  return `${Math.round(-(100 / (profit / stake)))}`;
+}
+
+export function detectOddsMissingReason({ oddsUS, stake, payout, toWin, screenType }) {
+  if (oddsUS) return "";
+  if (screenType === "active_bet_slip") return "Unsupported active bet slip";
+  if (screenType === "multi_bet_screenshot") return "Multiple bets detected";
+  if (!stake) return "No stake shown";
+  if (!payout && !toWin) return "No payout or to-win shown";
+  if (!payout) return "No payout shown";
+  if (!toWin) return "No to-win shown";
+  return "No odds detected";
+}
+
+function extractOddsCandidates(text) {
+  const candidates = [];
+  const lines = String(text || "").split("\n");
+
+  for (const line of lines) {
+    const cleanedLine = String(line || "").replace(/\s+/g, " ").trim();
+    const matches = cleanedLine.match(/[+-]\d{2,5}(?!\.\d)/g) || [];
+
+    for (const token of matches) {
+      if (!isLikelyAmericanOddsToken(token)) continue;
+
+      const lineHasCashoutOnly = /\bCash Out\b/i.test(line) && !/\bBet Placed\b/i.test(line);
+      if (lineHasCashoutOnly) continue;
+
+      candidates.push({
+        token,
+        line: cleanedLine,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+export function extractPayouts(text) {
+  const payout =
+    getMatch(text, /Total\s*Payout:\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /To\s*Pay:\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /Paid:\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /Returned\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    getMatch(text, /\bReturns?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    "";
+
+  const toWinDirect =
+    getMatch(text, /To\s*Win:\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) || "";
+
+  return { payout, toWinDirect };
+}
+
+export function extractBestOdds({ receiptText, rawSelection, payout, stake }) {
+  const selectionText = String(rawSelection || "").trim();
+  const text = String(receiptText || "");
+
+  const inlineSelectionOdds =
+    selectionText.match(/([+-]\d{3,5})\)?\s*$/i)?.[1] || "";
+  if (inlineSelectionOdds && isLikelyAmericanOddsToken(inlineSelectionOdds)) {
+    return { oddsUS: inlineSelectionOdds, oddsSource: "OCR" };
+  }
+
+  const oddsLabelMatch = getMatch(text, /Odds:\s*([+-]\d{3,5})/i);
+  if (oddsLabelMatch && isLikelyAmericanOddsToken(oddsLabelMatch)) {
+    return { oddsUS: oddsLabelMatch, oddsSource: "OCR" };
+  }
+
+  const allCandidates = extractOddsCandidates(text);
+
+  const filtered = allCandidates.filter((c) => {
+    const line = c.line || "";
+    const token = c.token || "";
+
+    if (!isLikelyAmericanOddsToken(token)) return false;
+    // Reject unrealistic odds
+    const numeric = parseInt(token, 10);
+    if (Math.abs(numeric) < 100) return false;   // kills -13, -14, etc
+    if (Math.abs(numeric) > 2000) return false;  // optional safety cap
+    if (/[+-]\d+\.\d/.test(token)) return false;
+    if (/Wager Amount|Wager:|Total Payout|To Pay|Paid:/i.test(line)) return false;
+    if (/^\d{1,2}:\d{2}/.test(line)) return false; // timestamps
+    if (/[@]/.test(line) && !/Moneyline|Spread|Total|O\/U/i.test(line)) return false; // junk event lines
+    if (
+      /Today|Tomorrow|Sun|Mon|Tue|Wed|Thu|Fri|Sat/i.test(line) &&
+      !/Moneyline|Spread|Total|O\/U/i.test(line)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (filtered.length > 0) {
+    const best =
+      filtered.find((c) =>
+    /\b(Odds|Moneyline|Spread|Total|To Win|Payout)\b/i.test(c.line)
+  ) ||
+      filtered[filtered.length - 1];
+
+    if (best?.token) {
+      return { oddsUS: best.token, oddsSource: "OCR" };
+    }
+  }
+
+  if (stake && payout) {
+    const calc = americanOddsFromStakeAndReturn(stake, payout);
+    if (calc) return { oddsUS: calc, oddsSource: "Calculated" };
+  }
+
+  return { oddsUS: "", oddsSource: "" };
+}

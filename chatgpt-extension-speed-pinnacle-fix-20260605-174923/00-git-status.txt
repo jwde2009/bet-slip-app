@@ -1,0 +1,155 @@
+ M app/components/FilterBar.js
+ M app/components/ReviewTable.js
+ M app/ev-parlay-lab/components/BoostWalletPanel.js
+ M app/ev-parlay-lab/components/FairOddsPanel.js
+ M app/ev-parlay-lab/components/ImportPanel.js
+ M app/ev-parlay-lab/components/LoadCoveragePanel.js
+ M app/ev-parlay-lab/components/ParlayFilters.js
+ M app/ev-parlay-lab/components/ParlayResults.js
+ M app/ev-parlay-lab/components/ParsedOddsTable.js
+ M app/ev-parlay-lab/components/SavedPlacedParlaysLedgerPanel.js
+ M app/ev-parlay-lab/data/teamAliases.js
+ M app/ev-parlay-lab/page.js
+ M app/ev-parlay-lab/utils/fairOdds.js
+ M app/ev-parlay-lab/utils/marketNormalization.js
+ M app/ev-parlay-lab/utils/parlayEngine.js
+ M app/ev-parlay-lab/utils/parsers/parseBetMGMText.js
+ M app/ev-parlay-lab/utils/parsers/parseDraftKingsText.js
+ M app/ev-parlay-lab/utils/parsers/parseFanDuelText.js
+ M app/ev-parlay-lab/utils/parsers/parsePinnacleText.js
+ M app/ev-parlay-lab/utils/parsers/parseTheScoreText.js
+ M app/page.js
+ M app/tools/page.js
+ M app/utils/canonicalSelection.js
+ M app/utils/canonicalTeamNames.js
+ M app/utils/detectLeague.js
+ M app/utils/oddsHelpers.js
+ M app/utils/parseBetMGM.js
+ M app/utils/parseCaesars.js
+ M app/utils/parseDraftKings.js
+ M app/utils/parseFanDuel.js
+ M app/utils/parseTheScore.js
+ M app/utils/parser.js
+ M app/utils/parserRegistry.js
+ M app/utils/parserShared.js
+ M ev-parlay-extension/background.js
+?? "Start Bet Slip App.bat"
+?? "Start Bet Slip App.lnk"
+?? aliases-canonical-merge-code.txt
+?? app/ev-parlay-lab/components/ParlayResults-before-actual-sgp-kelly.js.js
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-20260518-213600
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-20260518-214918
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-20260518-215047
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-20260518-215219
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-20260518-215551
+?? app/ev-parlay-lab/components/ParlayResults.js.bak-fanduel-recovery
+?? app/ev-parlay-lab/utils/parlayEngine-before-actual-sgp-kelly.js.js
+?? app/ev-parlay-lab/utils/parsers/appev-parlay-labutilsparsersparseBetMGMText.js
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-20260518-213600
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-20260518-214918
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-20260518-215047
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-20260518-215219
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-20260518-215551
+?? app/ev-parlay-lab/utils/parsers/parseFanDuelText.js.bak-fanduel-recovery
+?? app/tools/page.js.bak-before-icon-cleanup-20260602-231512
+?? app/tools/page.js.bak-tools-kelly-20260602-231230
+?? app/utils/parseGenericTextTicket
+?? betmgm-and-upload-path-current-code.txt
+?? betmgm-settled-parser-code.txt
+?? boost-wallet-all-loaded-sports-export.txt
+?? boost-wallet-sgp-rules-upgrade-export.txt
+?? canonical-hedge-review-code.txt
+?? chatgpt-dk-ladders-betmgm-helper-20260605-120245.zip
+?? chatgpt-dk-ladders-betmgm-helper-20260605-120245/
+?? chatgpt-extension-speed-pinnacle-fix-20260605-174923/
+?? chatgpt-fanduel-target-debug-20260526-212714.zip
+?? chatgpt-fanduel-target-debug-20260526-212714/
+?? chatgpt-full-code-review-20260524-233128.zip
+?? chatgpt-full-code-review-20260524-233128/
+?? chatgpt-mark-complete-odds-event-match-fix-20260603-204233.zip
+?? chatgpt-mark-complete-odds-event-match-fix-20260603-204233/
+?? chatgpt-pinnacle-wnba-fallback-fix-20260605-172716.zip
+?? chatgpt-pinnacle-wnba-fallback-fix-20260605-172716/
+?? chatgpt-review-edit-card-odds-and-all-fair-20260524-232007.zip
+?? chatgpt-review-edit-card-odds-and-all-fair-20260524-232007/
+?? chatgpt-review-fanduel-betmgm-20260521-203252.zip
+?? chatgpt-review-fanduel-betmgm-20260521-203252/
+?? chatgpt-review-fanduel-missing-market-20260524-221824.zip
+?? chatgpt-review-fanduel-missing-market-20260524-221824/
+?? chatgpt-review-fanduel-sgp-mojibake.zip
+?? chatgpt-review-fanduel-sgp-mojibake/
+?? chatgpt-review-sgp-missing-pass-20260522-214129.zip
+?? chatgpt-review-sgp-missing-pass-20260522-214129/
+?? chatgpt-review-thescore-parser-20260522-222735.zip
+?? chatgpt-review-thescore-parser-20260522-222735/
+?? chatgpt-review-wnba-dk-thescore-parsers-20260523-225143.zip
+?? chatgpt-review-wnba-dk-thescore-parsers-20260523-225143/
+?? chatgpt-review-wnba-mlb-startup-20260523-212344.zip
+?? chatgpt-review-wnba-mlb-startup-20260523-212344/
+?? chatgpt-target-snapshot-thescore-ppp-20260526-212741.zip
+?? chatgpt-target-snapshot-thescore-ppp-20260526-212741/
+?? chatgpt-wnba-coverage-targeting-fix-20260527-225108.zip
+?? chatgpt-wnba-coverage-targeting-fix-20260527-225108/
+?? chatgpt-wnba-next-parser-fix-20260604-180736.zip
+?? chatgpt-wnba-next-parser-fix-20260604-180736/
+?? current-betmgm-parser-after-patch.txt
+?? date-confirm-and-hedge-context-code.txt
+?? draftkings-top-card-fix-files.txt
+?? "ev-parlay-extension/background before show more fix.js"
+?? ev-parlay-extension/background-before-betmgm-force-playerprops-first.js
+?? ev-parlay-extension/background-before-fd-nba-betmgm-fix..js
+?? ev-parlay-extension/background-before-restore-normal-multipass-after-snapshot.js
+?? ev-parlay-extension/background-before-stop-missing-pass-opening-all.js
+?? ev-parlay-extension/background.js.bak-20260518-213600
+?? ev-parlay-extension/background.js.bak-20260518-213947
+?? ev-parlay-extension/background.js.bak-20260518-214918
+?? ev-parlay-extension/background.js.bak-20260518-215047
+?? ev-parlay-extension/background.js.bak-20260518-215219
+?? ev-parlay-extension/background.js.bak-20260518-215551
+?? ev-parlay-extension/background.js.bak-20260518-221230
+?? ev-parlay-extension/background.js.bak-fanduel-recovery
+?? ev-parlay-extension/background.js.pre-rollback-bad-full-replacement-20260518-220543
+?? fd-after-fallback-background.txt
+?? fd-after-fallback-parlay-results.txt
+?? fd-after-fallback-parser.txt
+?? fd-after-local-parseamerican-background.txt
+?? fd-after-local-parseamerican-parlay-results.txt
+?? fd-after-local-parseamerican-parser.txt
+?? fd-after-nhl-points-fix-background.txt
+?? fd-after-nhl-points-fix-parlay-results.txt
+?? fd-after-nhl-points-fix-parser.txt
+?? fd-after-robust-fallback-background.txt
+?? fd-after-robust-fallback-parlay-results.txt
+?? fd-after-robust-fallback-parser.txt
+?? fd-current-background-review.txt
+?? fd-current-parlay-results-review.txt
+?? fd-current-parser-review.txt
+?? fd-post-v3-background.txt
+?? fd-post-v3-parlay-results.txt
+?? fd-post-v3-parser.txt
+?? fd-restored-background.txt
+?? fd-restored-parlay-results.txt
+?? fd-restored-parser.txt
+?? hedge-page.txt
+?? hedge-reviewtable.txt
+?? images.png
+?? league-cleanup-code.txt
+?? new-chat-fanduel-nhl-current-export.txt
+?? next-parlay-filters-fanduel-debug-export.txt
+?? ocr-footer-date-fix-code.txt
+?? parlayEngine-before-actual-sgp-kelly.txt
+?? parseFanDuelText-before-player-team-suffix-fix.txt
+?? parseFanDuelText-current.txt
+?? parser-review-current-code.txt
+?? parser-routing-and-book-list-code.txt
+?? participant-normalization-code.txt
+?? post-parlay-rules-fanduel-nav-review.txt
+?? post-sgp-boost-wallet-review-export.txt
+?? reviewtable-current-after-reboot.txt
+?? score-caesars-current-after-patch.txt
+?? score-caesars-fix-files.txt
+?? tools-page-code-export.txt
+?? top-card-parser-files.txt
+?? tracker-export-popup-review-code.txt
+?? verify-active-betmgm-parser.txt
+?? workflow-upgrade-code.txt

@@ -4,6 +4,7 @@ import {
   americanOddsFromStakeAndReturn,
   detectOddsMissingReason,
 } from "./oddsHelpers";
+
 function getDateFromSourceFileName(sourceFileName) {
   const m = String(sourceFileName || "").match(/Screenshot_(\d{4})(\d{2})(\d{2})-/i);
   if (!m) return "";
@@ -11,45 +12,58 @@ function getDateFromSourceFileName(sourceFileName) {
   const [, y, mo, d] = m;
   return `${mo}/${d}/${y}`;
 }
-function getBetMgmTargetLines(cleaned) {
-  const lines = String(cleaned || "")
+
+function normalizeBetMgmMoneyValue(value = "") {
+  const cleaned = String(value || "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.]/g, "")
+    .trim();
+
+  if (!cleaned) return "";
+
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return "";
+
+  return n.toFixed(2);
+}
+
+function normalizeLine(value = "") {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/[|]+/g, " | ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getLines(text = "") {
+  return String(text || "")
+    .replace(/\r/g, "\n")
     .split("\n")
-    .map((line) => line.trim())
+    .map(normalizeLine)
     .filter(Boolean);
+}
 
-  const acceptedIndex = lines.findIndex((line) =>
-    /your bet has been accepted|good luck/i.test(line)
-  );
+function isStatusLine(line = "") {
+  const text = String(line || "").trim();
 
-  const typeIndex = lines.findIndex((line) =>
-    /straights?\s*\(\d+\)|single\s*\(\d+\)|parlay|same game parlay|sgp/i.test(line)
-  );
+  if (!text) return false;
+  if (/\b(To Win|Win:|Win \$|Stake|Risk|Payout|Returns?)\b/i.test(text)) return false;
 
-  const startIndex =
-    typeIndex !== -1
-      ? typeIndex + 1
-      : acceptedIndex !== -1
-      ? acceptedIndex + 1
-      : 0;
+  return /^(WON|WIN|LOST|LOSS|LOSE|VOID|VOIDED|PUSH|CASHED OUT|OPEN|CANCELLED|CANCELED)\b/i.test(text);
+}
 
-  let endIndex = lines.length;
+function statusFromText(text = "") {
+  const raw = String(text || "").toLowerCase();
 
-  for (let i = startIndex; i < lines.length; i++) {
-    if (
-      /^stake\b/i.test(lines[i]) ||
-      /^risk\b/i.test(lines[i]) ||
-      /^total payout\b/i.test(lines[i]) ||
-      /^returns?\b/i.test(lines[i]) ||
-      /^to win\b/i.test(lines[i]) ||
-      /^win\b/i.test(lines[i]) ||
-      /keep placed bets in bet slip|share my bet/i.test(lines[i])
-    ) {
-      endIndex = i;
-      break;
-    }
+  if (/\bwon\b|\bwin\b/.test(raw)) return { status: "Won", win: "Y" };
+  if (/\blost\b|\bloss\b|\blose\b/.test(raw)) return { status: "Lost", win: "N" };
+  if (/\bvoided\b|\bvoid\b|\bpush\b|\bcancelled\b|\bcanceled\b/.test(raw)) {
+   return { status: "Voided", win: "" };
   }
+  if (/\bcashed out\b/.test(raw)) return { status: "Cashed Out", win: "" };
+  if (/\bopen\b/.test(raw)) return { status: "Open", win: "" };
 
-  return lines.slice(startIndex, endIndex);
+  return { status: "", win: "" };
 }
 
 function isBetMgmNoiseLine(line) {
@@ -68,11 +82,303 @@ function isBetMgmNoiseLine(line) {
     /^today\s*-/i.test(line) ||
     /^starting in\b/i.test(line) ||
     /^login duration:/i.test(line) ||
-    /^today\s+\d{1,2}:\d{2}\s*(am|pm)\s*-/i.test(line) ||
+    /^my bets$/i.test(line) ||
+    /^open bets$/i.test(line) ||
+    /^settled bets$/i.test(line) ||
+    /^cash out$/i.test(line) ||
+    /^betmgm$/i.test(line) ||
     /espn\d?/i.test(line) ||
-    /spread total money/i.test(line)
+    /spread total money/i.test(line) ||
+    /keep placed bets in bet slip|share my bet/i.test(line)
   );
 }
+
+function isMoneyLine(line = "") {
+  return /\b(Stake|Risk|Total Payout|Payout|Returns?|To Win|Win)\b/i.test(String(line || ""));
+}
+
+function hasOdds(line = "") {
+  return /(^|\s)([+-]\d{2,5})(?=\s|$)/.test(String(line || ""));
+}
+
+function extractOdds(line = "") {
+  const matches = [...String(line || "").matchAll(/(^|\s)([+-]\d{2,5})(?=\s|$)/g)];
+  return matches.length ? matches[matches.length - 1][2] : "";
+}
+
+function cleanSelectionLine(line = "") {
+  let text = normalizeLine(line);
+
+  text = text
+    .replace(/\b(WON|WIN|LOST|LOSS|LOSE|VOID|VOIDED|PUSH|CASHED OUT|OPEN)\b/gi, " ")
+    .replace(/\bBETMGM\b/gi, " ")
+    .replace(/[|]/g, " ")
+    .replace(/(^|\s)[+-]\d{2,5}(?=\s|$)/g, " ")
+    .replace(/\s+-\s*ol\b/gi, " ")
+    .replace(/\bol\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove common OCR junk left from the top banner/status area.
+  text = text
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/^\d+\s+/, "")
+    .replace(/\s+#\d+\s*$/i, "")
+    .replace(/\s+[Hh][Oo]\s*$/i, "")
+    .trim();
+
+  return text;
+}
+
+function looksLikeMarketLine(line = "") {
+  return /\b(spread|moneyline|total|run line|puck line|games spread|match result|fight result|anytime|goal scorer|goalscorer|player assists|player points|player rebounds|points|rebounds|assists|shots on goal|shots|saves|strikeouts|total bases|home runs|rbis|hits|double-double|triple-double|submission|decision|ko\/tko|method)\b/i.test(
+    String(line || "")
+  );
+}
+
+function looksLikeFixtureLine(line = "") {
+  const text = String(line || "");
+  if (isMoneyLine(text)) return false;
+  if (isBetMgmNoiseLine(text)) return false;
+  if (/^placed\b/i.test(text)) return false;
+
+  return (
+    /\s+at\s+/i.test(text) ||
+    /\s*@\s*/i.test(text) ||
+    /\s+vs\.?\s+/i.test(text) ||
+    /\s+-\s/.test(text)
+  );
+}
+
+function cleanFixtureLine(line = "") {
+  let text = normalizeLine(line)
+    .replace(/\b(Stake|Risk|Total Payout|Payout|Returns?|To Win|Win)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!looksLikeFixtureLine(text)) return "";
+
+  return text;
+}
+
+function getBetMgmTopBetText(cleaned = "") {
+  const lines = getLines(cleaned);
+
+  const firstMoneyIndex = lines.findIndex((line) =>
+    /\b(Stake|Risk|Total Payout|Payout|Returns?|To Win|Win)\b/i.test(line)
+  );
+
+  if (firstMoneyIndex === -1) return cleaned;
+
+  const start = Math.max(0, firstMoneyIndex - 10);
+  let end = Math.min(lines.length, firstMoneyIndex + 10);
+
+  for (let i = firstMoneyIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    const looksLikeNextBet =
+      i > firstMoneyIndex + 2 &&
+      (
+        /\b(Stake|Risk)\b.*\$?\d/i.test(line) ||
+        /\b(Straight|Parlay|Same Game Parlay|SGP)\b/i.test(line)
+      );
+
+    if (looksLikeNextBet) {
+      end = i;
+      break;
+    }
+  }
+
+  return lines.slice(start, end).join("\n");
+}
+
+function findBestBetMgmSelectionLine(lines = []) {
+  const moneyIndex = lines.findIndex((line) => isMoneyLine(line));
+  const end = moneyIndex !== -1 ? moneyIndex : lines.length;
+
+  const candidates = [];
+
+  for (let i = 0; i < end; i += 1) {
+    const line = lines[i];
+
+    if (!hasOdds(line)) continue;
+    if (isMoneyLine(line)) continue;
+    if (isBetMgmNoiseLine(line)) continue;
+
+    const cleaned = cleanSelectionLine(line);
+
+    if (!cleaned || cleaned.length < 2) continue;
+    if (/^betmgm$/i.test(cleaned)) continue;
+    if (/^(won|lost|void|open)$/i.test(cleaned)) continue;
+
+    candidates.push({ line, index: i, cleaned });
+  }
+
+  if (!candidates.length) {
+    return { line: "", index: -1 };
+  }
+
+  const preferred =
+    candidates.find((candidate) =>
+      /[A-Za-z]/.test(candidate.cleaned) &&
+      !/^\d+$/.test(candidate.cleaned)
+    ) || candidates[0];
+
+  return {
+    line: preferred.line,
+    index: preferred.index,
+  };
+}
+
+function parseBetMgmSettledReceipt(cleaned = "") {
+  const lines = getLines(cleaned);
+
+  const statusIndex = lines.findIndex((line) => isStatusLine(line));
+  const statusInfo = statusIndex !== -1 ? statusFromText(lines[statusIndex]) : { status: "", win: "" };
+
+  const moneyIndex = lines.findIndex((line) => isMoneyLine(line));
+  const searchStart = statusIndex !== -1 ? statusIndex : 0;
+  const searchEnd = moneyIndex !== -1 ? moneyIndex : lines.length;
+
+  let selectionLine = "";
+  let selectionIndex = -1;
+
+  const bestSelection = findBestBetMgmSelectionLine(lines);
+
+  if (bestSelection.line) {
+    selectionLine = bestSelection.line;
+    selectionIndex = bestSelection.index;
+  } else if (statusIndex !== -1 && hasOdds(lines[statusIndex])) {
+    const candidate = cleanSelectionLine(lines[statusIndex]);
+
+    if (candidate && !/^betmgm$/i.test(candidate)) {
+      selectionLine = lines[statusIndex];
+      selectionIndex = statusIndex;
+    }
+  }
+
+  const oddsUS = extractOdds(selectionLine);
+  let rawSelection = cleanSelectionLine(selectionLine);
+
+  let marketDetail = "";
+  let fixtureEvent = "";
+
+  if (selectionIndex !== -1) {
+    const detailSearchEnd = moneyIndex !== -1 ? moneyIndex : lines.length;
+
+    for (let i = selectionIndex + 1; i < detailSearchEnd; i += 1) {
+      const line = lines[i];
+      if (!line || isBetMgmNoiseLine(line) || isMoneyLine(line) || isStatusLine(line)) continue;
+      if (hasOdds(line)) continue;
+
+      if (!fixtureEvent && looksLikeFixtureLine(line)) {
+        fixtureEvent = cleanFixtureLine(line);
+        continue;
+      }
+
+      if (!marketDetail && looksLikeMarketLine(line)) {
+        marketDetail = line;
+        continue;
+      }
+
+      // If market came before fixture and this looks like plain market text, use it.
+      if (!marketDetail && !fixtureEvent && !looksLikeFixtureLine(line)) {
+        marketDetail = line;
+      }
+    }
+  }
+
+  if (!fixtureEvent) {
+    const fixtureLine = lines.find((line) => looksLikeFixtureLine(line));
+    fixtureEvent = cleanFixtureLine(fixtureLine || "");
+  }
+
+  // If the player and prop are in the market line, make a better player prop selection.
+  // Example:
+  // selection: Over 0.5
+  // market: Josh Norris (BUF): Points
+  if (
+    /^(over|under)\s+\d+(?:\.\d+)?$/i.test(rawSelection) &&
+    /:/.test(marketDetail)
+  ) {
+    const m = marketDetail.match(/^(.+?):\s*(.+)$/);
+    if (m) {
+      const player = String(m[1] || "")
+        .replace(/\s*\([A-Z]{2,4}\)\s*$/i, "")
+        .trim();
+      const prop = String(m[2] || "").trim();
+
+      if (player && prop) {
+        rawSelection = `${player} ${rawSelection}`;
+        marketDetail = prop;
+      }
+    }
+  }
+
+  return {
+    ...statusInfo,
+    rawSelection,
+    marketDetail,
+    fixtureEvent,
+    oddsUS,
+  };
+}
+
+function extractBetMgmMoneyFields(text = "", status = "") {
+  const source = String(text || "").replace(/\r/g, "\n");
+  const lines = getLines(source);
+
+  const joined = lines.join("\n");
+
+  const stake =
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bStake:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bRisk:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    "";
+
+  let payout =
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bTotal\s*payout:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bPayout:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bReturns?:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    "";
+
+  let toWinDirect =
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bTo\s*win:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    normalizeBetMgmMoneyValue(
+      joined.match(/\bWin:?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1] || ""
+    ) ||
+    "";
+
+  const statusLower = String(status || "").toLowerCase();
+
+  if (statusLower === "lost") {
+    payout = "0.00";
+    toWinDirect = "0.00";
+  }
+
+  if (statusLower === "voided" && !payout) {
+    payout = "0.00";
+    toWinDirect = "0.00";
+  }
+
+  return {
+    stake,
+    payout,
+    toWinDirect,
+  };
+}
+
 export function parseBetMgmSlip({
   cleaned,
   originalText,
@@ -93,48 +399,30 @@ export function parseBetMgmSlip({
     enrichRow,
   } = shared;
 
- const lines = cleaned
-  .split("\n")
-  .map((line) => line.trim())
-  .filter(Boolean);
+  const stakeCount = (cleaned.match(/\bStake[: ]*\$/gi) || []).length;
+  const payoutCount = (cleaned.match(/\b(Total Payout|Payout)[: ]*\$/gi) || []).length;
+  const isMultiBetScreen = stakeCount > 1 || payoutCount > 1;
 
-const stakeCount = (cleaned.match(/\bStake[: ]*\$/gi) || []).length;
-const payoutCount = (cleaned.match(/\bTotal payout[: ]*\$/gi) || []).length;
+  const multiBetWarning = isMultiBetScreen
+    ? "betmgm_multiple_bets_detected_parsed_top_only"
+    : "";
 
-const isMultiBetScreen = stakeCount > 1 || payoutCount > 1;
+  if (isMultiBetScreen) {
+    cleaned = getBetMgmTopBetText(cleaned);
+  }
 
-if (isMultiBetScreen) {
-  return enrichRow({
-    ...emptyParsed,
-    bookmaker: sportsbook,
-    parseWarning: "Multiple bets detected in one BetMGM screenshot",
-    likelyParserIssue: "Y",
-    sourceFileName,
-    sourceText: originalText,
-  });
-}
+  const betId = extractBetId(cleaned);
+  const settled = parseBetMgmSettledReceipt(cleaned);
+  const money = extractBetMgmMoneyFields(cleaned, settled.status);
 
-const betId = extractBetId(cleaned);
+  const stake = money.stake;
+  const payout = money.payout;
+  const toWinDirect = money.toWinDirect;
 
-  const stake =
-    getMatch(cleaned, /\bStake[: ]*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    getMatch(cleaned, /\bRisk\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    "";
+  let oddsUS = settled.oddsUS || "";
+  let oddsSource = oddsUS ? "OCR" : "";
 
-  const payout =
-    getMatch(cleaned, /\bTotal\s*payout\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    getMatch(cleaned, /\bReturns?\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    "";
-
-  const toWinDirect =
-    getMatch(cleaned, /\bTo\s*win\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    getMatch(cleaned, /\bWin\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-    "";
-
-  let oddsUS = "";
-  let oddsSource = "";
-
-  if (stake && payout) {
+  if (!oddsUS && stake && payout && String(payout) !== "0.00") {
     const calc = americanOddsFromStakeAndReturn(stake, payout);
     if (calc) {
       oddsUS = calc;
@@ -142,7 +430,7 @@ const betId = extractBetId(cleaned);
     }
   }
 
-  if (!oddsUS && stake && toWinDirect) {
+  if (!oddsUS && stake && toWinDirect && String(toWinDirect) !== "0.00") {
     const calc = americanOddsFromStakeAndProfit(stake, toWinDirect);
     if (calc) {
       oddsUS = calc;
@@ -150,62 +438,9 @@ const betId = extractBetId(cleaned);
     }
   }
 
-   const targetLines = getBetMgmTargetLines(cleaned)
-    .map(cleanTextLine)
-    .filter((line) => line && !isBetMgmNoiseLine(line));
-
- let rawSelection = "";
-let marketDetail = "";
-let fixtureEvent = "";
-
-const eventLineIndex = targetLines.findIndex((line) =>
-  /\s@\s|\sat\s|\svs\.?\s/i.test(line) ||
-  /\s-\s/.test(line) ||
-  /\bvs\b/i.test(line)
-);
-
-if (eventLineIndex !== -1) {
-  fixtureEvent = targetLines[eventLineIndex] || "";
-
-  const windowBeforeEvent = targetLines
-    .slice(Math.max(0, eventLineIndex - 3), eventLineIndex)
-    .map(cleanTextLine)
-    .filter((line) => line && !isBetMgmNoiseLine(line));
-
-  const looksLikeMarket = (line) =>
-     /spread|totals?|moneyline|run line|puck line|match result|fight result|anytime|goalscorer|total goals|player assists|player points|player rebounds|to record|points|rebounds|assists|shots on goal|shots|strikeouts|goals/i.test(line);
-
-  if (windowBeforeEvent.length >= 2) {
-    const [l1, l2] = windowBeforeEvent.slice(-2);
-
-    if (looksLikeMarket(l2)) {
-      rawSelection = l1;
-      marketDetail = l2;
-    } else if (looksLikeMarket(l1)) {
-      rawSelection = l2;
-      marketDetail = l1;
-    } else {
-      rawSelection = l1;
-      marketDetail = l2;
-    }
-  }
-
-  if (!rawSelection && windowBeforeEvent.length >= 1) {
-    rawSelection = windowBeforeEvent[0];
-  }
-
-  if (!marketDetail && windowBeforeEvent.length >= 1) {
-    marketDetail = windowBeforeEvent[windowBeforeEvent.length - 1];
-  }
-}
-
-  if (!rawSelection && targetLines.length >= 1) {
-    rawSelection = targetLines[0];
-  }
-
-  if (!marketDetail && targetLines.length >= 2) {
-    marketDetail = targetLines[1];
-  }
+  let rawSelection = cleanTextLine(settled.rawSelection || "");
+  let marketDetail = cleanTextLine(settled.marketDetail || "");
+  let fixtureEvent = cleanTextLine(settled.fixtureEvent || "");
 
   if (!fixtureEvent) {
     fixtureEvent =
@@ -217,14 +452,22 @@ if (eventLineIndex !== -1) {
   }
 
   fixtureEvent = cleanTextLine(fixtureEvent);
-if (
-  !/\s@\s|\sat\s|\svs\.?\s|\s-\s/i.test(fixtureEvent)
-) {
-  fixtureEvent = "";
-}
+
+  if (!looksLikeFixtureLine(fixtureEvent)) {
+    fixtureEvent = "";
+  }
 
   const placedInfo = parsePlacedDate(cleaned);
-const betDate = placedInfo.dateOnly || getDateFromSourceFileName(sourceFileName);  const eventDate = inferEventDate(cleaned, placedInfo.dateObj);
+  const betDate = placedInfo.dateOnly || getDateFromSourceFileName(sourceFileName);
+  const eventDate = inferEventDate(cleaned, placedInfo.dateObj);
+
+  const status =
+    settled.status ||
+    (/accepted|open/i.test(cleaned) ? "Open" : detectStatus(cleaned, cleaned));
+
+  const win =
+    settled.win ||
+    (status === "Won" ? "Y" : status === "Lost" ? "N" : "");
 
   const lowerTypeText = [rawSelection, marketDetail, cleaned].join(" ").toLowerCase();
 
@@ -237,7 +480,7 @@ const betDate = placedInfo.dateOnly || getDateFromSourceFileName(sourceFileName)
     );
 
   const isPlayerProp =
-    /\bpoints?\b|\brebounds?\b|\bassists?\b|\bthree pointers?\b|\bshots on goal\b|\bgoalscorer\b|\bdouble-double\b|\btriple-double\b|\bhome runs?\b|\brbis?\b|\bhits?\b|\bstrikeouts?\b|\bearned runs\b|\bsubmission\b|\bdecision\b|\bko\/tko\/dq\b/i.test(
+    /\bpoints?\b|\brebounds?\b|\bassists?\b|\bthree pointers?\b|\bshots on goal\b|\bsaves?\b|\bgoalscorer\b|\bgoal scorer\b|\bdouble-double\b|\btriple-double\b|\bhome runs?\b|\brbis?\b|\bhits?\b|\bstrikeouts?\b|\bearned runs\b|\btotal bases?\b|\bsubmission\b|\bdecision\b|\bko\/tko\/dq\b/i.test(
       lowerTypeText
     );
 
@@ -254,34 +497,17 @@ const betDate = placedInfo.dateOnly || getDateFromSourceFileName(sourceFileName)
   else if (isTotal) betType = "total";
 
   let selection = isPlayerProp
-  ? buildPlayerPropSelection(rawSelection, marketDetail)
-  : rawSelection;
+    ? buildPlayerPropSelection(rawSelection, marketDetail)
+    : rawSelection;
 
-// 👇 ADD THIS BLOCK RIGHT HERE
-if (
-  /^(over|under)\s+\d+(\.\d+)?$/i.test(selection) &&
-  /:/.test(marketDetail)
-) {
-  const m = marketDetail.match(/^(.+?):\s*(.+)$/);
-  if (m) {
-    const player = m[1].replace(/\s*\([A-Z]{2,4}\)\s*$/, "").trim();
-    const prop = m[2].trim();
-
-    selection = `${player} ${selection}`;
-    marketDetail = prop;
-  }
-}
-
-// existing cleanup stays the same
-selection = cleanTextLine(selection)
-  .replace(/\s+[+-]?\d{1,5}\s*$/i, "")
-  .replace(/\s+[Hh][Oo]\s*$/i, "")
-  .replace(/\s+#\d+\s*$/i, "")
-  .replace(/\s+\d{3,4}\s*$/i, "")
-  .replace(/\s+[A-Za-z]{1,3}\s*$/i, "")
-  .replace(/\s+\+\d+\s*/g, " ")   // remove duplicate odds fragments
-  .replace(/\s{2,}/g, " ")
-  .trim();
+  selection = cleanTextLine(selection)
+    .replace(/\s+[+-]?\d{1,5}\s*$/i, "")
+    .replace(/\s+[Hh][Oo]\s*$/i, "")
+    .replace(/\s+#\d+\s*$/i, "")
+    .replace(/\s+\d{3,4}\s*$/i, "")
+    .replace(/\s+\+\d+\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 
   const sportLeague = detectLeague({
     cleaned,
@@ -291,36 +517,39 @@ selection = cleanTextLine(selection)
     isParlay,
   });
 
-  const status = /accepted|open/i.test(cleaned) ? "Open" : detectStatus(cleaned, cleaned);
-  const win = status === "Won" ? "Y" : status === "Lost" ? "N" : "";
   const bonusBet = /\bbonus bet\b|promotion used/i.test(cleaned) ? "Y" : "N";
 
   const toWin =
-    toWinDirect ||
-    (() => {
-      const wager = parseFloat((stake || "").replace(/,/g, ""));
-      const pay = parseFloat((payout || "").replace(/,/g, ""));
-      if (!Number.isNaN(wager) && !Number.isNaN(pay) && pay >= wager) {
-        return (pay - wager).toFixed(2);
-      }
-      return "";
-    })();
+    status === "Lost"
+      ? "0.00"
+      : toWinDirect ||
+        (() => {
+          const wager = parseFloat((stake || "").replace(/,/g, ""));
+          const pay = parseFloat((payout || "").replace(/,/g, ""));
+          if (!Number.isNaN(wager) && !Number.isNaN(pay) && pay >= wager) {
+            return (pay - wager).toFixed(2);
+          }
+          return "";
+        })();
+
+  const finalPayout = status === "Lost" ? "0.00" : payout;
 
   const oddsMissingReason = detectOddsMissingReason({
     oddsUS,
     stake,
-    payout,
+    payout: finalPayout,
     toWin,
     screenType: "receipt",
   });
 
   const additionalWarnings = [];
+  if (multiBetWarning) additionalWarnings.push(multiBetWarning);
   if (!oddsUS) additionalWarnings.push("betmgm_odds_missing");
-  if (!payout && !toWin) additionalWarnings.push("betmgm_payout_missing");
+  if (!finalPayout && !toWin) additionalWarnings.push("betmgm_payout_missing");
   if (!betDate) additionalWarnings.push("no_bet_date_detected");
   if (!sportLeague) additionalWarnings.push("no_league_detected");
   if (!selection) additionalWarnings.push("betmgm_selection_missing");
-  if (!fixtureEvent) additionalWarnings.push("betmgm_event_missing");
+  if (!fixtureEvent && betType !== "futures") additionalWarnings.push("betmgm_event_missing");
 
   const parseWarning = additionalWarnings.join(" | ");
 
@@ -341,7 +570,7 @@ selection = cleanTextLine(selection)
     bonusBet,
     win,
     marketDetail,
-    payout,
+    payout: finalPayout,
     toWin,
     rawPlacedDate: placedInfo.raw,
     status,
