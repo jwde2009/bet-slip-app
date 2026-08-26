@@ -1,0 +1,402 @@
+import {
+  decimalToAmerican,
+  impliedProbabilityFromDecimal,
+} from "./odds";
+import { normalizeMarketType } from "./marketNormalization";
+
+export const DEVIG_METHOD_LABELS = {
+  power: "Power",
+  multiplicative: "Multiplicative / proportional",
+  additive: "Additive",
+  shin: "Shin-style",
+};
+
+export function normalizeDevigMethod(method) {
+  const value = String(method || "power").trim().toLowerCase();
+
+  if (value === "power") return "power";
+  if (value === "multiplicative" || value === "proportional") return "multiplicative";
+  if (value === "additive") return "additive";
+  if (value === "shin" || value === "shin-style" || value === "shin_style") return "shin";
+
+  return "power";
+}
+
+export function getDevigMethodLabel(method) {
+  return DEVIG_METHOD_LABELS[normalizeDevigMethod(method)] || DEVIG_METHOD_LABELS.power;
+}
+
+export function calculateFairOddsForMarkets(markets, options = {}) {
+  const selectedMethod = normalizeDevigMethod(
+    Array.isArray(options) ? "power" : options?.method || options?.devigMethod || "power"
+  );
+
+  const results = [];
+
+  for (const market of markets) {
+    const sharpSelections = market.selections
+      .map((selection) => {
+        const sharpQuotes = selection.quotes.filter(
+          (q) => q.isSharpSource === true && Number.isFinite(q.oddsDecimal) && q.oddsDecimal > 1
+        );
+
+        if (!sharpQuotes.length) return null;
+
+        const bestSharpQuote = [...sharpQuotes].sort((a, b) => {
+          const priority = (quote) => {
+            const book = String(quote.sportsbook || "").trim().toLowerCase();
+            if (book === "pinnacle") return 1;
+            if (book === "fanduel") return 2;
+            return 3;
+          };
+
+          const priorityDiff = priority(a) - priority(b);
+          if (priorityDiff !== 0) return priorityDiff;
+
+          return b.oddsDecimal - a.oddsDecimal;
+        })[0];
+
+        const fullSelectionLabel = buildFairOddsFullSelectionLabel(market, selection);
+
+        return {
+          selectionId: selection.id,
+          selectionLabel: fullSelectionLabel,
+          rawSelectionLabel: selection.label,
+          fullSelectionLabel,
+          marketType: market.marketType || "",
+          marketDisplayName: market.displayName || "",
+          subjectKey: market.subjectKey || "",
+          subjectName: extractFairOddsSubjectName(market),
+          lineValue: market.lineValue ?? null,
+          decimal: bestSharpQuote.oddsDecimal,
+          sportsbook: bestSharpQuote.sportsbook,
+          allSharpQuotes: sharpQuotes.map((quote) => ({
+            parsedRowId: quote.parsedRowId || "",
+            sportsbook: quote.sportsbook || "",
+            oddsAmerican: quote.oddsAmerican ?? null,
+            oddsDecimal: quote.oddsDecimal ?? null,
+          })),
+        };
+      })
+      .filter(Boolean);
+
+    const expectedOutcomes = getExpectedOutcomeCount(market);
+
+    if (sharpSelections.length !== expectedOutcomes) continue;
+
+    const implieds = sharpSelections.map((s) =>
+      impliedProbabilityFromDecimal(s.decimal)
+    );
+
+    if (implieds.some((p) => !Number.isFinite(p) || p <= 0)) continue;
+
+    const impliedSum = implieds.reduce((acc, n) => acc + n, 0);
+    if (!(impliedSum > 0)) continue;
+
+    const holdPct = (impliedSum - 1) * 100;
+    const probabilitiesByMethod = buildProbabilitiesByMethod(implieds);
+    const selectedProbabilities = probabilitiesByMethod[selectedMethod] || probabilitiesByMethod.power;
+
+    sharpSelections.forEach((selection, idx) => {
+      const fairProbability = selectedProbabilities[idx];
+      const fairDecimal = fairProbability > 0 ? 1 / fairProbability : null;
+      const fairAmerican =
+        fairDecimal && Number.isFinite(fairDecimal)
+          ? decimalToAmerican(fairDecimal)
+          : null;
+
+      const fairProbabilitiesByMethod = Object.fromEntries(
+        Object.entries(probabilitiesByMethod).map(([method, probabilities]) => [
+          method,
+          probabilities[idx],
+        ])
+      );
+
+      results.push({
+        id: `${market.id}::${selection.selectionId}`,
+        marketId: market.id,
+        marketDisplayName: market.displayName,
+        eventName: market.displayName || "",
+        marketType: market.marketType || "",
+        marketLabel: formatFairOddsMarketLabel(market.marketType),
+        subjectKey: market.subjectKey || "",
+        subjectName: selection.subjectName || extractFairOddsSubjectName(market),
+        lineValue: market.lineValue ?? null,
+        selectionId: selection.selectionId,
+        selectionLabel: selection.selectionLabel,
+        rawSelectionLabel: selection.rawSelectionLabel || selection.selectionLabel,
+        fullSelectionLabel: selection.fullSelectionLabel || selection.selectionLabel,
+        fullMarketLabel: buildFairOddsFullMarketLabel(market),
+        fairProbability,
+        fairDecimal,
+        fairAmerican,
+        fairProbabilitiesByMethod,
+        devigMethod: selectedMethod,
+        devigMethodLabel: getDevigMethodLabel(selectedMethod),
+        holdPct,
+        sharpSportsbook: selection.sportsbook,
+        allSharpQuotes: selection.allSharpQuotes || [],
+      });
+    });
+  }
+
+  return results;
+}
+
+function buildFairOddsFullSelectionLabel(market = {}, selection = {}) {
+  const subject = extractFairOddsSubjectName(market);
+  const side = normalizeFairOddsSide(selection.label);
+  const line =
+    market.lineValue !== null &&
+    market.lineValue !== undefined &&
+    market.lineValue !== ""
+      ? String(market.lineValue)
+      : "";
+  const marketLabel = formatFairOddsMarketLabel(market.marketType);
+
+  if (subject && side) {
+    return `${subject} ${side}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (subject && selection.label) {
+    return `${subject} ${selection.label}${line ? ` ${line}` : ""}${marketLabel ? ` ${marketLabel}` : ""}`.trim();
+  }
+
+  if (selection.label && line && marketLabel) {
+    return `${selection.label} ${line} ${marketLabel}`.trim();
+  }
+
+  if (selection.label && marketLabel) {
+    return `${selection.label} ${marketLabel}`.trim();
+  }
+
+  return String(selection.label || "").trim();
+}
+
+function buildFairOddsFullMarketLabel(market = {}) {
+  const eventName = String(market.displayName || "").trim();
+  const subject = extractFairOddsSubjectName(market);
+  const line =
+    market.lineValue !== null &&
+    market.lineValue !== undefined &&
+    market.lineValue !== ""
+      ? String(market.lineValue)
+      : "";
+  const marketLabel = formatFairOddsMarketLabel(market.marketType);
+
+  return [eventName, subject, line, marketLabel].filter(Boolean).join(" | ");
+}
+
+function normalizeFairOddsSide(selectionLabel = "") {
+  const text = String(selectionLabel || "").trim();
+
+  if (/^over$/i.test(text) || /\bover\b/i.test(text)) return "Over";
+  if (/^under$/i.test(text) || /\bunder\b/i.test(text)) return "Under";
+  if (/^yes$/i.test(text) || /\byes\b/i.test(text)) return "Yes";
+  if (/^no$/i.test(text) || /\bno\b/i.test(text)) return "No";
+
+  return text;
+}
+
+function extractFairOddsSubjectName(market = {}) {
+  const subjectKey = String(market.subjectKey || "").trim();
+
+  if (!subjectKey.includes("::")) return "";
+
+  const rawName = subjectKey.split("::").slice(1).join("::").trim();
+  if (!rawName) return "";
+
+  return rawName
+    .split(/\s+/)
+    .map((part) => {
+      if (/^[a-z]\.$/i.test(part)) return part.toUpperCase();
+      if (/^og$/i.test(part)) return "OG";
+      if (/^mj$/i.test(part)) return "MJ";
+      if (/^jr\.?$/i.test(part)) return "Jr.";
+      if (/^iii$/i.test(part)) return "III";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+function formatFairOddsMarketLabel(marketType = "") {
+  const key = String(marketType || "").trim().toLowerCase();
+
+  const labels = {
+    moneyline_2way: "Moneyline",
+    moneyline_3way: "Moneyline",
+    spread: "Spread",
+    total: "Total",
+
+    player_points: "Points",
+    player_assists: "Assists",
+    player_rebounds: "Rebounds",
+    player_threes: "Threes",
+    player_pra: "PRA",
+    player_points_rebounds: "Points + Rebounds",
+    player_points_assists: "Points + Assists",
+    player_rebounds_assists: "Rebounds + Assists",
+    double_double: "Double-Double",
+    triple_double: "Triple-Double",
+
+    player_goals: "Goals",
+    anytime_goalscorer: "Goals",
+    anytime_goal_scorer: "Goals",
+    player_shots_on_goal: "Shots on Goal",
+    player_saves: "Saves",
+    goalie_goals_against: "Goals Against",
+    player_blocked_shots: "Blocked Shots",
+    player_power_play_points: "Power Play Points",
+
+    player_hits: "Hits",
+    player_total_bases: "Total Bases",
+    player_home_runs: "Home Runs",
+    player_rbis: "RBIs",
+    player_runs: "Runs",
+    player_stolen_bases: "Stolen Bases",
+    player_singles: "Singles",
+    player_doubles: "Doubles",
+    player_walks: "Walks",
+    player_hits_runs_rbis: "Hits + Runs + RBIs",
+
+    pitcher_strikeouts: "Strikeouts",
+    pitcher_outs_recorded: "Outs Recorded",
+    pitcher_hits_allowed: "Hits Allowed",
+    pitcher_earned_runs_allowed: "Earned Runs Allowed",
+    pitcher_walks_allowed: "Walks Allowed",
+  };
+
+  return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+
+function buildProbabilitiesByMethod(implieds = []) {
+  return {
+    power: normalizeProbabilities(devigPower(implieds)),
+    multiplicative: normalizeProbabilities(devigMultiplicative(implieds)),
+    additive: normalizeProbabilities(devigAdditive(implieds) || devigPower(implieds)),
+    shin: normalizeProbabilities(devigShinStyle(implieds)),
+  };
+}
+
+function devigMultiplicative(implieds = []) {
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (!(sum > 0)) return [];
+  return implieds.map((p) => p / sum);
+}
+
+function devigAdditive(implieds = []) {
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (!(sum > 0) || !implieds.length) return [];
+
+  const adjustment = (sum - 1) / implieds.length;
+  const probabilities = implieds.map((p) => p - adjustment);
+
+  if (probabilities.some((p) => !Number.isFinite(p) || p <= 0)) {
+    return null;
+  }
+
+  return probabilities;
+}
+
+function devigPower(implieds = []) {
+  if (!implieds.length) return [];
+
+  const sum = implieds.reduce((acc, n) => acc + n, 0);
+  if (Math.abs(sum - 1) < 0.000001) return implieds;
+
+  let low = 0.01;
+  let high = 10;
+
+  for (let i = 0; i < 80; i += 1) {
+    const mid = (low + high) / 2;
+    const poweredSum = implieds.reduce((acc, p) => acc + Math.pow(p, mid), 0);
+
+    if (poweredSum > 1) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return implieds.map((p) => Math.pow(p, (low + high) / 2));
+}
+
+function devigShinStyle(implieds = []) {
+  // Lightweight Shin-style sensitivity method. It blends power devig with a
+  // stronger longshot discount, useful as an alternate view on asymmetric books.
+  if (!implieds.length) return [];
+  if (implieds.length <= 2) return devigPower(implieds);
+
+  const power = normalizeProbabilities(devigPower(implieds));
+  const longshotDiscount = normalizeProbabilities(implieds.map((p) => Math.pow(p, 1.15)));
+
+  return power.map((p, idx) => p * 0.65 + longshotDiscount[idx] * 0.35);
+}
+
+function normalizeProbabilities(probabilities = []) {
+  const safe = probabilities.map((p) => Number(p)).filter((p) => Number.isFinite(p) && p > 0);
+  const sum = safe.reduce((acc, n) => acc + n, 0);
+
+  if (!safe.length || !(sum > 0)) return probabilities;
+
+  return probabilities.map((p) => {
+    const n = Number(p);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return n / sum;
+  });
+}
+
+function getExpectedOutcomeCount(market) {
+  const marketType = normalizeMarketType(market.marketType);
+
+  if (marketType === "moneyline_3way") return 3;
+
+    if (
+    marketType === "moneyline_2way" ||
+    marketType === "spread" ||
+    marketType === "total" ||
+
+    marketType === "player_points" ||
+    marketType === "player_assists" ||
+    marketType === "player_rebounds" ||
+    marketType === "player_threes" ||
+    marketType === "player_pra" ||
+    marketType === "player_points_rebounds" ||
+    marketType === "player_points_assists" ||
+    marketType === "player_rebounds_assists" ||
+    marketType === "double_double" ||
+    marketType === "triple_double" ||
+
+    marketType === "player_hits" ||
+    marketType === "player_total_bases" ||
+    marketType === "player_home_runs" ||
+    marketType === "player_rbis" ||
+    marketType === "player_runs" ||
+    marketType === "player_stolen_bases" ||
+    marketType === "player_singles" ||
+    marketType === "player_doubles" ||
+    marketType === "player_walks" ||
+    marketType === "player_hits_runs_rbis" ||
+
+    marketType === "pitcher_strikeouts" ||
+    marketType === "pitcher_outs_recorded" ||
+    marketType === "pitcher_hits_allowed" ||
+    marketType === "pitcher_earned_runs_allowed" ||
+    marketType === "pitcher_walks_allowed" ||
+
+    marketType === "player_goals" ||
+    marketType === "player_shots_on_goal" ||
+    marketType === "player_blocked_shots" ||
+    marketType === "player_power_play_points" ||
+    marketType === "player_saves" ||
+    marketType === "goalie_goals_against" ||
+    marketType === "player_shutout" ||
+    marketType === "anytime_goalscorer" ||
+    marketType === "both_teams_to_score"
+  ) {
+    return 2;
+  }
+
+  return 2;
+}

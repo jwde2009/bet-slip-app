@@ -1,5 +1,3 @@
-// app/utils/canonicalSelection.js
-
 import { canonicalizeTeamName, canonicalizeTeamsInText } from "./canonicalTeamNames";
 import { canonicalizeFixture } from "./canonicalFixture";
 import {
@@ -39,6 +37,10 @@ function toNumberString(value = "") {
 
 function inferMarketLabel(selection = "", marketDetail = "", betType = "") {
   const text = `${selection} | ${marketDetail}`.toLowerCase();
+
+  if (/\b(?:promo[\s_-]*special|sportsbook[\s_-]*special|promotion[\s_-]*special)\b/.test(text)) {
+    return "promo special";
+  }
 
   if (betType === "moneyline") return "moneyline";
   if (betType === "spread") return "spread";
@@ -194,6 +196,14 @@ export function canonicalizeSelectionFields(row = {}) {
     .replace(/\basts\b/g, "assists");
     selection = selection.replace(/\s+/g, " ").trim();
   const marketDetail = cleanValue(row.marketDetail || "");
+  const marketContext = cleanValue(
+    [row.canonicalMarketContext, row.reviewMarketType]
+      .filter(Boolean)
+      .join(" ")
+  );
+  const marketDetailForCanonical = cleanValue(
+    [marketDetail, marketContext].filter(Boolean).join(" ")
+  );
   const betType = cleanValue(row.betType || "").toLowerCase();
   const fixtureEvent = cleanValue(row.fixtureEvent || "");
   const canonicalFixtureValue = canonicalizeFixture(fixtureEvent);
@@ -203,7 +213,7 @@ export function canonicalizeSelectionFields(row = {}) {
     canonicalFixture: canonicalFixtureValue,
     canonicalSelection: canonicalizeTeamsInText(selection),
     canonicalBetType: betType,
-    canonicalMarket: inferMarketLabel(selection, marketDetail, betType),
+    canonicalMarket: inferMarketLabel(selection, marketDetailForCanonical, betType),
 
     canonicalSide: "",
     canonicalLine: "",
@@ -258,19 +268,26 @@ export function canonicalizeSelectionFields(row = {}) {
     result.canonicalSelection = cleanValue(canonicalizeTeamsInText(selection));
   }
 
-  result.canonicalPeriod = extractPeriod(selection, marketDetail, fixtureEvent);
+  result.canonicalPeriod = extractPeriod(selection, marketDetailForCanonical, fixtureEvent);
     if (row.canonicalSubject) {
     result.canonicalPlayer = String(row.canonicalSubject || "").trim().toLowerCase();
   }
 
-  if (row.canonicalMarketContext && !result.canonicalMarket) {
-    result.canonicalMarket = String(row.canonicalMarketContext || "").trim().toLowerCase();
+  if (marketContext) {
+    const normalizedMarketContext = marketContext.toLowerCase();
+
+    if (
+      normalizedMarketContext === "promo special" ||
+      !result.canonicalMarket
+    ) {
+      result.canonicalMarket = normalizedMarketContext;
+    }
   }
 
   result.canonicalMarketFamily = inferMarketFamily({
     betType,
     selection,
-    marketDetail,
+    marketDetail: marketDetailForCanonical,
     canonicalPlayer: result.canonicalPlayer,
     canonicalTeam: result.canonicalTeam,
     fixtureEvent,
@@ -282,7 +299,7 @@ export function canonicalizeSelectionFields(row = {}) {
   });
   result.canonicalResultTarget = inferResultTarget(
     selection,
-    marketDetail,
+    marketDetailForCanonical,
     result.canonicalMarketFamily
   );
 

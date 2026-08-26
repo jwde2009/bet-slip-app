@@ -1,3 +1,4 @@
+
 "use client";
 
 const wrapStyle = {
@@ -269,8 +270,10 @@ export default function FilterBar({
       </div>
 
       <div style={{ color: "#166534", fontWeight: 700, fontSize: 12 }}>
-        Keyboard: W = win, L = loss, ↑/↓ = move rows
+        Keyboard: W = win, L = loss, Up/Down = move rows
       </div>
     </div>
   );
 }
+
+

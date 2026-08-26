@@ -3,10 +3,6 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  calculateMultiOutcomeProbability,
-  MULTI_OUTCOME_PROMO_TYPES,
-} from "../utils/multiOutcomeCalculator";
 
 const SETTINGS_STORAGE_KEY = "betting-tools-settings-v2";
 
@@ -18,7 +14,6 @@ function ToolsPageContent() {
 
   const [novigA, setNovigA] = useState("-110");
   const [novigB, setNovigB] = useState("-110");
-  const [novigMethod, setNovigMethod] = useState("auto");
 
   const [bankroll, setBankroll] = useState("6000");
   const [kellyFraction, setKellyFraction] = useState("0.25");
@@ -33,13 +28,6 @@ function ToolsPageContent() {
   const [singleBetProb, setSingleBetProb] = useState("0.43");
   const [singleBetStake, setSingleBetStake] = useState("25");
   const [singleBetLabel, setSingleBetLabel] = useState("");
-  const [singleBetFairMode, setSingleBetFairMode] = useState("reference"); // reference | estimated | fair
-  const [singleBetReferenceOdds, setSingleBetReferenceOdds] = useState("+124");
-  const [singleBetOppositeOdds, setSingleBetOppositeOdds] = useState("-135");
-  const [singleBetDevigMethod, setSingleBetDevigMethod] = useState("auto");
-  const [singleBetEstimatedOdds, setSingleBetEstimatedOdds] = useState("+124");
-  const [singleBetEstimatedSourceBook, setSingleBetEstimatedSourceBook] = useState("pinnacle");
-  const [singleBetEstimatedHoldPct, setSingleBetEstimatedHoldPct] = useState("2.5");
 
   const [yourStake, setYourStake] = useState("25");
 
@@ -50,14 +38,6 @@ function ToolsPageContent() {
   const [promoTrueValue, setPromoTrueValue] = useState("+180");
   const [promoBoostPct, setPromoBoostPct] = useState("25");
   const [promoMaxStake, setPromoMaxStake] = useState("100");
-
-  const [multiOutcomePromoType, setMultiOutcomePromoType] = useState(
-    MULTI_OUTCOME_PROMO_TYPES.AT_LEAST_N
-  );
-  const [multiOutcomeNumberRequired, setMultiOutcomeNumberRequired] = useState("1");
-  const [multiOutcomeFairOdds, setMultiOutcomeFairOdds] = useState(["+200", "+200"]);
-  const [multiOutcomeBookOdds, setMultiOutcomeBookOdds] = useState("-110");
-  const [multiOutcomeStake, setMultiOutcomeStake] = useState("25");
 
   const [parlayLegsInput, setParlayLegsInput] = useState("+150, -110, +200");
   const [parlayBoostPct, setParlayBoostPct] = useState("0");
@@ -96,7 +76,6 @@ function ToolsPageContent() {
         setQuickStake(saved.defaultStake);
         setSingleBetStake(saved.defaultStake);
         setYourStake(saved.defaultStake);
-        setMultiOutcomeStake(saved.defaultStake);
         setParlayStake(saved.defaultStake);
       }
       if (saved.defaultBoostPct) {
@@ -190,8 +169,30 @@ function ToolsPageContent() {
   }, [impliedOddsInput]);
 
   const noVigResult = useMemo(() => {
-    return devigTwoWay(novigA, novigB, novigMethod);
-  }, [novigA, novigB, novigMethod]);
+    const parsedA = parseAnyOddsOrProbability(novigA);
+    const parsedB = parseAnyOddsOrProbability(novigB);
+    if (!parsedA || !parsedB) return null;
+
+    const impA = 1 / parsedA.decimal;
+    const impB = 1 / parsedB.decimal;
+    const total = impA + impB;
+    if (!(total > 0)) return null;
+
+    const fairProbA = impA / total;
+    const fairProbB = impB / total;
+
+    return {
+      fairProbA,
+      fairProbB,
+      fairDecimalA: 1 / fairProbA,
+      fairDecimalB: 1 / fairProbB,
+      fairAmericanA: decimalToAmerican(1 / fairProbA),
+      fairAmericanB: decimalToAmerican(1 / fairProbB),
+      holdPct: (total - 1) * 100,
+      inputTypeA: parsedA.type,
+      inputTypeB: parsedB.type,
+    };
+  }, [novigA, novigB]);
 
   const quickBetResult = useMemo(
     () =>
@@ -207,47 +208,20 @@ function ToolsPageContent() {
 
   const singleBetResult = useMemo(
     () =>
-      buildBetEvaluationFromFairSource({
+      buildBetEvaluation({
         bookInput: singleBetOdds,
-        fairMode: singleBetFairMode,
-        fairInput: singleBetProb,
-        referenceSideInput: singleBetReferenceOdds,
-        referenceOtherSideInput: singleBetOppositeOdds,
-        devigMethod: singleBetDevigMethod,
-        estimatedSideInput: singleBetEstimatedOdds,
-        estimatedHoldPctInput: singleBetEstimatedHoldPct,
-        estimatedSourceBook: singleBetEstimatedSourceBook,
+        trueInput: singleBetProb,
         stakeInput: singleBetStake,
         bankrollInput: bankroll,
         kellyFractionInput: kellyFraction,
       }),
-    [
-      singleBetOdds,
-      singleBetFairMode,
-      singleBetProb,
-      singleBetReferenceOdds,
-      singleBetOppositeOdds,
-      singleBetDevigMethod,
-      singleBetEstimatedOdds,
-      singleBetEstimatedHoldPct,
-      singleBetEstimatedSourceBook,
-      singleBetStake,
-      bankroll,
-      kellyFraction,
-    ]
+    [singleBetOdds, singleBetProb, singleBetStake, bankroll, kellyFraction]
   );
 
   const stakeComparisonResult = useMemo(() => {
-    const result = buildBetEvaluationFromFairSource({
+    const result = buildBetEvaluation({
       bookInput: singleBetOdds,
-      fairMode: singleBetFairMode,
-      fairInput: singleBetProb,
-      referenceSideInput: singleBetReferenceOdds,
-      referenceOtherSideInput: singleBetOppositeOdds,
-      devigMethod: singleBetDevigMethod,
-      estimatedSideInput: singleBetEstimatedOdds,
-      estimatedHoldPctInput: singleBetEstimatedHoldPct,
-      estimatedSourceBook: singleBetEstimatedSourceBook,
+      trueInput: singleBetProb,
       stakeInput: yourStake,
       bankrollInput: bankroll,
       kellyFractionInput: kellyFraction,
@@ -276,20 +250,7 @@ function ToolsPageContent() {
       diffPct,
       label,
     };
-  }, [
-    singleBetOdds,
-    singleBetFairMode,
-    singleBetProb,
-    singleBetReferenceOdds,
-    singleBetOppositeOdds,
-    singleBetDevigMethod,
-    singleBetEstimatedOdds,
-    singleBetEstimatedHoldPct,
-    singleBetEstimatedSourceBook,
-    bankroll,
-    kellyFraction,
-    yourStake,
-  ]);
+  }, [singleBetOdds, singleBetProb, bankroll, kellyFraction, yourStake]);
 
   const boostResult = useMemo(() => {
     const parsed = parseAnyOddsOrProbability(boostOdds);
@@ -345,43 +306,6 @@ function ToolsPageContent() {
       expectedAtMax: boosted.expectedProfit,
     };
   }, [promoBookOdds, promoTrueValue, promoBoostPct, promoMaxStake, bankroll, kellyFraction]);
-
-  const multiOutcomeResult = useMemo(() => {
-    const parsedOutcomes = multiOutcomeFairOdds.map(parseFairOddsOnly);
-    if (parsedOutcomes.some((item) => !item)) return null;
-
-    const probabilityResult = calculateMultiOutcomeProbability({
-      promoType: multiOutcomePromoType,
-      numberRequired: multiOutcomeNumberRequired,
-      fairDecimalOdds: parsedOutcomes.map((item) => item.decimal),
-    });
-
-    if (!probabilityResult) return null;
-
-    const evaluation = buildBetEvaluation({
-      bookInput: multiOutcomeBookOdds,
-      trueInput: String(probabilityResult.combinedProbability),
-      stakeInput: multiOutcomeStake,
-      bankrollInput: bankroll,
-      kellyFractionInput: kellyFraction,
-    });
-
-    if (!evaluation) return null;
-
-    return {
-      ...probabilityResult,
-      evaluation,
-      outcomeInputTypes: parsedOutcomes.map((item) => item.type),
-    };
-  }, [
-    multiOutcomePromoType,
-    multiOutcomeNumberRequired,
-    multiOutcomeFairOdds,
-    multiOutcomeBookOdds,
-    multiOutcomeStake,
-    bankroll,
-    kellyFraction,
-  ]);
 
   const parlayResult = useMemo(() => {
     const parts = splitCommaValues(parlayLegsInput);
@@ -593,41 +517,7 @@ function ToolsPageContent() {
     setQuickStake(value);
     setSingleBetStake(value);
     setYourStake(value);
-    setMultiOutcomeStake(value);
     setParlayStake(value);
-  }
-
-  function updateSingleBetEstimatedSourceBook(value) {
-    setSingleBetEstimatedSourceBook(value);
-
-    const preset = getEstimatedHoldPreset(value);
-    if (Number.isFinite(preset)) {
-      setSingleBetEstimatedHoldPct(String(preset));
-    }
-  }
-
-  function updateMultiOutcomeFairOdds(index, value) {
-    setMultiOutcomeFairOdds((prev) =>
-      prev.map((item, itemIndex) => (itemIndex === index ? value : item))
-    );
-  }
-
-  function addMultiOutcome() {
-    setMultiOutcomeFairOdds((prev) => [...prev, "+200"]);
-  }
-
-  function removeMultiOutcome(index) {
-    if (multiOutcomeFairOdds.length <= 2) return;
-
-    const nextOutcomeCount = multiOutcomeFairOdds.length - 1;
-    setMultiOutcomeFairOdds((prev) =>
-      prev.filter((_, itemIndex) => itemIndex !== index)
-    );
-    setMultiOutcomeNumberRequired((current) => {
-      const numeric = Number(current);
-      if (!Number.isFinite(numeric)) return "1";
-      return String(Math.min(Math.max(1, Math.trunc(numeric)), nextOutcomeCount));
-    });
   }
 
   function useQuickInSingleBet() {
@@ -644,28 +534,12 @@ function ToolsPageContent() {
 
   function useNoVigAInSingleBet() {
     if (!noVigResult) return;
-    setSingleBetFairMode("fair");
     setSingleBetProb(formatAmerican(noVigResult.fairAmericanA));
   }
 
   function useNoVigBInSingleBet() {
     if (!noVigResult) return;
-    setSingleBetFairMode("fair");
     setSingleBetProb(formatAmerican(noVigResult.fairAmericanB));
-  }
-
-  function useNoVigAAsReference() {
-    setSingleBetFairMode("reference");
-    setSingleBetReferenceOdds(novigA);
-    setSingleBetOppositeOdds(novigB);
-    setSingleBetDevigMethod(novigMethod);
-  }
-
-  function useNoVigBAsReference() {
-    setSingleBetFairMode("reference");
-    setSingleBetReferenceOdds(novigB);
-    setSingleBetOppositeOdds(novigA);
-    setSingleBetDevigMethod(novigMethod);
   }
 
   return (
@@ -778,7 +652,7 @@ function ToolsPageContent() {
         </div>
 
         <div style={gridStyle}>
-          <ToolCard collapseAction={toolCollapseAction} title="Quick Bet Check (Legacy)" defaultCollapsed={true}>
+          <ToolCard collapseAction={toolCollapseAction} title="Quick Bet Check">
             <label style={labelStyle}>
               Book Odds / Price
               <input
@@ -789,7 +663,7 @@ function ToolsPageContent() {
               />
             </label>
             <label style={labelStyle}>
-              Fair Probability / Fair Odds
+              True Probability / True Odds
               <input
                 value={quickTrueValue}
                 onChange={(e) => setQuickTrueValue(e.target.value)}
@@ -908,19 +782,6 @@ function ToolsPageContent() {
                 style={inputStyle}
               />
             </label>
-            <label style={labelStyle}>
-              Devig Method
-              <select
-                value={novigMethod}
-                onChange={(e) => setNovigMethod(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="auto">Auto recommended / Power</option>
-                <option value="power">Power</option>
-                <option value="multiplicative">Multiplicative / proportional</option>
-                <option value="additive">Additive</option>
-              </select>
-            </label>
 
             <div style={resultBoxStyle}>
               {noVigResult ? (
@@ -929,26 +790,18 @@ function ToolsPageContent() {
                   <div>Side B Fair Prob: <strong>{(noVigResult.fairProbB * 100).toFixed(2)}%</strong></div>
                   <div>Side A Fair Odds: <strong>{formatAmerican(noVigResult.fairAmericanA)}</strong> / <strong>{noVigResult.fairDecimalA.toFixed(3)}</strong></div>
                   <div>Side B Fair Odds: <strong>{formatAmerican(noVigResult.fairAmericanB)}</strong> / <strong>{noVigResult.fairDecimalB.toFixed(3)}</strong></div>
-                  <div>Method: <strong>{noVigResult.methodLabel}</strong></div>
                   <div>
                     Hold:{" "}
                     <ResultValue value={-Math.abs(noVigResult.holdPct)}>
                       {noVigResult.holdPct.toFixed(2)}%
                     </ResultValue>
                   </div>
-                  <DevigMethodComparison comparison={noVigResult.comparison} />
                   <div style={buttonRowStyle}>
                     <button type="button" onClick={useNoVigAInSingleBet} style={copyButtonStyle}>
-                      Use Side A as Fair Odds
+                      Use Side A as True Odds
                     </button>
                     <button type="button" onClick={useNoVigBInSingleBet} style={copyButtonStyle}>
-                      Use Side B as Fair Odds
-                    </button>
-                    <button type="button" onClick={useNoVigAAsReference} style={copyButtonStyle}>
-                      Use A/B as Reference
-                    </button>
-                    <button type="button" onClick={useNoVigBAsReference} style={copyButtonStyle}>
-                      Use B/A as Reference
+                      Use Side B as True Odds
                     </button>
                     <CopyButton text={buildNoVigSummaryText(noVigResult)}>
                       Copy Summary
@@ -961,119 +814,29 @@ function ToolsPageContent() {
             </div>
           </ToolCard>
 
-          <ToolCard collapseAction={toolCollapseAction} title="Bet Check: Fair Odds, EV & Kelly">
+          <ToolCard collapseAction={toolCollapseAction} title="Single Bet EV / Kelly Finder">
             {singleBetLabel ? (
               <div style={selectedBetBannerStyle}>{singleBetLabel}</div>
             ) : null}
 
             <label style={labelStyle}>
-              Target Book Odds / Price
+              Book Odds / Price
               <input
                 value={singleBetOdds}
                 onChange={(e) => setSingleBetOdds(e.target.value)}
-                placeholder="Odds you can bet: +175, 2.75, etc."
+                placeholder="+195, 2.95, 33.9%, or 0.339"
                 style={inputStyle}
               />
             </label>
-
             <label style={labelStyle}>
-              Fair Odds Source
-              <select
-                value={singleBetFairMode}
-                onChange={(e) => setSingleBetFairMode(e.target.value)}
+              True Probability / True Odds
+              <input
+                value={singleBetProb}
+                onChange={(e) => setSingleBetProb(e.target.value)}
+                placeholder="43%, 0.43, +133, or 2.33"
                 style={inputStyle}
-              >
-                <option value="reference">Both sides - exact de-vig</option>
-                <option value="estimated">One side - estimated de-vig</option>
-                <option value="fair">Already fair / no-vig odds or probability</option>
-              </select>
+              />
             </label>
-
-            {singleBetFairMode === "reference" ? (
-              <>
-                <label style={labelStyle}>
-                  Reference Side Odds
-                  <input
-                    value={singleBetReferenceOdds}
-                    onChange={(e) => setSingleBetReferenceOdds(e.target.value)}
-                    placeholder="Reference book price for the side you want, e.g. +124"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={labelStyle}>
-                  Reference Opposite Side Odds
-                  <input
-                    value={singleBetOppositeOdds}
-                    onChange={(e) => setSingleBetOppositeOdds(e.target.value)}
-                    placeholder="Opposite side at same book, e.g. -135"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={labelStyle}>
-                  Devig Method
-                  <select
-                    value={singleBetDevigMethod}
-                    onChange={(e) => setSingleBetDevigMethod(e.target.value)}
-                    style={inputStyle}
-                  >
-                    <option value="auto">Auto recommended / Power</option>
-                    <option value="power">Power</option>
-                    <option value="multiplicative">Multiplicative / proportional</option>
-                    <option value="additive">Additive</option>
-                  </select>
-                </label>
-              </>
-            ) : singleBetFairMode === "estimated" ? (
-              <>
-                <label style={labelStyle}>
-                  Source Book
-                  <select
-                    value={singleBetEstimatedSourceBook}
-                    onChange={(e) => updateSingleBetEstimatedSourceBook(e.target.value)}
-                    style={inputStyle}
-                  >
-                    <option value="pinnacle">Pinnacle - 2.5% hold preset</option>
-                    <option value="fanduel">FanDuel - 4.5% hold preset</option>
-                    <option value="other">Other / custom</option>
-                  </select>
-                </label>
-                <label style={labelStyle}>
-                  Source Side Odds
-                  <input
-                    value={singleBetEstimatedOdds}
-                    onChange={(e) => setSingleBetEstimatedOdds(e.target.value)}
-                    placeholder="Single sharp/source price, e.g. +124"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={labelStyle}>
-                  Assumed Market Hold %
-                  <input
-                    value={singleBetEstimatedHoldPct}
-                    onChange={(e) => setSingleBetEstimatedHoldPct(e.target.value)}
-                    placeholder="2.5"
-                    style={inputStyle}
-                  />
-                </label>
-                <div style={warningBoxStyle}>
-                  Estimate only: with no opposite-side price, the actual vig cannot be known.
-                  This mode assumes the entered total market hold and removes it proportionally
-                  from the single source price. The hold preset is only a starting estimate and
-                  can be edited for the specific market.
-                </div>
-              </>
-            ) : (
-              <label style={labelStyle}>
-                Fair Odds / Fair Probability
-                <input
-                  value={singleBetProb}
-                  onChange={(e) => setSingleBetProb(e.target.value)}
-                  placeholder="No-vig/fair value: 43%, 0.43, +133, or 2.33"
-                  style={inputStyle}
-                />
-              </label>
-            )}
-
             <label style={labelStyle}>
               Stake
               <input
@@ -1086,8 +849,7 @@ function ToolsPageContent() {
             <QuickStakeButtons onPick={setSingleBetStake} />
 
             <div style={helperTextStyle}>
-              Best: use both sides from a sharp/reference book. If you only have one Pinnacle,
-              FanDuel, or other source price, use estimated de-vig and adjust the assumed hold if needed.
+              Uses top settings: {formatCurrency(activeBankroll)} bankroll x {kellyFraction} Kelly.
             </div>
 
             <div style={resultBoxStyle}>
@@ -1095,15 +857,12 @@ function ToolsPageContent() {
                 <>
                   <VerdictRow result={singleBetResult} />
                   <BetEvaluationResult result={singleBetResult} kellyFraction={kellyFraction} />
-                  {singleBetResult.fairSource?.comparison ? (
-                    <DevigMethodComparison comparison={singleBetResult.fairSource.comparison} />
-                  ) : null}
-                  <CopyButton text={buildBetSummaryText("Bet Check: Fair Odds, EV & Kelly", singleBetResult)}>
+                  <CopyButton text={buildBetSummaryText("Single Bet EV / Kelly Finder", singleBetResult)}>
                     Copy Summary
                   </CopyButton>
                 </>
               ) : (
-                <div>Enter target odds, then fair odds, both reference sides, or one source side with an assumed hold.</div>
+                <div>Enter valid book odds, true probability/odds, and stake.</div>
               )}
             </div>
           </ToolCard>
@@ -1123,7 +882,7 @@ function ToolsPageContent() {
               />
             </label>
             <label style={labelStyle}>
-              Fair Probability / Fair Odds
+              True Probability / True Odds
               <input
                 value={singleBetProb}
                 onChange={(e) => setSingleBetProb(e.target.value)}
@@ -1239,7 +998,7 @@ function ToolsPageContent() {
               />
             </label>
             <label style={labelStyle}>
-              Fair Probability / Fair Odds
+              True Probability / True Odds
               <input
                 value={promoTrueValue}
                 onChange={(e) => setPromoTrueValue(e.target.value)}
@@ -1301,147 +1060,6 @@ function ToolsPageContent() {
                 </>
               ) : (
                 <div>Enter valid book odds, true probability/odds, boost %, and max stake.</div>
-              )}
-            </div>
-          </ToolCard>
-
-          <ToolCard
-            collapseAction={toolCollapseAction}
-            title="Multi-Outcome Promo EV Calculator"
-            defaultCollapsed={false}
-          >
-            <label style={labelStyle}>
-              Promo Type
-              <select
-                value={multiOutcomePromoType}
-                onChange={(e) => setMultiOutcomePromoType(e.target.value)}
-                style={inputStyle}
-              >
-                <option value={MULTI_OUTCOME_PROMO_TYPES.TRADITIONAL_PARLAY}>
-                  Traditional Parlay
-                </option>
-                <option value={MULTI_OUTCOME_PROMO_TYPES.AT_LEAST_N}>At Least N</option>
-                <option value={MULTI_OUTCOME_PROMO_TYPES.EXACTLY_N}>Exactly N</option>
-                <option value={MULTI_OUTCOME_PROMO_TYPES.ALL_HIT}>All Hit</option>
-              </select>
-            </label>
-
-            <label style={labelStyle}>
-              Number Required
-              <input
-                type="number"
-                min="1"
-                max={multiOutcomeFairOdds.length}
-                step="1"
-                value={
-                  multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.TRADITIONAL_PARLAY ||
-                  multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.ALL_HIT
-                    ? multiOutcomeFairOdds.length
-                    : multiOutcomeNumberRequired
-                }
-                onChange={(e) => setMultiOutcomeNumberRequired(e.target.value)}
-                disabled={
-                  multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.TRADITIONAL_PARLAY ||
-                  multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.ALL_HIT
-                }
-                style={{
-                  ...inputStyle,
-                  opacity:
-                    multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.TRADITIONAL_PARLAY ||
-                    multiOutcomePromoType === MULTI_OUTCOME_PROMO_TYPES.ALL_HIT
-                      ? 0.65
-                      : 1,
-                }}
-              />
-            </label>
-
-            <div style={multiOutcomeListStyle}>
-              {multiOutcomeFairOdds.map((value, index) => (
-                <div key={`multi-outcome-${index}`} style={multiOutcomeRowStyle}>
-                  <label style={{ ...labelStyle, flex: 1 }}>
-                    Outcome {index + 1} Fair Odds
-                    <input
-                      value={value}
-                      onChange={(e) => updateMultiOutcomeFairOdds(index, e.target.value)}
-                      placeholder="+200, -125, or 3.00"
-                      style={inputStyle}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeMultiOutcome(index)}
-                    disabled={multiOutcomeFairOdds.length <= 2}
-                    style={{
-                      ...smallSecondaryButtonStyle,
-                      alignSelf: "end",
-                      opacity: multiOutcomeFairOdds.length <= 2 ? 0.5 : 1,
-                      cursor: multiOutcomeFairOdds.length <= 2 ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Remove Outcome
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div style={buttonRowStyle}>
-              <button type="button" onClick={addMultiOutcome} style={copyButtonStyle}>
-                Add Outcome
-              </button>
-            </div>
-
-            <label style={labelStyle}>
-              Promo Book Odds
-              <input
-                value={multiOutcomeBookOdds}
-                onChange={(e) => setMultiOutcomeBookOdds(e.target.value)}
-                placeholder="-110, +200, or 2.50"
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Stake
-              <input
-                value={multiOutcomeStake}
-                onChange={(e) => setMultiOutcomeStake(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-
-            <QuickStakeButtons onPick={setMultiOutcomeStake} />
-
-            <div style={warningBoxStyle}>
-              Enter fair odds for each complete outcome. If an outcome itself is a parlay,
-              enter that parlay's fair odds as one outcome. Correlation is not modeled; every
-              entered outcome is treated as independent.
-            </div>
-
-            <div style={resultBoxStyle}>
-              {multiOutcomeResult ? (
-                <>
-                  <div>
-                    Combined Probability:{" "}
-                    <strong>{(multiOutcomeResult.combinedProbability * 100).toFixed(2)}%</strong>
-                  </div>
-                  <div>
-                    Fair American Odds:{" "}
-                    <strong>{formatAmerican(multiOutcomeResult.evaluation.trueAmerican)}</strong>
-                  </div>
-                  <VerdictRow result={multiOutcomeResult.evaluation} />
-                  <BetEvaluationResult
-                    result={multiOutcomeResult.evaluation}
-                    kellyFraction={kellyFraction}
-                  />
-                  <CopyButton text={buildMultiOutcomeSummaryText(multiOutcomeResult)}>
-                    Copy Summary
-                  </CopyButton>
-                </>
-              ) : (
-                <div>
-                  Enter valid fair odds for every outcome, a valid required count, promo book
-                  odds, and stake.
-                </div>
               )}
             </div>
           </ToolCard>
@@ -1835,22 +1453,8 @@ function BetEvaluationResult({ result, kellyFraction }) {
       {Number.isFinite(result.boostedDecimal) && result.boostPct !== 0 ? (
         <div>Boosted Odds: <strong>{formatAmerican(result.boostedAmerican)}</strong> / <strong>{result.boostedDecimal.toFixed(3)}</strong></div>
       ) : null}
-      <div>Fair Win %: <strong>{(result.trueProbability * 100).toFixed(2)}%</strong> <span style={mutedTextStyle}>({result.trueInputType})</span></div>
-      <div>Fair Odds: <strong>{formatAmerican(result.trueAmerican)}</strong> / <strong>{result.trueDecimal.toFixed(3)}</strong></div>
-      {result.fairSource?.mode === "reference" ? (
-        <div>Fair Source: <strong>{result.fairSource.methodLabel}</strong> devig from {formatAmerican(result.fairSource.referenceAmericanA)} / {formatAmerican(result.fairSource.referenceAmericanB)}</div>
-      ) : null}
-      {result.fairSource?.mode === "estimated" ? (
-        <>
-          <div>
-            Fair Source: <strong>{result.fairSource.sourceBookLabel}</strong> single-price estimate from {formatAmerican(result.fairSource.sourceAmerican)}
-          </div>
-          <div>
-            Assumed Market Hold: <strong>{result.fairSource.holdPct.toFixed(2)}%</strong>
-            {" "}- Raw Source Implied: <strong>{(result.fairSource.rawImpliedProbability * 100).toFixed(2)}%</strong>
-          </div>
-        </>
-      ) : null}
+      <div>True Win %: <strong>{(result.trueProbability * 100).toFixed(2)}%</strong> <span style={mutedTextStyle}>({result.trueInputType})</span></div>
+      <div>True Odds: <strong>{formatAmerican(result.trueAmerican)}</strong> / <strong>{result.trueDecimal.toFixed(3)}</strong></div>
       <div>Break-Even %: <strong>{(result.breakEvenProbability * 100).toFixed(2)}%</strong></div>
       <div>
         EV %:{" "}
@@ -1877,29 +1481,6 @@ function BetEvaluationResult({ result, kellyFraction }) {
         </ResultValue>
       </div>
     </>
-  );
-}
-
-function DevigMethodComparison({ comparison }) {
-  if (!comparison) return null;
-
-  const rows = [
-    ["Power", comparison.power],
-    ["Multiplicative", comparison.multiplicative],
-    ["Additive", comparison.additive],
-  ].filter(([, item]) => item);
-
-  if (!rows.length) return null;
-
-  return (
-    <div style={warningBoxStyle}>
-      <strong>Devig comparison</strong>
-      {rows.map(([label, item]) => (
-        <div key={label}>
-          {label}: Side A {formatAmerican(item.fairAmericanA)} ({(item.fairProbA * 100).toFixed(2)}%) / Side B {formatAmerican(item.fairAmericanB)} ({(item.fairProbB * 100).toFixed(2)}%)
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1978,16 +1559,6 @@ function parseTrueProbabilityInput(value) {
   return {
     probability: 1 / parsed.decimal,
     type: parsed.type === "American odds" ? "American true odds" : "decimal true odds",
-  };
-}
-
-function parseFairOddsOnly(value) {
-  const parsed = parseFlexiblePrice(value);
-  if (!parsed || parsed.type === "probability") return null;
-
-  return {
-    decimal: parsed.decimal,
-    type: parsed.type,
   };
 }
 
@@ -2137,236 +1708,6 @@ function buildBetEvaluation({
   };
 }
 
-function buildBetEvaluationFromFairSource({
-  bookInput,
-  fairMode,
-  fairInput,
-  referenceSideInput,
-  referenceOtherSideInput,
-  devigMethod,
-  estimatedSideInput,
-  estimatedHoldPctInput,
-  estimatedSourceBook,
-  stakeInput,
-  bankrollInput,
-  kellyFractionInput,
-  boostPctInput = 0,
-}) {
-  let resolvedFairInput = fairInput;
-  let fairSource = null;
-
-  if (fairMode === "reference") {
-    const devig = devigTwoWay(referenceSideInput, referenceOtherSideInput, devigMethod);
-    if (!devig) return null;
-
-    resolvedFairInput = String(devig.fairProbA);
-    fairSource = {
-      mode: "reference",
-      method: devig.method,
-      methodLabel: devig.methodLabel,
-      holdPct: devig.holdPct,
-      referenceAmericanA: devig.inputAmericanA,
-      referenceAmericanB: devig.inputAmericanB,
-      fairAmericanA: devig.fairAmericanA,
-      fairDecimalA: devig.fairDecimalA,
-      fairProbA: devig.fairProbA,
-      comparison: devig.comparison,
-    };
-  } else if (fairMode === "estimated") {
-    const estimate = estimateFairFromSinglePrice(
-      estimatedSideInput,
-      estimatedHoldPctInput
-    );
-    if (!estimate) return null;
-
-    resolvedFairInput = String(estimate.fairProbability);
-    fairSource = {
-      mode: "estimated",
-      method: "single-price-proportional",
-      methodLabel: "Single-price estimated de-vig",
-      sourceBook: estimatedSourceBook || "other",
-      sourceBookLabel: getEstimatedSourceBookLabel(estimatedSourceBook),
-      sourceAmerican: estimate.sourceAmerican,
-      sourceDecimal: estimate.sourceDecimal,
-      rawImpliedProbability: estimate.rawImpliedProbability,
-      holdPct: estimate.holdPct,
-      fairProbability: estimate.fairProbability,
-      fairDecimal: estimate.fairDecimal,
-      fairAmerican: estimate.fairAmerican,
-    };
-  } else {
-    fairSource = {
-      mode: "fair",
-      method: "none",
-      methodLabel: "Already fair / no-vig",
-    };
-  }
-
-  const result = buildBetEvaluation({
-    bookInput,
-    trueInput: resolvedFairInput,
-    stakeInput,
-    bankrollInput,
-    kellyFractionInput,
-    boostPctInput,
-  });
-
-  return result ? { ...result, fairSource } : null;
-}
-
-function estimateFairFromSinglePrice(sideInput, holdPctInput) {
-  const parsed = parseAnyOddsOrProbability(sideInput);
-  const holdPct = Number(holdPctInput);
-
-  if (!parsed || !Number.isFinite(holdPct) || holdPct < 0) return null;
-
-  const rawImpliedProbability = 1 / parsed.decimal;
-  const overround = 1 + holdPct / 100;
-  if (!(overround > 0)) return null;
-
-  const fairProbability = rawImpliedProbability / overround;
-  if (!(fairProbability > 0 && fairProbability < 1)) return null;
-
-  const fairDecimal = 1 / fairProbability;
-
-  return {
-    sourceDecimal: parsed.decimal,
-    sourceAmerican: decimalToAmerican(parsed.decimal),
-    rawImpliedProbability,
-    holdPct,
-    fairProbability,
-    fairDecimal,
-    fairAmerican: decimalToAmerican(fairDecimal),
-  };
-}
-
-function getEstimatedHoldPreset(sourceBook) {
-  if (sourceBook === "pinnacle") return 2.5;
-  if (sourceBook === "fanduel") return 4.5;
-  return NaN;
-}
-
-function getEstimatedSourceBookLabel(sourceBook) {
-  if (sourceBook === "pinnacle") return "Pinnacle";
-  if (sourceBook === "fanduel") return "FanDuel";
-  return "Other / custom source";
-}
-
-function devigTwoWay(sideAInput, sideBInput, methodInput = "auto") {
-  const parsedA = parseAnyOddsOrProbability(sideAInput);
-  const parsedB = parseAnyOddsOrProbability(sideBInput);
-  if (!parsedA || !parsedB) return null;
-
-  const impA = 1 / parsedA.decimal;
-  const impB = 1 / parsedB.decimal;
-  const total = impA + impB;
-  if (!(total > 0)) return null;
-
-  const method = normalizeDevigMethod(methodInput);
-  const selected = calculateTwoWayDevigProbabilities(impA, impB, method);
-  if (!selected) return null;
-
-  const comparison = {
-    power: calculateTwoWayDevigProbabilities(impA, impB, "power"),
-    multiplicative: calculateTwoWayDevigProbabilities(impA, impB, "multiplicative"),
-    additive: calculateTwoWayDevigProbabilities(impA, impB, "additive"),
-  };
-
-  return {
-    fairProbA: selected.fairProbA,
-    fairProbB: selected.fairProbB,
-    fairDecimalA: 1 / selected.fairProbA,
-    fairDecimalB: 1 / selected.fairProbB,
-    fairAmericanA: decimalToAmerican(1 / selected.fairProbA),
-    fairAmericanB: decimalToAmerican(1 / selected.fairProbB),
-    inputAmericanA: decimalToAmerican(parsedA.decimal),
-    inputAmericanB: decimalToAmerican(parsedB.decimal),
-    holdPct: (total - 1) * 100,
-    method,
-    methodLabel: getDevigMethodLabel(method),
-    inputTypeA: parsedA.type,
-    inputTypeB: parsedB.type,
-    comparison,
-  };
-}
-
-function normalizeDevigMethod(methodInput) {
-  const method = String(methodInput || "auto").toLowerCase();
-  if (method === "auto") return "power";
-  if (["power", "multiplicative", "additive"].includes(method)) return method;
-  return "power";
-}
-
-function getDevigMethodLabel(method) {
-  if (method === "power") return "Power";
-  if (method === "multiplicative") return "Multiplicative / proportional";
-  if (method === "additive") return "Additive";
-  return "Power";
-}
-
-function calculateTwoWayDevigProbabilities(impA, impB, method) {
-  const total = impA + impB;
-  if (!(impA > 0) || !(impB > 0) || !(total > 0)) return null;
-
-  let fairProbA;
-  let fairProbB;
-
-  if (method === "additive") {
-    const adjustment = (total - 1) / 2;
-    fairProbA = clampProbability(impA - adjustment);
-    fairProbB = clampProbability(impB - adjustment);
-
-    const adjustedTotal = fairProbA + fairProbB;
-    if (adjustedTotal > 0) {
-      fairProbA /= adjustedTotal;
-      fairProbB /= adjustedTotal;
-    }
-  } else if (method === "power") {
-    const exponent = solvePowerDevigExponent(impA, impB);
-    fairProbA = Math.pow(impA, exponent);
-    fairProbB = Math.pow(impB, exponent);
-
-    const adjustedTotal = fairProbA + fairProbB;
-    fairProbA /= adjustedTotal;
-    fairProbB /= adjustedTotal;
-  } else {
-    fairProbA = impA / total;
-    fairProbB = impB / total;
-  }
-
-  if (!(fairProbA > 0) || !(fairProbB > 0)) return null;
-
-  return {
-    fairProbA,
-    fairProbB,
-    fairDecimalA: 1 / fairProbA,
-    fairDecimalB: 1 / fairProbB,
-    fairAmericanA: decimalToAmerican(1 / fairProbA),
-    fairAmericanB: decimalToAmerican(1 / fairProbB),
-  };
-}
-
-function solvePowerDevigExponent(impA, impB) {
-  let low = 0.01;
-  let high = 10;
-
-  for (let i = 0; i < 80; i += 1) {
-    const mid = (low + high) / 2;
-    const sum = Math.pow(impA, mid) + Math.pow(impB, mid);
-
-    if (sum > 1) low = mid;
-    else high = mid;
-  }
-
-  return (low + high) / 2;
-}
-
-function clampProbability(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0.5;
-  return Math.min(0.999999, Math.max(0.000001, number));
-}
-
 function calculateEvPct(decimalOdds, trueProbability) {
   return trueProbability * (decimalOdds - 1) - (1 - trueProbability);
 }
@@ -2509,10 +1850,8 @@ function buildBetSummaryText(title, result) {
     title,
     `Book odds: ${formatAmerican(result.bookAmerican)} / ${result.bookDecimal.toFixed(3)}`,
     result.boostPct ? `Boosted odds: ${formatAmerican(result.boostedAmerican)} / ${result.boostedDecimal.toFixed(3)}` : null,
-    `Fair odds: ${formatAmerican(result.trueAmerican)} / ${result.trueDecimal.toFixed(3)}`,
-    `Fair probability: ${(result.trueProbability * 100).toFixed(2)}%`,
-    result.fairSource?.mode === "reference" ? `Fair source: ${result.fairSource.methodLabel} devig from ${formatAmerican(result.fairSource.referenceAmericanA)} / ${formatAmerican(result.fairSource.referenceAmericanB)}` : null,
-    result.fairSource?.mode === "estimated" ? `Fair source: estimated from ${result.fairSource.sourceBookLabel} ${formatAmerican(result.fairSource.sourceAmerican)} using ${result.fairSource.holdPct.toFixed(2)}% assumed market hold` : null,
+    `True odds: ${formatAmerican(result.trueAmerican)} / ${result.trueDecimal.toFixed(3)}`,
+    `True probability: ${(result.trueProbability * 100).toFixed(2)}%`,
     `EV: ${(result.evPct * 100).toFixed(2)}%`,
     `Expected value at ${formatCurrency(result.stake)} stake: ${formatCurrency(result.expectedProfit)}`,
     `Full Kelly: ${(Math.max(0, result.fullKelly) * 100).toFixed(2)}%`,
@@ -2543,7 +1882,6 @@ function buildNoVigSummaryText(result) {
     `Side B fair probability: ${(result.fairProbB * 100).toFixed(2)}%`,
     `Side B fair odds: ${formatAmerican(result.fairAmericanB)} / ${result.fairDecimalB.toFixed(3)}`,
     `Hold: ${result.holdPct.toFixed(2)}%`,
-    `Method: ${result.methodLabel || "Multiplicative / proportional"}`,
   ].join("\n");
 }
 
@@ -2569,35 +1907,6 @@ function buildPromoSummaryText(result) {
     `Expected value at max: ${formatCurrency(result.expectedAtMax)}`,
     `Suggested stake: ${formatCurrency(result.suggested)}`,
     `Use full max: ${result.useMax ? "Yes" : "No"}`,
-  ].join("\n");
-}
-
-function getMultiOutcomePromoTypeLabel(promoType) {
-  if (promoType === MULTI_OUTCOME_PROMO_TYPES.TRADITIONAL_PARLAY) return "Traditional Parlay";
-  if (promoType === MULTI_OUTCOME_PROMO_TYPES.AT_LEAST_N) return "At Least N";
-  if (promoType === MULTI_OUTCOME_PROMO_TYPES.EXACTLY_N) return "Exactly N";
-  if (promoType === MULTI_OUTCOME_PROMO_TYPES.ALL_HIT) return "All Hit";
-  return "Multi-Outcome Promo";
-}
-
-function buildMultiOutcomeSummaryText(result) {
-  if (!result?.evaluation) return "";
-
-  const evaluation = result.evaluation;
-  return [
-    "Multi-Outcome Promo EV Calculator",
-    `Promo type: ${getMultiOutcomePromoTypeLabel(result.promoType)}`,
-    `Outcomes: ${result.outcomeCount}`,
-    `Number required: ${result.numberRequired}`,
-    `Combined probability: ${(result.combinedProbability * 100).toFixed(2)}%`,
-    `Fair American odds: ${formatAmerican(evaluation.trueAmerican)}`,
-    `Promo book odds: ${formatAmerican(evaluation.bookAmerican)} / ${evaluation.bookDecimal.toFixed(3)}`,
-    `Break-even: ${(evaluation.breakEvenProbability * 100).toFixed(2)}%`,
-    `EV: ${(evaluation.evPct * 100).toFixed(2)}%`,
-    `Expected value at ${formatCurrency(evaluation.stake)} stake: ${formatCurrency(evaluation.expectedProfit)}`,
-    `Full Kelly: ${(Math.max(0, evaluation.fullKelly) * 100).toFixed(2)}%`,
-    `Suggested stake: ${formatCurrency(evaluation.suggestedStake)}`,
-    "Assumption: entered outcomes are independent complete events; correlation is not modeled.",
   ].join("\n");
 }
 
@@ -2860,18 +2169,6 @@ const tinyButtonStyle = {
   cursor: "pointer",
   fontWeight: 800,
   fontSize: 12,
-};
-
-const multiOutcomeListStyle = {
-  display: "grid",
-  gap: 8,
-};
-
-const multiOutcomeRowStyle = {
-  display: "flex",
-  gap: 8,
-  alignItems: "end",
-  flexWrap: "wrap",
 };
 
 const parlayLabelListStyle = {

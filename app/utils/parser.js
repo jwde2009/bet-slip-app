@@ -1,3 +1,4 @@
+
 import { PARSER_REGISTRY } from "./parserRegistry";
 import { canonicalizeTeamsInText } from "./canonicalTeamNames";
 import { canonicalizeFixture, getCanonicalFixtureKey } from "./canonicalFixture";
@@ -54,6 +55,7 @@ const emptyParsed = {
     sourceText: "",
     sourceImageUrl: "",
     reviewNotes: "",
+    tipper: "",
     betId: "",
     accountOwner: "Me",
     betSourceTag: "",
@@ -159,8 +161,9 @@ function extractPlayerAndStatFromMarket(marketDetail = "") {
     .trim();
 
   const patterns = [
+    /^(.*?)\s+(To Hit a Home Run|Hit a Home Run|Anytime Home Run|Anytime Homer)\b/i,
+    /^(.*?)\s+(Anytime Goalscorer|Anytime Goal Scorer|Goalscorer|To Score a Goal|Score a Goal)\b/i,
     /^(.*?)\s+(Assists|Rebounds|Points|Total Bases|Strikeouts(?: Thrown)?|Home Runs?|RBIs?|Hits|Shots on Goal|Saves|Goals|Double-Double|Triple-Double)\b/i,
-    /^(.*?)\s+(Anytime Goalscorer|Anytime Goal Scorer|Goalscorer)\b/i,
   ];
 
   for (const pattern of patterns) {
@@ -183,10 +186,59 @@ function extractPlayerAndStatFromMarket(marketDetail = "") {
   return { player: "", stat: "" };
 }
 
+function cleanAnytimePlayerCandidate(value = "") {
+  return cleanLeadingOcrTokens(value)
+    .replace(/\b(?:anytime\s+goal\s*scorer|anytime\s+goalscorer|goalscorer|goal\s*scorer|to\s+score\s+a\s+goal|score\s+a\s+goal)\b.*$/i, " ")
+    .replace(/\b(?:anytime\s+home\s+run|anytime\s+homer|to\s+hit\s+a\s+home\s+run|hit\s+a\s+home\s+run)\b.*$/i, " ")
+    .replace(/\b(?:yes|over|under)\b/gi, " ")
+    .replace(/\b0?\.5\b/g, " ")
+    .replace(/[+-]\d{2,5}\b/g, " ")
+    .replace(/[^A-Za-z.'-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeAnytimeZeroHalfSelection(value = "", marketDetail = "") {
+  const selectionText = normalizeOcrLineNumber(cleanLeadingOcrTokens(value));
+  const marketText = String(marketDetail || "").replace(/\s+/g, " ").trim();
+  const combined = `${selectionText} ${marketText}`.replace(/\s+/g, " ").trim();
+
+  const isAnytimeGoal =
+    /\b(?:anytime\s+goal\s*scorer|anytime\s+goalscorer|goalscorer|goal\s*scorer|to\s+score\s+a\s+goal|score\s+a\s+goal)\b/i.test(combined);
+  const isAnytimeHomeRun =
+    /\b(?:anytime\s+home\s+run|anytime\s+homer|to\s+hit\s+a\s+home\s+run|hit\s+a\s+home\s+run)\b/i.test(combined) ||
+    (/\b(?:home run|homer|hr)\b/i.test(combined) && /\byes\b/i.test(combined));
+
+  if (!isAnytimeGoal && !isAnytimeHomeRun) return "";
+
+  const marketParts = extractPlayerAndStatFromMarket(marketText);
+  let player = cleanAnytimePlayerCandidate(marketParts.player || "");
+
+  if (!player) {
+    player = cleanAnytimePlayerCandidate(selectionText);
+  }
+
+  // Some books provide only the player in Selection and the binary market name
+  // in Market Detail. Preserve that player rather than keeping sportsbook
+  // wording such as "Anytime Goalscorer" or "To Hit a Home Run".
+  if (!player && selectionText && !/\b(?:anytime|goal|home run|homer|yes|no|over|under)\b/i.test(selectionText)) {
+    player = cleanAnytimePlayerCandidate(selectionText);
+  }
+
+  if (!player) return "";
+
+  return isAnytimeGoal
+    ? `${player} Over 0.5 Goals`
+    : `${player} Over 0.5 Home Runs`;
+}
+
 function cleanSelectionDisplay(value = "", marketDetail = "") {
   let text = normalizeOcrLineNumber(cleanLeadingOcrTokens(value));
   const market = String(marketDetail || "").replace(/\s+/g, " ").trim();
   const { player, stat } = extractPlayerAndStatFromMarket(market);
+  const anytimeZeroHalf = normalizeAnytimeZeroHalfSelection(text, market);
+
+  if (anytimeZeroHalf) return anytimeZeroHalf;
 
   const sideLine = text.match(/\b(Over|Under)\s*(\d+(?:\.\d+)?)/i);
 
@@ -209,7 +261,7 @@ function cleanSelectionDisplay(value = "", marketDetail = "") {
   }
 
   if (player && /Anytime Goal/i.test(stat)) {
-    return `${player} Anytime Goalscorer`;
+    return `${player} Over 0.5 Goals`;
   }
 
   if (player && /Double-Double/i.test(stat) && /\bYes\b/i.test(text)) {
@@ -248,7 +300,7 @@ function cleanSelectionDisplay(value = "", marketDetail = "") {
 
   text = text
     .replace(/^\s*[A-Za-z]{1,3}\s+(?=CLE\b|BOS\b|DET\b|MEM\b|OKC\b|NY\b|LA\b|North Carolina\b)/, "")
-    .replace(/^\s*[#&~@®©»>"'`]+\s*/, "")
+    .replace(/^\s*[#&~@\xc2\xae\xc2\xa9\xc2\xbb>"'`]+\s*/, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -258,7 +310,7 @@ function cleanSelectionDisplay(value = "", marketDetail = "") {
 function normalizeScoreboardTeamName(value = "") {
   let text = String(value || "")
     .replace(/[|()[\]{}<>]/g, " ")
-    .replace(/[®©@~*]+/g, " ")
+    .replace(/[\xc2\xae\xc2\xa9@~*]+/g, " ")
     .replace(/[.]{2,}/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -818,7 +870,7 @@ function computeReviewReasons(row) {
   if (row.hedgeGroupId) reasons.push("In hedge group");
   if (row.guaranteedProfit === "Y" || row.guaranteedProfit === true) reasons.push("Guaranteed profit");
 
-  return reasons.slice(0, 4).join(" â€¢ ");
+  return reasons.slice(0, 4).join(" \xc3\xa2\xe2\u201a\xac\xc2\xa2 ");
 }
 
 export function enrichRow(row) {
@@ -1193,4 +1245,5 @@ export function parseBetSlip(text, sourceFileName = "", uploadBookmaker = "Auto"
     shared,
   });
 }
+
 

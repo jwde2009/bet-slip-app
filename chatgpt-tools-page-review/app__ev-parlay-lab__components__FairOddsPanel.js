@@ -1,0 +1,175 @@
+"use client";
+
+import { useState } from "react";
+
+export default function FairOddsPanel({ fairOddsResults }) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <section style={sectionStyle}>
+      <div style={headerRowStyle}>
+        <h2 style={h2Style}>4. Fair Odds Engine</h2>
+
+        <button type="button" onClick={() => setCollapsed((prev) => !prev)} style={toggleButtonStyle}>
+          {collapsed ? "Show" : "Hide"}
+        </button>
+      </div>
+
+      {!collapsed &&
+        (fairOddsResults.length === 0 ? (
+          <p style={mutedStyle}>No fair odds calculated yet. Make sure some rows are marked as sharp.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Event</th>
+                  <th style={thStyle}>Full Selection</th>
+                  <th style={thStyle}>Market</th>
+                  <th style={thStyle}>Line</th>
+                  <th style={thStyle}>Sharp</th>
+                  <th style={thStyle}>Fair Prob</th>
+                  <th style={thStyle}>Fair American</th>
+                  <th style={thStyle}>Hold %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fairOddsResults.map((result) => (
+                  <tr key={result.id}>
+                    <td style={tdStyle}>{result.eventName || result.marketDisplayName || "—"}</td>
+                    <td style={tdStrongStyle}>{buildFairOddsSelectionDisplay(result)}</td>
+                    <td style={tdStyle}>{result.marketLabel || result.marketType || "—"}</td>
+                    <td style={tdStyle}>{formatLine(result.lineValue)}</td>
+                    <td style={tdStyle}>{renderSharpQuoteList(result)}</td>
+                    <td style={tdStyle}>{formatProbability(result.fairProbability)}</td>
+                    <td style={tdStyle}>{formatAmerican(result.fairAmerican)}</td>
+                    <td style={tdStyle}>
+                      {typeof result.holdPct === "number" ? `${result.holdPct.toFixed(2)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+    </section>
+  );
+}
+
+function buildFairOddsSelectionDisplay(result = {}) {
+  if (result.fullSelectionLabel) return result.fullSelectionLabel;
+
+  const subject = String(result.subjectName || "").trim();
+  const selection = String(result.selectionLabel || "").trim();
+  const line = formatLine(result.lineValue);
+  const market = String(result.marketLabel || result.marketType || "").trim();
+
+  if (subject && selection) {
+    return [subject, selection, line !== "—" ? line : "", market].filter(Boolean).join(" ");
+  }
+
+  return [selection || "—", line !== "—" ? line : "", market].filter(Boolean).join(" ");
+}
+
+function formatProbability(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatLine(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+function renderSharpQuoteList(result = {}) {
+  const quotes = Array.isArray(result.allSharpQuotes) ? result.allSharpQuotes : [];
+
+  if (!quotes.length) {
+    return result.sharpSportsbook || "—";
+  }
+
+  return (
+    <div style={sharpQuoteListStyle}>
+      {quotes.map((quote, index) => (
+        <div key={`${quote.sportsbook || "sharp"}_${quote.oddsAmerican ?? "odds"}_${index}`} style={sharpQuoteItemStyle}>
+          <strong>{quote.sportsbook || "Sharp"}</strong>: {formatAmerican(quote.oddsAmerican)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+function formatAmerican(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return value > 0 ? `+${Math.round(value)}` : `${Math.round(value)}`;
+}
+
+const sectionStyle = {
+  background: "#fff",
+  border: "1px solid #ddd",
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const headerRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 8,
+};
+
+const h2Style = { marginTop: 0, marginBottom: 8 };
+const mutedStyle = { color: "#666", fontSize: 14 };
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 14,
+};
+
+const thStyle = {
+  textAlign: "left",
+  borderBottom: "1px solid #ddd",
+  padding: 8,
+  whiteSpace: "nowrap",
+};
+
+const tdStyle = {
+  borderBottom: "1px solid #eee",
+  padding: 8,
+  verticalAlign: "top",
+};
+
+const tdStrongStyle = {
+  ...tdStyle,
+  fontWeight: 700,
+  minWidth: 260,
+};
+
+const sharpQuoteListStyle = {
+  display: "grid",
+  gap: 3,
+  minWidth: 130,
+};
+
+const sharpQuoteItemStyle = {
+  whiteSpace: "nowrap",
+  fontSize: 12,
+};
+
+
+const toggleButtonStyle = {
+  background: "#166534",
+  color: "#f0fdf4",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};

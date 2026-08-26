@@ -1,4 +1,3 @@
-// app/utils/canonicalMarket.js
 
 function clean(value = "") {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -7,7 +6,7 @@ function clean(value = "") {
 function normalizeText(value = "") {
   return clean(value)
     .toLowerCase()
-    .replace(/[’']/g, "")
+    .replace(/[\xe2\u20ac\u2122']/g, "")
     .replace(/[()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -64,13 +63,15 @@ function inferSubjectType({ canonicalPlayer = "", canonicalTeam = "", canonicalM
   if (canonicalPlayer) return "player";
   if (canonicalTeam) return "team";
   if (canonicalMarketFamily === "game_total") return "game";
-  if (canonicalMarketFamily === "binary_market") return "market";
+  if (["binary_market", "promo_special", "parlay"].includes(canonicalMarketFamily)) return "market";
   return "";
 }
 
 function inferResultTarget(selection = "", marketDetail = "", canonicalMarketFamily = "") {
   const text = normalizeText(`${selection} ${marketDetail}`);
 
+  if (canonicalMarketFamily === "promo_special") return "promo_special";
+  if (canonicalMarketFamily === "parlay") return "parlay";
   if (canonicalMarketFamily === "moneyline") return "moneyline";
   if (canonicalMarketFamily === "spread") return "spread";
 
@@ -79,7 +80,7 @@ function inferResultTarget(selection = "", marketDetail = "", canonicalMarketFam
     canonicalMarketFamily === "team_total"
   ) return "points";
 
-  // 🔥 NORMALIZED TARGETS
+  // \xf0\u0178\u201d\xa5 NORMALIZED TARGETS
   if (/\b(points|pts|total points|player points)\b/.test(text)) return "points";
   if (/\b(rebounds|rebs|total rebounds|player rebounds)\b/.test(text)) return "rebounds";
   if (/\b(assists|asts|total assists|player assists)\b/.test(text)) return "assists";
@@ -90,6 +91,7 @@ function inferResultTarget(selection = "", marketDetail = "", canonicalMarketFam
   if (/\bhits\b/.test(text)) return "hits";
   if (/\brbis\b|\brbi\b/.test(text)) return "rbis";
   if (/\bhome runs\b|\bhome run\b/.test(text)) return "home_runs";
+  if (/\bgoals?\b|\banytime goalscorer\b|\bgoal scorer\b/.test(text)) return "goals";
   if (/\bdouble-double\b/.test(text)) return "double_double";
   if (/\btriple-double\b/.test(text)) return "triple_double";
   if (/\banytime goalscorer\b|\banytime scorer\b/.test(text)) return "anytime_scorer";
@@ -109,6 +111,12 @@ function inferMarketFamily({
   const text = normalizeText(`${selection} ${marketDetail} ${fixtureEvent}`)
   .replace(/\bplayer\b/g, "")
   .replace(/\btotal\b/g, "");
+
+  if (/\b(?:promo[\s_-]*special|sportsbook[\s_-]*special|promotion[\s_-]*special)\b/.test(text)) {
+    return "promo_special";
+  }
+
+  if (bt === "parlay") return "parlay";
 
   if (/\byes\b|\bno\b/.test(clean(selection)) && !canonicalTeam && !canonicalPlayer) {
     return "binary_market";
@@ -132,6 +140,7 @@ function inferMarketFamily({
     if (/\bhits\b/.test(text)) return "player_hits";
     if (/\brbis\b|\brbi\b/.test(text)) return "player_rbis";
     if (/\bhome runs\b|\bhome run\b/.test(text)) return "player_home_runs";
+    if (/\bgoals?\b|\banytime goalscorer\b|\bgoal scorer\b/.test(text)) return "player_goals";
     if (/\bdouble-double\b/.test(text)) return "player_double_double";
     if (/\btriple-double\b/.test(text)) return "player_triple_double";
     if (/\banytime goalscorer\b|\banytime scorer\b/.test(text)) return "player_anytime_scorer";
@@ -206,3 +215,4 @@ export {
   buildCanonicalHedgeKey,
   buildCanonicalOppositeKey
 };
+

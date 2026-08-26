@@ -1,3 +1,4 @@
+
 "use client";
 
 function getStatusColor(status) {
@@ -79,9 +80,9 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
               </div>
 
               <div style={{ marginTop: 6, fontSize: 14 }}>
-                Accepted: <strong>{batch.fileCount}</strong> · Processed:{" "}
-                <strong>{batch.processedCount}</strong> / {batch.fileCount} · Rows Created:{" "}
-                <strong>{batch.rowsCreated}</strong> · Errors: <strong>{batch.errorCount}</strong>
+                Accepted: <strong>{batch.fileCount}</strong> | Processed:{" "}
+                <strong>{batch.processedCount}</strong> / {batch.fileCount} | Rows Created:{" "}
+                <strong>{batch.rowsCreated}</strong> | Errors: <strong>{batch.errorCount}</strong>
               </div>
 
               <div style={{ fontSize: 12, marginTop: 6 }}>
@@ -92,14 +93,14 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
                 <strong>Path:</strong>{" "}
                 {batch.parentFolder && batch.folder
                   ? `${batch.parentFolder} / ${batch.folder}`
-                  : batch.folder || batch.parentFolder || "—"}
+                  : batch.folder || batch.parentFolder || "-"}
               </div>
 
               {batch.fileNames?.length > 0 && (
                 <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-                  {batch.fileNames.slice(0, 4).join(" · ")}
+                  {batch.fileNames.slice(0, 4).join(" | ")}
                   {batch.fileNames.length > 4
-                    ? ` · +${batch.fileNames.length - 4} more`
+                    ? ` | +${batch.fileNames.length - 4} more`
                     : ""}
                 </div>
               )}
@@ -110,3 +111,4 @@ export default function UploadBatchStatus({ batches, onClearHistory }) {
     </div>
   );
 }
+

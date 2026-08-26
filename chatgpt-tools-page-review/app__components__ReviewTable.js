@@ -15,30 +15,6 @@ import {
 import {
   TEAM_ALIASES_BY_SPORT,
 } from "../ev-parlay-lab/data/teamAliases";
-import {
-  MY_VARIABLE_SUGGESTIONS,
-  applyMyVariableDefaults,
-  buildMyVariableReviewUpdates,
-  getMyVariableState,
-  getSuggestedMyVariable,
-} from "../utils/myVariable";
-import {
-  isRecognizedPlayerPropMarket,
-  normalizeRecognizedPlayerPropMarket,
-} from "../utils/propMarketRecognition";
-import {
-  CORE_REVIEW_FIELDS,
-  addManualLockedFields,
-  getAuditTrail,
-  getDecisionReasonItems,
-  getManualLockedFields,
-  getActiveReviewDataIssues,
-  getManualConflictIssues,
-  isManualFieldLocked,
-  mergeFieldSources,
-  removeManualLockedFields,
-  stringifyQaOverrideCodes,
-} from "../utils/reviewGovernance";
 
 
 const cellStyle = {
@@ -132,9 +108,6 @@ export default function ReviewTable({
   getRowAttentionLevel,
   rowNeedsReview,
   allRows = [],
-  workflowView = "review_all",
-  hedgeReviewLaunchToken = 0,
-  onCaptureUndoSnapshot,
   onReattachSingleScreenshot,
   onClearReviewedScreenshots,
 }) {
@@ -167,12 +140,6 @@ export default function ReviewTable({
     day: "",
     year: "",
   });
-  const reviewDatePartsRef = useRef({
-    rowId: "",
-    month: "",
-    day: "",
-    year: "",
-  });
 
   const [hedgeDetailPreview, setHedgeDetailPreview] = useState({
     visible: false,
@@ -180,16 +147,8 @@ export default function ReviewTable({
   });
 
   const [reviewActionNotice, setReviewActionNotice] = useState("");
-  const [showAuditHistoryByRowId, setShowAuditHistoryByRowId] = useState({});
-  const [showDecisionInspectorByRowId, setShowDecisionInspectorByRowId] = useState({});
   const [reviewHistory, setReviewHistory] = useState([]);
   const [showHedgeCandidatesByRowId, setShowHedgeCandidatesByRowId] = useState({});
-  const [hedgeReviewCandidateIndexByRowId, setHedgeReviewCandidateIndexByRowId] = useState({});
-  const [hedgeReviewPairIndex, setHedgeReviewPairIndex] = useState(0);
-  const [hedgeReviewSkippedPairKeys, setHedgeReviewSkippedPairKeys] = useState([]);
-  const [hedgeReviewSessionPairs, setHedgeReviewSessionPairs] = useState([]);
-  const [hedgeReviewSessionDecisions, setHedgeReviewSessionDecisions] = useState({});
-  const lastHandledHedgeReviewLaunchTokenRef = useRef(0);
   const [parlayLegDraftByRowId, setParlayLegDraftByRowId] = useState({});
   const [knownPlayerNames, setKnownPlayerNames] = useState([]);
   const [knownTeamNamesByLeague, setKnownTeamNamesByLeague] = useState({});
@@ -237,16 +196,13 @@ export default function ReviewTable({
     "bookmaker",
     "betType",
     "reviewBetKind",
-    "reviewBetKindManual",
     "reviewMarketType",
     "selection",
     "fixtureEvent",
     "participantA",
     "participantANormalized",
-    "participantAManual",
     "participantB",
     "participantBNormalized",
-    "participantBManual",
     "canonicalSubject",
     "canonicalPlayer",
     "playerSubjectManual",
@@ -254,9 +210,7 @@ export default function ReviewTable({
     "playerLastName",
     "propMarket",
     "propSide",
-    "propSideManual",
     "propLine",
-    "propLineManual",
     "canonicalMarketContext",
     "mainLineSide",
     "mainLineLine",
@@ -269,10 +223,6 @@ export default function ReviewTable({
     "marketDetail",
     "reviewNotes",
     "performanceCategory",
-    "myVariable",
-    "myVariableReviewed",
-    "myVariableManual",
-    "myVariableAutoSource",
     "parlayLegsJson",
     "parlayLegCount",
     "parlayLegsConfirmed",
@@ -559,53 +509,6 @@ export default function ReviewTable({
         Object.entries(rowUpdates).forEach(([field, value]) => handleRowFieldChangeProp(id, field, value));
       }
     }
-  }
-
-  function markReviewFieldsManual(rowId = "", fields = [], reason = "Manual review edit") {
-    if (!rowId || !fields.length) return;
-
-    const row = getLoadedReviewRowById(rowId) || {};
-    const cleanFields = Array.from(new Set(fields.filter(Boolean)));
-    const sourceUpdates = Object.fromEntries(
-      cleanFields.map((field) => [field, "manual review"])
-    );
-
-    handleRowFieldsChangeProp?.(rowId, {
-      manualLockedFields: addManualLockedFields(row, cleanFields),
-      fieldSourcesJson: mergeFieldSources(row, sourceUpdates),
-      __changeReason: reason,
-      __changeSource: "manual",
-      __skipUndo: true,
-    });
-  }
-
-  function handleManualReviewFieldChange(rowId = "", field = "", value = "", reason = "Manual review edit") {
-    if (!rowId || !field) return;
-    handleRowFieldChange(rowId, field, value);
-    markReviewFieldsManual(rowId, [field], reason);
-  }
-
-  function unlockAllManualReviewFields(row = {}) {
-    if (!row?.id) return;
-    handleRowFieldsChangeProp?.(row.id, {
-      manualLockedFields: "",
-      fieldSourcesJson: row.fieldSourcesJson || "",
-      __changeReason: "Unlocked manual review fields",
-      __changeSource: "manual",
-    });
-    setReviewActionNotice("Manual source-of-truth locks cleared for this row.");
-  }
-
-  function reopenReviewedRowForEditing(row = {}) {
-    if (!row?.id) return;
-    onCaptureUndoSnapshot?.("Reopen reviewed row", row.id);
-    handleRowFieldsChangeProp?.(row.id, {
-      reviewResolved: "N",
-      reviewDataLocked: "N",
-      __changeReason: "Reopened reviewed row for editing",
-      __changeSource: "manual",
-    });
-    setReviewActionNotice("Row reopened. Reviewed-data lock is off until you Confirm + Next again.");
   }
 
   function getLoadedReviewRowById(rowId) {
@@ -975,8 +878,6 @@ export default function ReviewTable({
     { key: "image", label: "Image", sortable: false },
     { key: "sourceFileName", label: "Source File", sortable: true },
     { key: "accountOwner", label: "Owner", sortable: true },
-    { key: "tipper", label: "Notes", sortable: true },
-    { key: "myVariable", label: "My Variable", sortable: true },
     { key: "bookmaker", label: "Bookmaker", sortable: true },
     { key: "betId", label: "Bet ID", sortable: true },
     { key: "eventDate", label: "Event Date", sortable: true },
@@ -1025,54 +926,6 @@ export default function ReviewTable({
 
   const allReviewRows = allRows?.length ? allRows : rows;
 
-  const hedgeReviewPairs = useMemo(() => {
-    const byId = new Map((allReviewRows || []).map((row) => [row?.id, row]));
-    const seen = new Set();
-    const pairs = [];
-
-    (allReviewRows || []).forEach((row) => {
-      if (!row?.id || row.reviewResolved !== "Y") return;
-      if (isConfirmedHedgeRow(row)) return;
-
-      getUnhandledHedgeCandidateIdsForReview(row).forEach((partnerId) => {
-        const partner = byId.get(partnerId);
-        if (!partner?.id || partner.reviewResolved !== "Y") return;
-        if (isConfirmedHedgeRow(partner)) return;
-        if (isIgnoredHedgePair(row, partner)) return;
-
-        const ids = [row.id, partner.id].sort();
-        const key = ids.join("__");
-        if (seen.has(key)) return;
-        seen.add(key);
-
-        const first = byId.get(ids[0]);
-        const second = byId.get(ids[1]);
-        if (!first || !second) return;
-
-        pairs.push({ key, rowA: first, rowB: second });
-      });
-    });
-
-    return pairs.sort((a, b) => {
-      const dateA = String(a.rowA?.betDate || a.rowA?.eventDate || "");
-      const dateB = String(b.rowA?.betDate || b.rowA?.eventDate || "");
-      return dateB.localeCompare(dateA);
-    });
-  }, [allReviewRows]);
-
-  const activeHedgeReviewPairs = useMemo(() => {
-    const skipped = new Set(hedgeReviewSkippedPairKeys);
-    const sessionKeys = new Set((hedgeReviewSessionPairs || []).map((pair) => pair.key));
-    const restrictToSession = sessionKeys.size > 0;
-    return hedgeReviewPairs.filter((pair) =>
-      (!restrictToSession || sessionKeys.has(pair.key)) && !skipped.has(pair.key)
-    );
-  }, [hedgeReviewPairs, hedgeReviewSkippedPairKeys, hedgeReviewSessionPairs]);
-
-  const activeHedgeReviewPair = activeHedgeReviewPairs.length
-    ? activeHedgeReviewPairs[Math.min(Math.max(hedgeReviewPairIndex, 0), activeHedgeReviewPairs.length - 1)]
-    : null;
-
   function normalizePerformanceCategory(value = "") {
     const text = String(value || "")
       .trim()
@@ -1089,14 +942,39 @@ export default function ReviewTable({
   }
 
   function getPerformanceCategoryForRow(row = {}) {
-    const value = getSuggestedMyVariable(row);
-    const normalized = String(value || "").trim().toLowerCase();
+    // The explicit tracker category is authoritative and does not modify the
+    // separate hedge-review workflow.
+    const explicitCategory = normalizePerformanceCategory(
+      row.performanceCategory || ""
+    );
+    if (explicitCategory) return explicitCategory;
 
-    if (normalized === "matched") return "hedge";
-    if (normalized === "fun") return "fun";
-    if (normalized === "ev+") return "ev";
+    const tagText = [
+      row.betSourceTag,
+      row.sourceTag,
+      row.betCategory,
+      row.wagerCategory,
+      row.strategyType,
+      row.strategy,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-    // Custom My Variable tags remain visible in the tracker as unclassified.
+    const confirmedHedge =
+      String(row.hedgeOverride || "").toUpperCase() === "Y" ||
+      normalizePerformanceCategory(tagText) === "hedge";
+
+    if (confirmedHedge) return "hedge";
+
+    const positiveEv =
+      normalizePerformanceCategory(tagText) === "ev" ||
+      [row.positiveEV, row.isPositiveEV, row.evPositive].some(
+        (value) => String(value || "").toUpperCase() === "Y"
+      );
+
+    if (positiveEv) return "ev";
+    if (normalizePerformanceCategory(tagText) === "fun") return "fun";
+
     return "";
   }
 
@@ -1267,7 +1145,7 @@ export default function ReviewTable({
   function renderPerformanceTracker() {
     const items = [
       ["Total", performanceTracker.total],
-      ["Matched", performanceTracker.hedge],
+      ["Hedge", performanceTracker.hedge],
       ["EV+", performanceTracker.ev],
       ["Fun", performanceTracker.fun],
     ];
@@ -1458,88 +1336,6 @@ export default function ReviewTable({
   const previewRowDraft = rawPreviewRow?.id ? (reviewDraftByRowId[rawPreviewRow.id] || {}) : {};
   const previewRow = rawPreviewRow ? { ...rawPreviewRow, ...previewRowDraft } : null;
 
-  function getCurrentMyVariableRow(row = {}) {
-    if (!row?.id) return row || {};
-
-    const activeBatch =
-      isRowUpdateBatchActive(row.id) &&
-      String(rowUpdateBatchRef.current?.rowId || "") === String(row.id)
-        ? rowUpdateBatchRef.current?.updates || {}
-        : {};
-
-    return {
-      ...row,
-      ...(reviewDraftByRowIdRef.current[row.id] || {}),
-      ...activeBatch,
-    };
-  }
-
-  function updateMyVariableForRow(row = {}, value = "") {
-    if (!row?.id) return;
-
-    const workingRow = getCurrentMyVariableRow(row);
-    const updates = buildMyVariableReviewUpdates(workingRow, value);
-
-    handleRowFieldsChange(row.id, updates);
-
-    const nextValue = updates.myVariable || getSuggestedMyVariable(workingRow);
-    setReviewActionNotice(
-      `My Variable set to ${nextValue}. This tag is ready for export.`
-    );
-  }
-
-  function confirmMyVariableForRow(row = {}) {
-    if (!row?.id) return;
-
-    const workingRow = getCurrentMyVariableRow(row);
-    const value = getSuggestedMyVariable(workingRow);
-    const updates = buildMyVariableReviewUpdates(workingRow, value);
-
-    handleRowFieldsChange(row.id, updates);
-  }
-
-  function splitReviewReasonText(value = "") {
-    return String(value || "")
-      .split(/\s*(?:\||\u2022|\xc2\xb7|\xc3\xa2\xe2\u201a\xac\xc2\xa2)\s*/g)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  function getReviewQueueReasonItems(row = {}) {
-    if (!row) return [];
-
-    // Current data/QA state beats stale historical queue reasons. In particular,
-    // hedge-only reasons must never explain why a row is in normal Review All.
-    const currentIssues = getActiveReviewDataIssues(row, { includeAdvisory: true });
-    if (currentIssues.length) {
-      return Array.from(new Set(currentIssues.map((issue) => issue.message))).slice(0, 6);
-    }
-
-    if (row.reviewResolved !== "Y") {
-      const persisted = splitReviewReasonText(row.reviewQueueReason || "")
-        .filter((reason) => !/hedge|large stake/i.test(reason));
-      if (persisted.length) return persisted.slice(0, 6);
-      return ["Manual confirmation required before export"];
-    }
-
-    return [];
-  }
-
-  function getReviewQueueReasonSummary(row = {}) {
-    const items = getReviewQueueReasonItems(row);
-    return items.length ? items.join(" | ") : "No blocking review issue";
-  }
-
-  function getReviewQueueTechnicalDetail(row = {}) {
-    const warning = String(row?.parseWarning || "").trim();
-    if (warning) return warning;
-
-    const reviewReasons = String(row?.reviewReasons || "").trim();
-    if (reviewReasons) return reviewReasons;
-
-    return "";
-  }
-
   // Performance note: auto-normalize-on-open was intentionally removed.
   // Use M / Build Normalize for the heavier normalization pass. Full-page edits
   // are now kept in a local draft and committed once on Save/Next/Confirm.
@@ -1552,15 +1348,12 @@ export default function ReviewTable({
     const activeDate = dateFromRow || dateFromScreenshotName || "";
     const parts = getDateParts(activeDate);
 
-    const nextReviewDateParts = {
+    setReviewDateParts({
       rowId: previewRow.id,
       month: parts.month || "",
       day: parts.day || "",
       year: parts.year || "",
-    };
-
-    reviewDatePartsRef.current = nextReviewDateParts;
-    setReviewDateParts(nextReviewDateParts);
+    });
 
     // Keep screenshot-name dates visible in draft review without immediately
     // committing the row. Confirm Date / Confirm + Next will save it.
@@ -1572,20 +1365,6 @@ export default function ReviewTable({
     }
   }, [previewRow?.id]);
 
-  useEffect(() => {
-    if (!hoverPreview.locked || !previewRow?.id) return;
-    if (String(previewRow.reviewQueueReason || "").trim()) return;
-    if (getReviewPassStatusForPopup(previewRow) === "Export Ready") return;
-
-    const reason = getReviewQueueReasonSummary(previewRow);
-    if (!reason || reason === "No blocking review issue") return;
-
-    handleRowFieldsChange(previewRow.id, {
-      reviewQueueReason: reason,
-      reviewQueueCapturedAt: new Date().toISOString(),
-    });
-  }, [hoverPreview.locked, previewRow?.id, previewRow?.reviewQueueReason]);
-
   // Do not auto-focus the League input when a review row opens.
   // The blank review form should start with keyboard shortcuts active, so M can
   // normalize immediately without first leaving or clearing a text field.
@@ -1593,19 +1372,16 @@ export default function ReviewTable({
   const fallbackRowNeedsReview = (row) =>
     !!row &&
     (
-      !rowHasRecognizedPropMarket(row) ||
+      row.reviewResolved !== "Y" &&
       (
-        row.reviewResolved !== "Y" &&
-        (
-          row.likelyParserIssue === "Y" ||
-          !row.sportLeague ||
-          !row.oddsUS ||
-          row.oddsSource === "Calculated" ||
-          String(row.parseWarning || "").includes("stake_missing") ||
-          String(row.parseWarning || "").includes("selection_missing") ||
-          String(row.parseWarning || "").includes("fixture_missing") ||
-          row.reviewLater === "Y"
-        )
+        row.likelyParserIssue === "Y" ||
+        !row.sportLeague ||
+        !row.oddsUS ||
+        row.oddsSource === "Calculated" ||
+        String(row.parseWarning || "").includes("stake_missing") ||
+        String(row.parseWarning || "").includes("selection_missing") ||
+        String(row.parseWarning || "").includes("fixture_missing") ||
+        row.reviewLater === "Y"
       )
     );
 
@@ -1860,66 +1636,6 @@ export default function ReviewTable({
     return getAllHedgeCandidateRows(row).filter((partner) => !isIgnoredHedgePair(row, partner));
   }
 
-  function getHedgeReviewModeCandidateRows(row = {}) {
-    const visible = getHedgePartnerRows(row);
-    const hidden = getIgnoredHedgePartnerRows(row).filter(
-      (candidate) => candidate?.id && !visible.some((visibleRow) => visibleRow.id === candidate.id)
-    );
-
-    return [...visible, ...hidden];
-  }
-
-  function clampHedgeReviewCandidateIndex(row = {}, index = 0) {
-    const candidates = getHedgeReviewModeCandidateRows(row);
-    if (!candidates.length) return 0;
-    const numeric = Number(index || 0);
-    if (!Number.isFinite(numeric)) return 0;
-    return Math.min(Math.max(Math.trunc(numeric), 0), candidates.length - 1);
-  }
-
-  function setActiveHedgeReviewCandidateIndex(rowId = "", nextIndex = 0) {
-    if (!rowId) return;
-
-    setHedgeReviewCandidateIndexByRowId((prev) => ({
-      ...prev,
-      [rowId]: nextIndex,
-    }));
-  }
-
-  function getActiveHedgeReviewCandidate(row = {}) {
-    const candidates = getHedgeReviewModeCandidateRows(row);
-    if (!candidates.length) {
-      return {
-        candidates: [],
-        activeCandidate: null,
-        activeIndex: 0,
-      };
-    }
-
-    const requestedIndex = hedgeReviewCandidateIndexByRowId[row.id] ?? 0;
-    const activeIndex = clampHedgeReviewCandidateIndex(row, requestedIndex);
-
-    return {
-      candidates,
-      activeCandidate: candidates[activeIndex] || null,
-      activeIndex,
-    };
-  }
-
-  function stepActiveHedgeReviewCandidate(row = {}, delta = 1) {
-    if (!row?.id) return;
-
-    const candidates = getHedgeReviewModeCandidateRows(row);
-    if (!candidates.length) return;
-
-    const currentIndex = clampHedgeReviewCandidateIndex(
-      row,
-      hedgeReviewCandidateIndexByRowId[row.id] ?? 0
-    );
-    const nextIndex = (currentIndex + delta + candidates.length) % candidates.length;
-    setActiveHedgeReviewCandidateIndex(row.id, nextIndex);
-  }
-
   function appendUniqueIds(value = "", ids = []) {
     const existing = String(value || "")
       .split(/[,|]/)
@@ -2058,13 +1774,13 @@ export default function ReviewTable({
         : snapshot.partnerBookmaker || "partner";
       const selection = partner?.selection || snapshot.partnerSelection || "";
       const event = partner?.fixtureEvent || snapshot.partnerEvent || "";
-      const context = [selection, event].filter(Boolean).join(" | ");
+      const context = [selection, event].filter(Boolean).join(" · ");
 
       return {
         id,
         partner,
         snapshot,
-        label: `Possible hedge ${index + 1} hidden as not a match (${bookLabel}) - click to undo`,
+        label: `Possible hedge ${index + 1} hidden as not a match (${bookLabel}) — click to undo`,
         context,
       };
     });
@@ -2076,7 +1792,7 @@ export default function ReviewTable({
     if (!items.length) return "";
     if (items.length === 1) return items[0].label;
 
-    return `${items.length} possible hedge pairs hidden as not matches - click one below to undo`;
+    return `${items.length} possible hedge pairs hidden as not matches — click one below to undo`;
   }
 
   function resetIgnoredHedgeMatches(row = {}, explicitPartners = null) {
@@ -2241,122 +1957,6 @@ export default function ReviewTable({
     );
   }
 
-  function recordHedgeReviewSessionDecision(pairKey = "", decision = "", rowA = null, rowB = null) {
-    if (!pairKey || !decision) return;
-    setHedgeReviewSessionDecisions((prev) => ({
-      ...prev,
-      [pairKey]: {
-        decision,
-        at: new Date().toISOString(),
-        rowAId: rowA?.id || "",
-        rowBId: rowB?.id || "",
-        bookA: rowA ? (getDisplayedBookmaker(rowA) || rowA.bookmaker || "Book") : "Book",
-        bookB: rowB ? (getDisplayedBookmaker(rowB) || rowB.bookmaker || "Book") : "Book",
-      },
-    }));
-  }
-
-  function stepActiveHedgeReviewPair(delta = 1) {
-    if (!activeHedgeReviewPairs.length) return;
-    setHedgeReviewPairIndex((current) => {
-      const safe = Math.min(Math.max(current, 0), activeHedgeReviewPairs.length - 1);
-      return (safe + delta + activeHedgeReviewPairs.length) % activeHedgeReviewPairs.length;
-    });
-  }
-
-  function openHedgeReviewSessionPair(pairKey = "") {
-    if (!pairKey) return;
-    const skipped = new Set(hedgeReviewSkippedPairKeys);
-    skipped.delete(pairKey);
-    const candidatePairs = hedgeReviewPairs.filter((pair) => !skipped.has(pair.key));
-    const targetIndex = candidatePairs.findIndex((pair) => pair.key === pairKey);
-    if (targetIndex < 0) return;
-    setHedgeReviewSkippedPairKeys([...skipped]);
-    setHedgeReviewSessionDecisions((prev) => {
-      if (prev?.[pairKey]?.decision !== "skip") return prev;
-      const next = { ...prev };
-      delete next[pairKey];
-      return next;
-    });
-    setHedgeReviewPairIndex(targetIndex);
-    const targetPair = candidatePairs[targetIndex];
-    if (targetPair?.rowA) movePopupToRow(targetPair.rowA, { addCurrentToHistory: false });
-  }
-
-  function skipActiveHedgeReviewPair() {
-    const pair = activeHedgeReviewPair;
-    if (!pair?.key) {
-      setReviewActionNotice("No unresolved hedge pair is currently loaded.");
-      return;
-    }
-
-    recordHedgeReviewSessionDecision(pair.key, "skip", pair.rowA, pair.rowB);
-    setHedgeReviewSkippedPairKeys((prev) =>
-      prev.includes(pair.key) ? prev : [...prev, pair.key]
-    );
-    setReviewActionNotice("Skipped this pair for the current Hedge Review session.");
-  }
-
-  function resolveHedgeReviewDecision(row = {}, partner = null, decision = "") {
-    if (!row?.id) return;
-
-    const pairKey = row?.id && partner?.id
-      ? [row.id, partner.id].sort().join("__")
-      : activeHedgeReviewPair?.key || "";
-
-    if (decision === "clear") {
-      clearRowFromHedgeReview(row);
-      if (workflowView === "hedge_review") {
-        recordHedgeReviewSessionDecision(pairKey, "clear", row, partner);
-        return;
-      }
-      window.setTimeout(() => jumpToNextReviewRow(row.id), 0);
-      return;
-    }
-
-    if (!partner?.id) {
-      setReviewActionNotice("No hedge candidate is loaded for this pair.");
-      return;
-    }
-
-    if (decision === "confirm") {
-      recordHedgeReviewSessionDecision(pairKey, "match", row, partner);
-      confirmHedgePair(row, partner);
-      if (workflowView === "hedge_review") {
-        setReviewActionNotice("Match confirmed. Loading the next unique unresolved pair...");
-        return;
-      }
-      window.setTimeout(() => jumpToNextReviewRow(row.id), 0);
-      return;
-    }
-
-    if (decision === "ignore") {
-      recordHedgeReviewSessionDecision(pairKey, "not_match", row, partner);
-      ignoreCurrentHedgeMatch(row, partner);
-      if (workflowView === "hedge_review") {
-        setReviewActionNotice("Pair marked Not a Match. Loading the next unique unresolved pair...");
-        return;
-      }
-
-      window.setTimeout(() => {
-        const latestRow = allReviewRows.find((candidate) => candidate?.id === row.id) || row;
-        const remainingCandidates = getHedgePartnerRows(latestRow);
-
-        if (remainingCandidates.length) {
-          const nextIndex = Math.min(
-            clampHedgeReviewCandidateIndex(latestRow, hedgeReviewCandidateIndexByRowId[row.id] ?? 0),
-            Math.max(remainingCandidates.length - 1, 0)
-          );
-          setActiveHedgeReviewCandidateIndex(row.id, nextIndex);
-          openReviewPanelForRow(latestRow, false);
-          return;
-        }
-
-        jumpToNextReviewRow(row.id);
-      }, 0);
-    }
-  }
-
   function cleanParsedParticipantName(value = "") {
     return cleanParticipantTextForMatching(value);
   }
@@ -2372,7 +1972,7 @@ export default function ReviewTable({
     const cleanedFixture = cleanParticipantTextForMatching(fixtureText);
 
     const parts = cleanedFixture
-      .replace(/\s+[-\xe2\u20ac\u201c\xe2\u20ac\u201d]\s+/g, " @ ")
+      .replace(/\s+[-–—]\s+/g, " @ ")
       .split(/\s+(?:@|vs\.?|v\.?|at)\s+/i)
       .map(cleanParsedParticipantName)
       .filter(Boolean);
@@ -2414,12 +2014,11 @@ export default function ReviewTable({
 
   function cleanParsedPlayerCandidate(value = "") {
     return String(value || "")
-      .replace(/^\s*ufc\s+fight\s+night\s*:\s*/i, "")
       .replace(/\b(?:over|under|o\/u|u\/o|yes|no|total|to record|recorded|record|made|make|player|prop|moneyline|spread|run line|puck line|handicap|match result|cost)\b/gi, " ")
       .replace(/\b(?:anytime\s+goal\s*scorer|anytime\s+goalscorer|goal\s*scorer|goalscorer|score\s+a\s+goal|to\s+score|double[-\s]?double|triple[-\s]?double)\b/gi, " ")
       .replace(/\banytime\b(?=\s*$)/gi, " ")
       .replace(/\b\d+(?:\.\d+)?\+?\b/g, " ")
-      .replace(/\b(?:points?|pts?|rebounds?|rebs?|assists?|asts?|threes?|3-?pointers?|pra|rbis?|hits?|home runs?|hrs?|strikeouts?|ks|outs?|outs recorded|pitcher outs?|pitching outs?|total outs|saves?|shots on goal|sog|goals?)\b/gi, " ")
+      .replace(/\b(?:points?|pts?|rebounds?|rebs?|assists?|asts?|threes?|3-?pointers?|pra|rbis?|hits?|home runs?|hrs?|strikeouts?|ks|saves?|shots on goal|sog|goals?)\b/gi, " ")
       .replace(/[^a-zA-Z.'-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -2439,19 +2038,18 @@ export default function ReviewTable({
 
   function cleanPlayerSubjectForBuild(value = "") {
     let text = String(value || "")
-      .replace(/^\s*ufc\s+fight\s+night\s*:\s*/i, "")
-      .replace(/[\xe2\u20ac\u0153\xe2\u20ac\x9d]/g, '"')
-      .replace(/[\xe2\u20ac\u2122]/g, "'")
-      .replace(/^[\s"'\xe2\u20ac\u0153\xe2\u20ac\x9d\xe2\u20ac\u02dc\xe2\u20ac\u2122*\xe2\u20ac\xa2\xc2\xb7\xe2\u20ac\u201c\xe2\u20ac\u201d-]+/g, " ")
+      .replace(/[“”]/g, '"')
+      .replace(/[’]/g, "'")
+      .replace(/^[\s"'“”‘’*•·–—-]+/g, " ")
       .replace(/\b(?:made|make|o\s*\/?\s*u|u\s*\/?\s*o|over|under|yes|no|total|to record|recorded|record|player|prop|moneyline|spread|run line|puck line|handicap|match result|cost)\b/gi, " ")
       .replace(/\b(?:anytime\s+goal\s*scorer|anytime\s+goalscorer|goal\s*scorer|goalscorer|score\s+a\s+goal|to\s+score|double[-\s]?double|triple[-\s]?double)\b/gi, " ")
       .replace(/\banytime\b(?=\s*$)/gi, " ")
       .replace(/\b\d+(?:\.\d+)?\+?\b/g, " ")
-      .replace(/\b(?:points?|pts?|rebounds?|rebs?|assists?|asts?|threes?|3-?pointers?|3\s*pointers?|three\s*pointers?|made threes?|made\s+3s|pra|rbis?|hits?|home runs?|hrs?|strikeouts?|ks|outs?|outs recorded|pitcher outs?|pitching outs?|total outs|saves?|shots on goal|sog|goals?)\b/gi, " ")
+      .replace(/\b(?:points?|pts?|rebounds?|rebs?|assists?|asts?|threes?|3-?pointers?|3\s*pointers?|three\s*pointers?|made threes?|made\s+3s|pra|rbis?|hits?|home runs?|hrs?|strikeouts?|ks|saves?|shots on goal|sog|goals?)\b/gi, " ")
       .replace(/[^a-zA-Z.'-]+/g, " ")
-      .replace(/(^|\s)[-\xe2\u20ac\u201c\xe2\u20ac\u201d]+(?=\s|$)/g, " ")
-      .replace(/[-\xe2\u20ac\u201c\xe2\u20ac\u201d]+$/g, " ")
-      .replace(/^[-\xe2\u20ac\u201c\xe2\u20ac\u201d]+/g, " ")
+      .replace(/(^|\s)[-–—]+(?=\s|$)/g, " ")
+      .replace(/[-–—]+$/g, " ")
+      .replace(/^[-–—]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -2555,7 +2153,7 @@ export default function ReviewTable({
     const selection = String(row.selection || "");
     const marketDetail = String(row.marketDetail || "");
 
-    const marketWords = "(?:points?|pts?|rebounds?|rebs?|reb|assists?|asts?|ast|assts?|asst|threes?|made threes?|3-?pointers?|3pt|3pts|3pm|3fgm|pra|p\\+r|p\\+a|r\\+a|double[-\\s]?double|dd|dbl\\s+dbl|triple[-\\s]?double|trpl\\s+dbl|shots on goal|sog|saves?|svs?|goals?|strikeouts?|ks|outs?|outs recorded|pitcher outs?|pitching outs?|total outs|total bases?|tb|home runs?|hrs?|rbis?|hits?)";
+    const marketWords = "(?:points?|pts?|rebounds?|rebs?|reb|assists?|asts?|ast|assts?|asst|threes?|made threes?|3-?pointers?|3pt|3pts|3pm|3fgm|pra|p\\+r|p\\+a|r\\+a|double[-\\s]?double|dd|dbl\\s+dbl|triple[-\\s]?double|trpl\\s+dbl|shots on goal|sog|saves?|svs?|goals?|strikeouts?|ks|total bases?|tb|home runs?|hrs?|rbis?|hits?)";
     const yesNoGoalWords = "(?:anytime\\s+goal\\s*scorer|anytime\\s+goalscorer|goal\\s*scorer|goalscorer|score\\s+a\\s+goal|to\\s+score|double[-\\s]?double|triple[-\\s]?double)";
 
     const candidates = [sourceText, marketDetail, selection].filter(Boolean);
@@ -2603,7 +2201,7 @@ export default function ReviewTable({
     const { allowSingleWord = false } = options;
     const cleaned = cleanParsedPlayerCandidate(value)
       .replace(/^[^a-zA-Z]+/g, "")
-      .replace(/[^a-zA-Z.'\xe2\u20ac\u2122\-\s]+$/g, "")
+      .replace(/[^a-zA-Z.'’\-\s]+$/g, "")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -2666,7 +2264,7 @@ export default function ReviewTable({
       "\\$&"
     );
     const fullNamePattern = new RegExp(
-      `\\b([A-Z][A-Za-z.'\xe2\u20ac\u2122\\-]{1,30})\\s+(${escapedLastName})\\b`,
+      `\\b([A-Z][A-Za-z.'’\\-]{1,30})\\s+(${escapedLastName})\\b`,
       "i"
     );
     const disallowedFirstWords = new Set([
@@ -2868,13 +2466,13 @@ export default function ReviewTable({
   }
 
   function isPlayerPropMarketText(value = "") {
-    return /\b(points?|pts?|rebounds?|rebs?|reb|assists?|asts?|ast|assts?|asst|threes?|3-?pointers?|three\s*pointers?|made\s+threes?|made\s+3s|3pt|3pts|3pm|3fgm|pra|p\s*\+\s*r|p\s*\+\s*a|r\s*\+\s*a|points?\s*\+\s*rebounds?|points?\s*\+\s*assists?|rebounds?\s*\+\s*assists?|double[-\s]?double|dd|dbl\s+dbl|triple[-\s]?double|trpl\s+dbl|to\s+record|record\s+a|anytime|first\s+basket|shots on goal|sog|saves?|svs?|goals?|strikeouts?|ks|outs?|outs recorded|pitcher outs?|pitching outs?|total outs|total bases?|tb|home runs?|hrs?|rbis?|hits?|method of victory|method of win|winning method|win method|mov)\b/i.test(String(value || ""));
+    return /\b(points?|pts?|rebounds?|rebs?|reb|assists?|asts?|ast|assts?|asst|threes?|3-?pointers?|three\s*pointers?|made\s+threes?|made\s+3s|3pt|3pts|3pm|3fgm|pra|p\s*\+\s*r|p\s*\+\s*a|r\s*\+\s*a|points?\s*\+\s*rebounds?|points?\s*\+\s*assists?|rebounds?\s*\+\s*assists?|double[-\s]?double|dd|dbl\s+dbl|triple[-\s]?double|trpl\s+dbl|to\s+record|record\s+a|anytime|first\s+basket|shots on goal|sog|saves?|svs?|goals?|strikeouts?|ks|total bases?|tb|home runs?|hrs?|rbis?|hits?|method of victory|method of win|winning method|win method|mov)\b/i.test(String(value || ""));
   }
 
   function getGamePropMarketLabel(value = "") {
     const text = String(value || "")
       .toLowerCase()
-      .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+      .replace(/[–—]/g, "-")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -2891,10 +2489,10 @@ export default function ReviewTable({
 
     const goalWindowMatch =
       text.match(
-        /\b(?:a\s+)?goals?\s+(?:scored\s+)?(?:in|within)\s+(?:the\s+)?(?:first|1st)\s+(ten|10|fifteen|15|twenty|20)(?:\s*(?:minutes?|mins?|min))?\b/i
+        /\b(?:a\s+)?goals?\s+(?:scored\s+)?(?:in|within)\s+(?:the\s+)?(?:first|1st)\s+(ten|10|fifteen|15|twenty|20)\s*(?:minutes?|mins?|min)\b/i
       ) ||
       text.match(
-        /\b(?:first|1st)\s+(ten|10|fifteen|15|twenty|20)(?:\s*(?:minutes?|mins?|min))?\b[^\n|]{0,60}\bgoals?\b/i
+        /\b(?:first|1st)\s+(ten|10|fifteen|15|twenty|20)\s*(?:minutes?|mins?|min)\b[^\n|]{0,60}\bgoals?\b/i
       );
 
     if (goalWindowMatch) {
@@ -3006,103 +2604,42 @@ export default function ReviewTable({
     return "";
   }
 
-  function getOverUnderLineNumber(value = "") {
-    const match = String(value || "").match(/\b(?:over|under|o|u)\s*([0-9]+(?:\.[0-9]+)?)/i);
-    if (!match) return NaN;
-    const line = Number(match[1]);
-    return Number.isFinite(line) ? line : NaN;
-  }
-
-  function rowHasStrongPlayerPropEvidence(row = {}) {
-    const combined = [
-      popupMarketContextRef.current?.value,
-      popupPropMarketRef.current?.value,
-      row.reviewBetKind,
-      row.betType,
-      row.canonicalMarketContext,
-      row.reviewMarketType,
-      row.marketDetail,
-      row.propMarket,
-      row.selection,
-      row.sourceText,
-    ].filter(Boolean).join(" ");
-
-    if (/player[ _-]*prop/i.test(combined)) return true;
-
-    const knownPlayerMatch = findKnownPlayerMatchForRow(row);
-    if (knownPlayerMatch?.name) return true;
-
-    const candidate = getLikelyPlayerSubjectCandidate(row);
-    if (candidate && isPlayerPropMarketText(combined)) return true;
-
-    const explicitSubject = getPlayerSubjectForReviewLeague(
-      row,
-      getRefValueForRow(popupSubjectRef, row.id) ||
-        row.canonicalSubject ||
-        row.canonicalPlayer ||
-        ""
-    );
-    if (explicitSubject && isPlayerPropMarketText(combined)) return true;
-
-    return false;
-  }
-
   function rowShouldDefaultToPlayerProp(row = {}) {
-    if (!rowHasTwoIdentifiedParticipants(row)) return false;
+    const currentLeague = getPreviewLeagueValue(row);
+    const betTypeText = String(row.betType || row.canonicalMarketContext || row.reviewMarketType || "").toLowerCase();
 
-    const visibleSide =
-      getRefValueForRow(popupMainLineSideRef, row.id) ||
-      row.mainLineSide ||
-      row.selection ||
-      "";
-
-    // A soccer draw is a real third moneyline side, never a player prop.
-    if (isDrawSideValue(visibleSide) || /^\s*(?:draw|tie)\b/i.test(String(row.selection || ""))) {
+    // Soccer rows in this app are main-line only. Do not auto-promote a
+    // soccer moneyline/spread/total to player prop just because a club name
+    // looks like a standalone person/team name. Manual Player Prop still works
+    // if the user explicitly chooses it.
+    if (isSoccerLeagueForReview(currentLeague) && !betTypeText.includes("player prop")) {
       return false;
     }
 
-    const combined = [
-      popupMarketContextRef.current?.value,
-      popupPropMarketRef.current?.value,
-      row.reviewBetKind,
-      row.betType,
-      row.canonicalMarketContext,
-      row.reviewMarketType,
-      row.marketDetail,
-      row.propMarket,
-      row.selection,
-      row.sourceText,
-    ].filter(Boolean).join(" ");
-
-    const knownPlayerMatch = findKnownPlayerMatchForRow(row);
-    if (knownPlayerMatch?.name) return true;
-
-    if (/player[ _-]*prop/i.test(combined)) return true;
+    if (!rowHasTwoIdentifiedParticipants(row)) return false;
 
     const candidate = getLikelyPlayerSubjectCandidate(row);
     if (!candidate) return false;
 
-    // Market words such as rebounds, shots on goal, home runs, etc. are much
-    // stronger evidence than a generic Over/Under number.
+    const combined = [
+      popupMarketContextRef.current?.value,
+      popupPropMarketRef.current?.value,
+      row.betType,
+      row.canonicalMarketContext,
+      row.marketDetail,
+      row.propMarket,
+      row.selection,
+      row.sourceText,
+    ].filter(Boolean).join(" ");
+
     if (isPlayerPropMarketText(combined)) return true;
-
-    const line = getOverUnderLineNumber(combined);
-
-    // A small naked O/U paired with a person-like subject is usually a player
-    // prop. Lines 40+ remain eligible to be treated as game totals unless
-    // stronger player evidence (known player / market wording) exists above.
-    if (Number.isFinite(line) && line < 40) return true;
 
     const betType = String(row.betType || "").toLowerCase();
 
-    // If a stale parser label says moneyline/spread/total but the side text is
-    // clearly a standalone person rather than either participant, prefer player prop.
+    // If a row has a matchup plus a standalone name where a team side should be,
+    // it is more likely a misclassified player prop than a moneyline/spread/total.
     if (/moneyline|spread|total|straight/.test(betType)) {
-      const sideText =
-        getRefValueForRow(popupMainLineSideRef, row.id) ||
-        row.mainLineSide ||
-        row.selection ||
-        "";
+      const sideText = popupMainLineSideRef.current?.value || row.mainLineSide || row.selection || "";
       return !!getLikelyPlayerSubjectCandidate({ ...row, selection: sideText });
     }
 
@@ -3121,14 +2658,13 @@ export default function ReviewTable({
 
     if (!text) return false;
 
-    // Explicit game-total wording is authoritative at any line size.
     if (/\b(total|totals|game total|team total|over\/under|o\/u)\b/.test(text)) return true;
 
-    // A bare Over/Under number is only strong game-total evidence at a larger
-    // threshold. Small numbers are intentionally left ambiguous so player-name
-    // and player-market evidence can win instead of every O/U becoming Total.
-    const line = getOverUnderLineNumber(text);
-    return Number.isFinite(line) && line >= 40;
+    // Main-line totals often OCR as just "Under 230.5" or "Over 5.5".
+    // Player props are still protected by getReviewBetKind's player-prop check.
+    if (/\b(over|under|o|u)\s*\d+(?:\.\d+)?\b/.test(text)) return true;
+
+    return false;
   }
 
   function sideValueIsTotalSide(value = "") {
@@ -3149,14 +2685,16 @@ export default function ReviewTable({
 
   function inferMainLineMarketFromRow(row = {}) {
     const sideSources = [
-      getRefValueForRow(popupMainLineSideRef, row.id),
+      popupMainLineSideRef.current?.value,
       row.mainLineSide,
       row.selection,
       row.marketDetail,
       row.canonicalMarketContext,
     ];
 
-    const strongPlayerEvidence = rowHasStrongPlayerPropEvidence(row);
+    // If the visible/parsed side is Over or Under, that should override stale
+    // spread/moneyline values left in Market Type / Bet Type fields.
+    if (sideSources.some(sideValueIsTotalSide)) return "total";
 
     const totalSources = [
       row.reviewMarketType,
@@ -3168,35 +2706,7 @@ export default function ReviewTable({
       popupPropMarketRef.current?.value,
     ];
 
-    const explicitTotalText = totalSources.some((source) =>
-      /\b(?:total|totals|game total|team total|over\/under|o\/u)\b/i.test(String(source || ""))
-    );
-
-    const overUnderLine = totalSources
-      .map(getOverUnderLineNumber)
-      .find((line) => Number.isFinite(line));
-
-    // Strong player evidence always beats a stale Total inference. Otherwise,
-    // explicit total wording or a large O/U line can establish a game total.
-    if (!strongPlayerEvidence) {
-      if (explicitTotalText) return "total";
-      if (Number.isFinite(overUnderLine) && overUnderLine >= 40) return "total";
-
-      const league = String(getPreviewLeagueValue(row) || "").trim().toLowerCase();
-      const lowScoringGameTotalLeague = /^(?:baseball|mlb|nhl|soccer|tennis)$/.test(league);
-
-      // In low-scoring sports, small game totals are normal. Only use this
-      // fallback when there is no person/player evidence at all.
-      if (
-        lowScoringGameTotalLeague &&
-        Number.isFinite(overUnderLine) &&
-        sideSources.some(sideValueIsTotalSide)
-      ) {
-        return "total";
-      }
-    }
-
-    if (!strongPlayerEvidence && totalSources.some(textLooksLikeMainLineTotal)) return "total";
+    if (totalSources.some(textLooksLikeMainLineTotal)) return "total";
 
     const sources = [
       popupMarketContextRef.current?.value,
@@ -3230,7 +2740,7 @@ export default function ReviewTable({
       };
     }
 
-    const spread = text.match(/\b([A-Za-z][A-Za-z0-9 .&'\xe2\u20ac\u2122/-]{1,50}?)\s*([+-]\d+(?:\.\d+)?)\b/);
+    const spread = text.match(/\b([A-Za-z][A-Za-z0-9 .&'’/-]{1,50}?)\s*([+-]\d+(?:\.\d+)?)\b/);
     if (spread) {
       return {
         side: cleanParsedParticipantName(spread[1]),
@@ -3301,29 +2811,6 @@ export default function ReviewTable({
     return "Clean selection";
   }
 
-  function getMainLinePeriodQualifier(row = {}) {
-    const text = [
-      row.marketPeriod,
-      row.marketDetail,
-      row.selection,
-      row.rawSelection,
-      row.sourceText,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .replace(/\s+/g, " ");
-
-    if (/\b(?:1st|first)\s+half\b|\b1h\b/.test(text)) return "1st Half";
-    if (/\b(?:2nd|second)\s+half\b|\b2h\b/.test(text)) return "2nd Half";
-    if (/\b(?:1st|first)\s+quarter\b|\b1q\b/.test(text)) return "1st Quarter";
-    if (/\b(?:2nd|second)\s+quarter\b|\b2q\b/.test(text)) return "2nd Quarter";
-    if (/\b(?:3rd|third)\s+quarter\b|\b3q\b/.test(text)) return "3rd Quarter";
-    if (/\b(?:4th|fourth)\s+quarter\b|\b4q\b/.test(text)) return "4th Quarter";
-
-    return "";
-  }
-
   function buildCanonicalMainLineSelection(
     row = {},
     marketValue = "",
@@ -3347,12 +2834,7 @@ export default function ReviewTable({
         : normalizedSide;
     const line = cleanMainLineLineValue(lineValue || "", market);
 
-    if (market === "moneyline") {
-      const period = getMainLinePeriodQualifier(row);
-      return cleanSelectionTextForReview(
-        [side, period, period ? "Moneyline" : ""].filter(Boolean).join(" ")
-      );
-    }
+    if (market === "moneyline") return side;
 
     if (market === "spread" && side && line) {
       return cleanSelectionTextForReview(`${side} ${line}`);
@@ -3374,21 +2856,11 @@ export default function ReviewTable({
     const explicitMarket = normalizeMainLineMarket(
       row.reviewMarketType || row.betType || row.marketDetail || ""
     );
-
-    const drawSource = [
-      getRefValueForRow(popupMainLineSideRef, row.id),
-      row.mainLineSide,
-      row.selection,
-      row.rawSelection,
-    ].find((value) => isDrawSideValue(value) || /^\s*(?:draw|tie)\b/i.test(String(value || "")));
-
-    const explicitSide = drawSource
-      ? "Draw"
-      : normalizeMainLineSideValue(
-          row.mainLineSide || "",
-          row,
-          explicitMarket
-        );
+    const explicitSide = normalizeMainLineSideValue(
+      row.mainLineSide || "",
+      row,
+      explicitMarket
+    );
 
     const explicitSideIsValid =
       explicitMarket === "total"
@@ -3460,7 +2932,7 @@ export default function ReviewTable({
     const event = cleanSelectionTextForReview(leg.fixtureEvent || leg.event || "");
     const league = String(leg.sportLeague || leg.league || "").trim();
     const pieces = [selection, event, league].filter(Boolean);
-    return pieces.join(" | ") || "Incomplete leg";
+    return pieces.join(" · ") || "Incomplete leg";
   }
 
   function getReviewLeagueDisplayLabel(row = {}) {
@@ -3630,21 +3102,6 @@ export default function ReviewTable({
 
       if (!subject || !propMarket) return manualSelection;
 
-      if (["goals", "home runs"].includes(propMarket)) {
-        const zeroHalfSide =
-          ["Yes", "Over"].includes(outcome)
-            ? "Over"
-            : ["No", "Under"].includes(outcome)
-            ? "Under"
-            : "";
-
-        if (zeroHalfSide && (!line || String(line) === "0.5")) {
-          return cleanSelectionTextForReview(
-            `${subject} ${zeroHalfSide} 0.5 ${propMarket === "goals" ? "Goals" : "Home Runs"}`
-          );
-        }
-      }
-
       if (isYesNoPlayerPropMarket(propMarket) || ["Yes", "No"].includes(outcome)) {
         if (!["Yes", "No"].includes(outcome)) return manualSelection;
         return cleanSelectionTextForReview(`${subject} ${outcome} ${propMarket}`);
@@ -3665,16 +3122,6 @@ export default function ReviewTable({
     const existingLegs = parseParlayLegs(row);
     const draft = getParlayLegDraft(row);
     const legIndex = existingLegs.length + 1;
-
-    if (String(draft.legType || "") === "player_prop") {
-      const normalizedDraftMarket = normalizeRecognizedPlayerPropMarket(draft.propMarket || "");
-      if (!normalizedDraftMarket) {
-        window.alert(`Parlay leg Prop Market "${String(draft.propMarket || "").trim() || "(blank)"}" is not recognized.`);
-        return;
-      }
-      draft.propMarket = normalizedDraftMarket;
-    }
-
     const selection = buildParlayLegSelection(row, draft);
     const league = draft.sportLeague || row.sportLeague || "";
     const rowEvent = /\bparlay$/i.test(String(row.fixtureEvent || "").trim())
@@ -3786,61 +3233,19 @@ export default function ReviewTable({
     );
   }
 
-  function getStrongMainLineMarketFromReviewedBet(row = {}) {
-    const primaryText = [
-      getRefValueForRow(popupSelectionRef, row.id),
-      row.selection,
-      row.rawSelection,
-      row.marketDetail,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!primaryText) return "";
-
-    // Explicit main-line wording in the reviewed selection is stronger than stale
-    // parser metadata such as betType="player prop" / propMarket="prop".
-    if (/\b(?:moneyline|match winner)\b/.test(primaryText)) return "moneyline";
-    if (/\b(?:spread|run line|puck line|asian handicap|handicap)\b/.test(primaryText)) return "spread";
-    if (
-      /\b(?:game total|team total|total|over\/?under|o\/?u)\b/.test(primaryText) &&
-      /\b(?:over|under|o|u)\b/.test(primaryText)
-    ) {
-      return "total";
-    }
-
-    return "";
-  }
-
   function getReviewBetKind(row = {}) {
-    const draft = row?.id ? (reviewDraftByRowIdRef.current[row.id] || {}) : {};
-    const activeBatch =
-      row?.id &&
-      isRowUpdateBatchActive(row.id) &&
-      String(rowUpdateBatchRef.current?.rowId || "") === String(row.id)
-        ? rowUpdateBatchRef.current?.updates || {}
-        : {};
-    const liveRow = {
-      ...row,
-      ...draft,
-      ...activeBatch,
-    };
-
-    const explicit = String(liveRow.reviewBetKind || "").trim();
+    const explicit = String(row.reviewBetKind || "").trim();
 
     const combined = [
       popupMarketContextRef.current?.value,
       popupPropMarketRef.current?.value,
-      liveRow.reviewMarketType,
-      liveRow.betType,
-      liveRow.canonicalMarketContext,
-      liveRow.marketDetail,
-      liveRow.propMarket,
-      liveRow.selection,
-      liveRow.sourceText,
+      row.reviewMarketType,
+      row.betType,
+      row.canonicalMarketContext,
+      row.marketDetail,
+      row.propMarket,
+      row.selection,
+      row.sourceText,
     ].filter(Boolean).join(" ");
 
     // Strong market wording must repair a stale parser label. Example:
@@ -3855,30 +3260,9 @@ export default function ReviewTable({
       return "promo_special";
     }
 
-    const manualKind = String(liveRow.reviewBetKindManual || "").trim().toUpperCase() === "Y";
-
-    // Manual review buttons are authoritative. Inference is only allowed to repair
-    // rows the reviewer has not explicitly classified. This prevents explicit
-    // Player Prop from being immediately pulled back to Moneyline/Spread/Total
-    // because stale selection/source text still contains main-line wording.
-    if (manualKind) {
-      if (explicit === "player_prop") return "player_prop";
-      if (explicit === "main_line") return "main_line";
-      if (explicit === "other") return "other";
-      if (explicit === "parlay") return "parlay";
-      if (explicit === "promo_special") return "promo_special";
-    }
-
     if (gamePropMarket) return "other";
 
-    const strongMainLineMarket = getStrongMainLineMarketFromReviewedBet(liveRow);
-    if (strongMainLineMarket) return "main_line";
-
     if (explicit === "player_prop") return "player_prop";
-
-    // A manual Game Prop / Other choice is authoritative. Do not let stale
-    // player-prop fields or generic Over/Under text pull the row back into a
-    // Player Prop or Total after the user explicitly selected Game Prop.
     if (explicit === "other") return "other";
 
     const explicitMainLineMarket = normalizeMainLineMarket(
@@ -3887,20 +3271,17 @@ export default function ReviewTable({
         row.reviewMarketType ||
         row.betType ||
         row.canonicalMarketContext ||
-        liveRow.marketDetail ||
+        row.marketDetail ||
         ""
     );
 
     const explicitPlayerPropText = [
-      liveRow.reviewBetKind,
-      liveRow.betType,
-      liveRow.canonicalMarketContext,
-      liveRow.reviewMarketType,
+      row.reviewBetKind,
+      row.betType,
+      row.canonicalMarketContext,
+      row.reviewMarketType,
     ].filter(Boolean).join(" ").toLowerCase();
 
-    // A manual main-line choice is authoritative. Do not let a previously
-    // learned player name or stale player-prop text pull a row back into
-    // Player Prop after the reviewer explicitly clicked Moneyline/Spread/Total.
     if (
       explicit === "main_line" &&
       explicitMainLineMarket &&
@@ -3909,27 +3290,26 @@ export default function ReviewTable({
       return "main_line";
     }
 
+    const shouldDefaultPlayerProp = rowShouldDefaultToPlayerProp(row);
+
+    if (shouldDefaultPlayerProp) {
+      return "player_prop";
+    }
+
     if (explicit === "main_line") return "main_line";
+    if (String(row.betType || "").toLowerCase().includes("parlay")) return "parlay";
 
-    // Strong player evidence (including a previously learned full player name
-    // found in current OCR text) is allowed to repair stale main-line
-    // classifications only when the reviewer has not already made a manual
-    // main-line selection.
-    const shouldDefaultPlayerProp = rowShouldDefaultToPlayerProp(liveRow);
-    if (shouldDefaultPlayerProp) return "player_prop";
-    if (String(liveRow.betType || "").toLowerCase().includes("parlay")) return "parlay";
-
-    const mainMarket = inferMainLineMarketFromRow(liveRow);
+    const mainMarket = inferMainLineMarketFromRow(row);
     const hasPlayerFields =
-      !!liveRow.propMarket ||
-      !!liveRow.playerLastName ||
-      !!liveRow.canonicalSubject ||
-      !!liveRow.canonicalPlayer;
+      !!row.propMarket ||
+      !!row.playerLastName ||
+      !!row.canonicalSubject ||
+      !!row.canonicalPlayer;
 
     if (mainMarket && !isPlayerPropMarketText(combined)) return "main_line";
 
     if (
-      String(liveRow.betType || "").toLowerCase().includes("player prop") ||
+      String(row.betType || "").toLowerCase().includes("player prop") ||
       hasPlayerFields ||
       isPlayerPropMarketText(combined)
     ) {
@@ -3969,66 +3349,28 @@ export default function ReviewTable({
     if (!row?.id) return;
 
     const market = normalizeMainLineMarket(marketValue) || marketValue || "moneyline";
-    const draft = reviewDraftByRowIdRef.current[row.id] || {};
-    const workingRow = { ...row, ...draft };
-    const sideLine = inferMainLineSideAndLine(workingRow);
+    const sideLine = inferMainLineSideAndLine(row);
+    const normalizedSide = normalizeMainLineSideValue(row.mainLineSide || sideLine.side || "", row, market);
+    const line = cleanMainLineLineValue(row.mainLineLine || sideLine.line || "", market);
 
-    const storedSide = normalizeMainLineSideValue(workingRow.mainLineSide || "", workingRow, market);
-    const storedSideIsValid =
-      market === "total"
-        ? ["Over", "Under"].includes(normalizeSelectionSide(storedSide))
-        : isDrawSideValue(storedSide) || !!findParticipantMatchForSide(storedSide, workingRow);
+    handleRowFieldChange(row.id, "reviewBetKind", "main_line");
+    handleRowFieldChange(row.id, "betType", market);
+    handleRowFieldChange(row.id, "canonicalMarketContext", market);
+    handleRowFieldChange(row.id, "reviewMarketType", market);
+    handleRowFieldChange(row.id, "propMarket", "");
+    handleRowFieldChange(row.id, "canonicalSubject", "");
+    handleRowFieldChange(row.id, "playerLastName", "");
+    handleRowFieldChange(row.id, "mainLineSide", normalizedSide);
+    handleRowFieldChange(row.id, "mainLineLine", market === "moneyline" ? "" : line);
 
-    const inferredSide = normalizeMainLineSideValue(sideLine.side || "", workingRow, market);
-    const inferredMatchedSide =
-      market === "total"
-        ? normalizeSelectionSide(inferredSide)
-        : findParticipantMatchForSide(inferredSide, workingRow)?.display || inferredSide;
-
-    const normalizedSide = storedSideIsValid ? storedSide : inferredMatchedSide;
-    const line = cleanMainLineLineValue(workingRow.mainLineLine || sideLine.line || "", market);
-    const period = getMainLinePeriodQualifier(workingRow);
-
-    handleRowFieldsChange(row.id, {
-      reviewBetKind: "main_line",
-      reviewBetKindManual: "Y",
-      betType: market,
-      canonicalMarketContext: market,
-      reviewMarketType: market,
-      marketDetail: period ? `${period} ${market}` : market,
-      propMarket: "",
-      propSide: "",
-      propLine: "",
-      canonicalSubject: "",
-      canonicalPlayer: "",
-      playerLastName: "",
-      playerSubjectManual: "N",
-      mainLineSide: normalizedSide,
-      mainLineLine: market === "moneyline" ? "" : line,
-      // Switching away from an auto-classified Game Prop must release that
-      // auto-only My Variable source so defaults can be recomputed normally.
-      myVariableAutoSource:
-        String(workingRow.myVariableAutoSource || "").toLowerCase() === "game_prop"
-          ? ""
-          : workingRow.myVariableAutoSource || "",
-      myVariableManual:
-        String(workingRow.myVariableAutoSource || "").toLowerCase() === "game_prop" &&
-        String(workingRow.myVariableManual || "").toUpperCase() !== "Y"
-          ? "N"
-          : workingRow.myVariableManual || "",
-    });
-    markReviewFieldsManual(
-      row.id,
-      ["reviewBetKind", "betType", "canonicalMarketContext", "reviewMarketType", "mainLineSide", "mainLineLine"],
-      `Selected ${period ? `${period} ` : ""}${market} manually`
-    );
-
-    const nextSelection = buildCanonicalMainLineSelection(
-      { ...workingRow, marketDetail: period ? `${period} ${market}` : market },
-      market,
-      normalizedSide,
-      line
-    );
+    const nextSelection =
+      market === "moneyline" && normalizedSide
+        ? normalizedSide
+        : market === "spread" && normalizedSide && line
+        ? `${normalizedSide} ${line}`.replace(/\s+/g, " ").trim()
+        : market === "total" && normalizedSide && line
+        ? `${normalizeSelectionSide(normalizedSide)} ${line}`.replace(/\s+/g, " ").trim()
+        : "";
 
     if (nextSelection) {
       handleRowFieldChange(row.id, "selection", nextSelection);
@@ -4068,7 +3410,6 @@ export default function ReviewTable({
     );
 
     handleRowFieldChange(row.id, "reviewBetKind", "main_line");
-    handleRowFieldChange(row.id, "reviewBetKindManual", "Y");
     handleRowFieldChange(row.id, "mainLineSide", normalizedSide);
 
     if (market === "total") {
@@ -4102,15 +3443,7 @@ export default function ReviewTable({
   function setReviewBetKindForCurrentRow(row = {}, kind = "") {
     if (!row?.id || !kind) return;
 
-    handleRowFieldsChange(row.id, {
-      reviewBetKind: kind,
-      reviewBetKindManual: "Y",
-    });
-    markReviewFieldsManual(
-      row.id,
-      ["reviewBetKind", "betType", "canonicalMarketContext", "reviewMarketType"],
-      `Selected ${kind.replace(/_/g, " ")} manually`
-    );
+    handleRowFieldChange(row.id, "reviewBetKind", kind);
 
     if (kind === "main_line") {
       setMainLineMarketForCurrentRow(row, inferMainLineMarketFromRow(row) || "moneyline");
@@ -4125,11 +3458,8 @@ export default function ReviewTable({
         "";
 
       const updates = {
-        reviewBetKind: "player_prop",
-        reviewBetKindManual: "Y",
         betType: "player prop",
         canonicalMarketContext: "player prop",
-        reviewMarketType: "player prop",
       };
 
       if (cleanedSubject) {
@@ -4150,9 +3480,8 @@ export default function ReviewTable({
 
     if (kind === "parlay") {
       applyParlaySummaryLabels(row, {
-        reviewBetKindManual: "Y",
         propMarket: "",
-        parlayLegsSkipped: row.parlayLegsSkipped || "Y",
+        parlayLegsSkipped: row.parlayLegsSkipped || "N",
       });
       return;
     }
@@ -4171,7 +3500,6 @@ export default function ReviewTable({
 
       const updates = {
         reviewBetKind: "promo_special",
-        reviewBetKindManual: "Y",
         betType: "straight",
         canonicalMarketContext: "promo special",
         reviewMarketType: "promo special",
@@ -4218,23 +3546,14 @@ export default function ReviewTable({
 
       applyRowFieldUpdates(row.id, {
         reviewBetKind: "other",
-        reviewBetKindManual: "Y",
         betType: nextBetType,
         canonicalMarketContext: nextMarket,
         reviewMarketType: nextMarket,
         propMarket: "",
-        propSide: "",
-        propLine: "",
-        mainLineSide: "",
-        mainLineLine: "",
         canonicalSubject: "",
         canonicalPlayer: "",
         playerLastName: "",
         playerSubjectManual: "N",
-        myVariable: "fun",
-        myVariableReviewed: "Y",
-        myVariableManual: "N",
-        myVariableAutoSource: "game_prop",
       });
 
       if (popupBetTypeRef.current) popupBetTypeRef.current.value = nextBetType;
@@ -4328,11 +3647,9 @@ export default function ReviewTable({
 
     const lockedSubject = getLockedPlayerSubjectForRow(row);
     const visibleSubject = getVisiblePlayerSubjectForRow(row);
-    const knownPlayerMatch = findKnownPlayerMatchForRow(row);
     const subject =
       lockedSubject ||
       visibleSubject ||
-      knownPlayerMatch?.name ||
       inferPlayerSubjectFromParsedText(row) ||
       getLikelyPlayerSubjectCandidate(row);
     const playerLastName = getLastNameFromText(subject);
@@ -4614,50 +3931,6 @@ export default function ReviewTable({
     });
   }
 
-  useEffect(() => {
-    if (workflowView !== "hedge_review") return;
-    if (!hedgeReviewLaunchToken) return;
-    if (lastHandledHedgeReviewLaunchTokenRef.current === hedgeReviewLaunchToken) return;
-
-    const firstPair = hedgeReviewPairs[0] || null;
-    const target = firstPair?.rowA || rows[0] || null;
-    if (!target?.id) return;
-
-    lastHandledHedgeReviewLaunchTokenRef.current = hedgeReviewLaunchToken;
-    setHedgeReviewPairIndex(0);
-    setHedgeReviewSkippedPairKeys([]);
-    setHedgeReviewSessionPairs(hedgeReviewPairs.map((pair) => ({
-      key: pair.key,
-      rowAId: pair.rowA?.id || "",
-      rowBId: pair.rowB?.id || "",
-      bookA: getDisplayedBookmaker(pair.rowA) || pair.rowA?.bookmaker || "Book",
-      bookB: getDisplayedBookmaker(pair.rowB) || pair.rowB?.bookmaker || "Book",
-    })));
-    setHedgeReviewSessionDecisions({});
-    openReviewPanelForRow(target, false);
-  }, [hedgeReviewLaunchToken, workflowView, hedgeReviewPairs]);
-
-  useEffect(() => {
-    if (workflowView !== "hedge_review" || !hoverPreview.locked) return;
-
-    if (!activeHedgeReviewPairs.length) {
-      setHedgeReviewPairIndex(0);
-      setReviewActionNotice((current) => current || "No unresolved hedge pairs remain in this session.");
-      return;
-    }
-
-    const safeIndex = Math.min(hedgeReviewPairIndex, activeHedgeReviewPairs.length - 1);
-    if (safeIndex !== hedgeReviewPairIndex) {
-      setHedgeReviewPairIndex(safeIndex);
-      return;
-    }
-
-    const pair = activeHedgeReviewPairs[safeIndex];
-    if (pair?.rowA?.id && hoverPreview.rowId !== pair.rowA.id) {
-      movePopupToRow(pair.rowA, { addCurrentToHistory: false });
-    }
-  }, [workflowView, hoverPreview.locked, activeHedgeReviewPairs, hedgeReviewPairIndex]);
-
   function confirmHedgeCluster(row = {}, jumpToPartner = false) {
     if (!row?.id) return;
 
@@ -4785,7 +4058,7 @@ export default function ReviewTable({
   function formatMoneyForReview(value) {
     const n = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
 
-    if (!Number.isFinite(n)) return "-";
+    if (!Number.isFinite(n)) return "—";
 
     return `$${n.toFixed(2)}`;
   }
@@ -4972,22 +4245,6 @@ export default function ReviewTable({
     market = "moneyline",
     currentValue = ""
   ) {
-    const currentOrSavedSide =
-      currentValue ||
-      getRefValueForRow(popupMainLineSideRef, row.id) ||
-      row.mainLineSide ||
-      row.selection ||
-      "";
-
-    if (
-      market === "moneyline" &&
-      isSoccerLeagueForReview(getPreviewLeagueValue(row)) &&
-      (isDrawSideValue(currentOrSavedSide) || /^\s*(?:draw|tie)\b/i.test(String(currentOrSavedSide)))
-    ) {
-      if (popupMainLineSideRef.current) popupMainLineSideRef.current.value = "Draw";
-      return "Draw";
-    }
-
     const { choices, shortcutOwners, uniqueShortcutsByChoice } =
       getMainLineParticipantShortcutData(row);
 
@@ -5010,19 +4267,12 @@ export default function ReviewTable({
       return `${slot} = ${choice.display}${shortcutText}`;
     });
 
-    const allowDraw =
-      market === "moneyline" &&
-      isSoccerLeagueForReview(getPreviewLeagueValue(row));
-
     const promptText = [
       `Choose the ${marketLabel} side.`,
       "",
       ...choiceLines,
-      ...(allowDraw ? ["D = Draw"] : []),
       "",
-      allowDraw
-        ? "Enter A, B, or D for Draw. You can also enter a listed shortcut or type the team name."
-        : "Enter A or B. You can also enter a listed shortcut or type the team/player name.",
+      "Enter A or B. You can also enter a listed shortcut or type the team/player name.",
     ].join("\n");
 
     let promptDefault = currentValue || "";
@@ -5036,11 +4286,6 @@ export default function ReviewTable({
         window.alert("Enter A or B, a listed shortcut, or the team/player name.");
         promptDefault = "";
         continue;
-      }
-
-      if (allowDraw && ["d", "draw", "tie"].includes(entered.toLowerCase())) {
-        if (popupMainLineSideRef.current) popupMainLineSideRef.current.value = "Draw";
-        return "Draw";
       }
 
       const directMatch = findParticipantMatchForSide(entered, row);
@@ -5076,9 +4321,7 @@ export default function ReviewTable({
       }
 
       window.alert(
-        allowDraw
-          ? `Choice not recognized. Enter A for ${choices[0].display}, B for ${choices[1].display}, D for Draw, or type the team name.`
-          : `Choice not recognized. Enter A for ${choices[0].display}, B for ${choices[1].display}, or type the team/player name.`
+        `Choice not recognized. Enter A for ${choices[0].display}, B for ${choices[1].display}, or type the team/player name.`
       );
       promptDefault = entered;
     }
@@ -5147,20 +4390,20 @@ export default function ReviewTable({
   }
 
   function formatHedgePromptCandidateDetails(row = {}) {
-    if (!row) return "Hedge candidate: -";
+    if (!row) return "Hedge candidate: —";
 
     const book = getDisplayedBookmaker(row) || row.bookmaker || "Book";
     const event = row.fixtureEvent || row.eventName || "No event";
     const selection = row.selection || row.marketDetail || "No selection";
-    const stake = row.stake ? `$${row.stake}` : "-";
-    const odds = row.oddsUS || "-";
-    const payout = row.payout ? `$${row.payout}` : "-";
+    const stake = row.stake ? `$${row.stake}` : "—";
+    const odds = row.oddsUS || "—";
+    const payout = row.payout ? `$${row.payout}` : "—";
 
     return [
       `Hedge candidate: ${book}`,
       `${event}`,
       `${selection}`,
-      `Stake ${stake} | Odds ${odds} | Payout ${payout}`,
+      `Stake ${stake} · Odds ${odds} · Payout ${payout}`,
     ].join("\n");
   }
 
@@ -5168,8 +4411,8 @@ export default function ReviewTable({
     const quality = row.hedgeQuality || row.hedgeConfidence || "Possible Hedge";
     const profit =
       row.hedgeProfitLow || row.hedgeProfitHigh
-        ? `Potential profit: ${row.hedgeProfitLow || "-"} -> ${row.hedgeProfitHigh || "-"}`
-        : "Potential profit: -";
+        ? `Potential profit: ${row.hedgeProfitLow || "—"} → ${row.hedgeProfitHigh || "—"}`
+        : "Potential profit: —";
 
     const detailLines = [
       "Possible hedge match identified.",
@@ -5191,7 +4434,6 @@ export default function ReviewTable({
 
   function promptForHedgeDecisionIfNeeded(row = {}) {
     if (!row?.id) return true;
-    if (workflowView === "hedge_review") return true;
 
     // If this row has already been confirmed as a hedge/middle, do not keep
     // prompting on Confirm + Next. It can still be reviewed through Hedge History.
@@ -5225,29 +4467,18 @@ export default function ReviewTable({
   function promptForMissingRequiredFields(row = {}) {
     if (!row?.id) return false;
     const rowId = row.id;
-    const draft = reviewDraftByRowIdRef.current[rowId] || {};
-    const activeBatch =
-      isRowUpdateBatchActive(rowId) &&
-      String(rowUpdateBatchRef.current?.rowId || "") === String(rowId)
-        ? rowUpdateBatchRef.current?.updates || {}
-        : {};
-    const workingRow = {
-      ...row,
-      ...draft,
-      ...activeBatch,
-    };
-    const kind = getReviewBetKind(workingRow);
+    const kind = getReviewBetKind(row);
 
-    let league = maybeApplyInferredLeague(workingRow, { promptOnMismatch: true }) || getPreviewLeagueValue(workingRow);
+    let league = maybeApplyInferredLeague(row, { promptOnMismatch: true }) || getPreviewLeagueValue(row);
     if (!league) {
-      const next = promptRequiredReviewValue("League", workingRow.sportLeague || "", "NBA, Baseball, UFC");
+      const next = promptRequiredReviewValue("League", row.sportLeague || "", "NBA, Baseball, UFC");
       if (next === null) return false;
       league = next;
       setLeagueForReviewRow(rowId, next);
     }
 
-    let participantA = popupParticipantARef.current?.value || workingRow.participantA || workingRow.participantANormalized || "";
-    let participantB = popupParticipantBRef.current?.value || workingRow.participantB || workingRow.participantBNormalized || "";
+    let participantA = popupParticipantARef.current?.value || row.participantA || row.participantANormalized || "";
+    let participantB = popupParticipantBRef.current?.value || row.participantB || row.participantBNormalized || "";
 
     if (!["parlay", "promo_special"].includes(kind)) {
       if (!participantA) {
@@ -5268,16 +4499,16 @@ export default function ReviewTable({
       }
     }
 
-    if (!validateParticipantTeamsBeforeProceed(workingRow)) {
+    if (!validateParticipantTeamsBeforeProceed(row)) {
       return false;
     }
 
     const eventValue =
       kind === "parlay"
-        ? getParlaySummaryLabel({ ...workingRow, sportLeague: league })
+        ? getParlaySummaryLabel({ ...row, sportLeague: league })
         : kind === "promo_special"
-        ? getPromoSpecialEventLabel({ ...workingRow, sportLeague: league })
-        : popupFixtureRef.current?.value || workingRow.fixtureEvent || buildContextEventLabel(workingRow);
+        ? getPromoSpecialEventLabel({ ...row, sportLeague: league })
+        : popupFixtureRef.current?.value || row.fixtureEvent || buildContextEventLabel(row);
 
     if (!eventValue && !["parlay", "promo_special"].includes(kind)) {
       const next = promptRequiredReviewValue("Event", "", "Chicago Bulls @ New York Knicks");
@@ -5301,14 +4532,7 @@ export default function ReviewTable({
     }
 
     if (kind === "main_line") {
-      let market = normalizeMainLineMarket(
-        popupPropMarketRef.current?.value ||
-          workingRow.reviewMarketType ||
-          workingRow.betType ||
-          workingRow.canonicalMarketContext ||
-          workingRow.marketDetail ||
-          ""
-      );
+      let market = normalizeMainLineMarket(popupPropMarketRef.current?.value || row.reviewMarketType || row.betType || row.marketDetail || "");
       if (!market) {
         const next = promptRequiredReviewValue("Market Type", "", "moneyline, spread, total");
         if (next === null) return false;
@@ -5322,13 +4546,7 @@ export default function ReviewTable({
       handleRowFieldChange(rowId, "betType", market);
       handleRowFieldChange(rowId, "canonicalMarketContext", market);
 
-      const inferredMainLineSide = inferMainLineSideAndLine(workingRow).side;
-      let side = cleanParticipantTextForMatching(
-        getRefValueForRow(popupMainLineSideRef, row.id) ||
-          workingRow.mainLineSide ||
-          inferredMainLineSide ||
-          (isDrawSideValue(workingRow.selection || "") ? "Draw" : "")
-      );
+      let side = cleanParticipantTextForMatching(popupMainLineSideRef.current?.value || row.mainLineSide || "");
       if (!side) {
         if (market === "moneyline") {
           const next = promptForMainLineParticipantChoice(row, "moneyline", "");
@@ -5342,9 +4560,9 @@ export default function ReviewTable({
           side = market === "total" ? normalizeSelectionSide(next) : cleanParticipantTextForMatching(next);
         }
       }
-      side = normalizeMainLineSideValue(side, workingRow, market);
+      side = normalizeMainLineSideValue(side, row, market);
 
-      const sideValidation = validateMainLineSideForProceed(workingRow, market, side);
+      const sideValidation = validateMainLineSideForProceed(row, market, side);
       if (!sideValidation.ok) {
         window.alert(sideValidation.message);
         if (popupMainLineSideRef.current) {
@@ -5359,7 +4577,7 @@ export default function ReviewTable({
       if (popupMainLineSideRef.current) popupMainLineSideRef.current.value = side;
       handleRowFieldChange(rowId, "mainLineSide", side);
 
-      let line = getVisibleMainLineLineForRow(workingRow, market);
+      let line = getVisibleMainLineLineForRow(row, market);
       if (["spread", "total"].includes(market) && !line) {
         const next = promptRequiredReviewValue(
           "Line",
@@ -5373,7 +4591,7 @@ export default function ReviewTable({
       handleRowFieldChange(rowId, "mainLineLine", line);
 
       const canonicalMainLineSelection = buildCanonicalMainLineSelection(
-        workingRow,
+        row,
         market,
         side,
         line
@@ -5389,19 +4607,19 @@ export default function ReviewTable({
 
     if (kind === "player_prop") {
       const rawSubjectValue =
-        getRefValueForRow(popupSubjectRef, workingRow.id) ||
-        workingRow.canonicalSubject ||
-        workingRow.canonicalPlayer ||
+        getRefValueForRow(popupSubjectRef, row.id) ||
+        row.canonicalSubject ||
+        row.canonicalPlayer ||
         "";
       let subject = getPlayerSubjectForReviewLeague(
-        { ...workingRow, sportLeague: league },
+        { ...row, sportLeague: league },
         rawSubjectValue
       );
       if (!subject) {
         const next = promptRequiredReviewValue("Player / Subject", "", "Ryan Rollins");
         if (next === null) return false;
         subject = getPlayerSubjectForReviewLeague(
-          { ...workingRow, sportLeague: league },
+          { ...row, sportLeague: league },
           next
         );
       }
@@ -5414,7 +4632,7 @@ export default function ReviewTable({
         playerSubjectManual: "Y",
       });
 
-      let lastName = popupPlayerLastNameRef.current?.value || workingRow.playerLastName || getLastNameFromText(subject);
+      let lastName = popupPlayerLastNameRef.current?.value || row.playerLastName || getLastNameFromText(subject);
       if (!lastName) {
         const next = promptRequiredReviewValue("Player Last Name", "", "Rollins");
         if (next === null) return false;
@@ -5423,41 +4641,21 @@ export default function ReviewTable({
       if (popupPlayerLastNameRef.current) popupPlayerLastNameRef.current.value = "";
       handleRowFieldChange(rowId, "playerLastName", lastName);
 
-      const rawPropMarket =
-        getRefValueForRow(popupPropMarketRef, row.id) ||
-        workingRow.propMarket ||
-        "";
-      const manualPropMarket = isManualFieldLocked(workingRow, "propMarket");
-      let propMarket = normalizeRecognizedPlayerPropMarket(rawPropMarket);
-
-      if (!propMarket && manualPropMarket && String(rawPropMarket || "").trim()) {
-        propMarket = String(rawPropMarket || "").trim();
-      }
-
+      let propMarket = normalizePropMarketValue(popupPropMarketRef.current?.value || row.propMarket || row.marketDetail || row.selection || "");
       if (!propMarket) {
-        const inferredMarket = inferPropMarketFromSources([
-          workingRow.marketDetail,
-          workingRow.selection,
-          workingRow.sourceText,
-        ]);
-        const promptDefault = String(rawPropMarket || "").trim() || inferredMarket || "";
-
-        propMarket = promptForPlayerPropMarket(promptDefault);
-        if (!propMarket) {
-          setReviewActionNotice("Prop Market is still missing. Confirm + Next stayed on this row.");
-          return false;
-        }
+        const next = promptRequiredReviewValue("Prop Market", "", "points, rebounds, double-double");
+        if (next === null) return false;
+        propMarket = normalizePropMarketValue(next);
       }
-
       if (popupPropMarketRef.current) popupPropMarketRef.current.value = propMarket;
       handleRowFieldChange(rowId, "propMarket", propMarket);
       handleRowFieldChange(rowId, "betType", "player prop");
       handleRowFieldChange(rowId, "canonicalMarketContext", "player prop");
 
-      const ctx = getPopupSelectionBuildContext(workingRow);
+      const ctx = getPopupSelectionBuildContext(row);
 
       if (isMethodOfVictoryMarket(propMarket)) {
-        const nextSelection = buildMethodOfVictorySelection(workingRow, subject, {
+        const nextSelection = buildMethodOfVictorySelection(row, subject, {
           promptIfMissing: true,
         });
 
@@ -5465,7 +4663,7 @@ export default function ReviewTable({
         if (popupSelectionRef.current) popupSelectionRef.current.value = nextSelection;
         handleRowFieldChange(rowId, "selection", nextSelection);
       } else {
-        const yesNoMarket = isYesNoPlayerPropMarket(propMarket) || /\b(yes|no)\b/i.test(workingRow.selection || workingRow.marketDetail || "");
+        const yesNoMarket = isYesNoPlayerPropMarket(propMarket) || /\b(yes|no)\b/i.test(row.selection || row.marketDetail || "");
         const inferredOutcome = inferYesNoPlayerPropSide(ctx.existingText, propMarket);
 
         if (yesNoMarket && !["Yes", "No"].includes(inferredOutcome)) {
@@ -5486,10 +4684,10 @@ export default function ReviewTable({
       }
 
       const currentSelection = cleanSelectionTextForReview(
-        popupSelectionRef.current?.value || workingRow.selection || ""
+        popupSelectionRef.current?.value || row.selection || ""
       );
       const explicitMarketSelection = ensurePlayerPropMarketInSelection(
-        workingRow,
+        row,
         currentSelection,
         subject,
         propMarket
@@ -5506,11 +4704,11 @@ export default function ReviewTable({
         [
           popupPropMarketRef.current?.value,
           popupMarketContextRef.current?.value,
-          workingRow.reviewMarketType,
-          workingRow.canonicalMarketContext,
-          workingRow.marketDetail,
-          workingRow.selection,
-          workingRow.sourceText,
+          row.reviewMarketType,
+          row.canonicalMarketContext,
+          row.marketDetail,
+          row.selection,
+          row.sourceText,
         ]
           .filter(Boolean)
           .join(" ")
@@ -5518,9 +4716,9 @@ export default function ReviewTable({
       const gamePropOutcome = normalizeSelectionSide(
         [
           popupSelectionRef.current?.value,
-          workingRow.selection,
-          workingRow.marketDetail,
-          workingRow.sourceText,
+          row.selection,
+          row.marketDetail,
+          row.sourceText,
         ]
           .filter(Boolean)
           .join(" ")
@@ -5543,7 +4741,7 @@ export default function ReviewTable({
         const descriptiveGamePropSelection = buildGamePropSelection(
           gamePropMarket,
           gamePropOutcome,
-          popupSelectionRef.current?.value || workingRow.selection || ""
+          popupSelectionRef.current?.value || row.selection || ""
         );
 
         if (descriptiveGamePropSelection) {
@@ -5560,17 +4758,17 @@ export default function ReviewTable({
       }
     }
 
-    let selection = cleanSelectionTextForReview(popupSelectionRef.current?.value || workingRow.selection || "");
+    let selection = cleanSelectionTextForReview(popupSelectionRef.current?.value || row.selection || "");
     if (!selection) {
       buildBetFieldsForCurrentRow(row);
-      selection = cleanSelectionTextForReview(popupSelectionRef.current?.value || workingRow.selection || "");
+      selection = cleanSelectionTextForReview(popupSelectionRef.current?.value || row.selection || "");
     }
     if (!selection) {
       const selectionExample =
         kind === "player_prop"
           ? "Ryan Rollins Under 17.5 Points"
           : kind === "parlay"
-          ? getParlaySummaryLabel({ ...workingRow, sportLeague: league })
+          ? getParlaySummaryLabel({ ...row, sportLeague: league })
           : kind === "promo_special"
           ? "Yes"
           : "Mexico +3.5";
@@ -5581,7 +4779,7 @@ export default function ReviewTable({
     if (popupSelectionRef.current) popupSelectionRef.current.value = selection;
     handleRowFieldChange(rowId, "selection", selection);
 
-    let stake = popupStakeRef.current?.value || workingRow.stake || "";
+    let stake = popupStakeRef.current?.value || row.stake || "";
     if (!stake) {
       const next = promptRequiredReviewValue("Stake", "", "25.00");
       if (next === null) return false;
@@ -5590,7 +4788,7 @@ export default function ReviewTable({
     if (popupStakeRef.current) popupStakeRef.current.value = stake;
     handleRowFieldChange(rowId, "stake", stake);
 
-    let odds = popupOddsRef.current?.value || workingRow.oddsUS || "";
+    let odds = popupOddsRef.current?.value || row.oddsUS || "";
     if (!odds) {
       const next = promptRequiredReviewValue("Odds", "", "+100 or -110");
       if (next === null) return false;
@@ -5599,153 +4797,7 @@ export default function ReviewTable({
     if (popupOddsRef.current) popupOddsRef.current.value = odds;
     handleRowFieldChange(rowId, "oddsUS", odds);
 
-    let payout = popupPayoutRef.current?.value || workingRow.payout || workingRow.toWin || "";
-    if (!payout) {
-      const next = promptRequiredReviewValue("Payout / To Win", "", "48.50");
-      if (next === null) return false;
-      payout = next;
-    }
-    if (popupPayoutRef.current) popupPayoutRef.current.value = payout;
-    handleRowFieldChange(rowId, "payout", payout);
-
-    // Hedge pairing is reviewed in the dedicated Hedge Review workflow and
-    // must never block normal Full-Page Review confirmation.
-    return promptResultIfMissing(workingRow);
-  }
-
-  function buildProceedSnapshotFromPopup(row = {}, extraUpdates = {}) {
-    const inferredKind = getReviewBetKind(row);
-    const marketContextValue =
-      popupMarketContextRef.current?.value ||
-      popupPropMarketRef.current?.value ||
-      row.canonicalMarketContext ||
-      row.reviewMarketType ||
-      row.betType ||
-      "";
-
-    return applyMyVariableDefaults({
-      ...row,
-      betDate: getPopupDateValue(row) || row.betDate || "",
-      eventDate: row.eventDate || getPopupDateValue(row) || row.betDate || "",
-      sportLeague: getPreviewLeagueValue(row) || row.sportLeague || "",
-      fixtureEvent: popupFixtureRef.current?.value || row.fixtureEvent || "",
-      participantA: popupParticipantARef.current?.value || row.participantA || "",
-      participantB: popupParticipantBRef.current?.value || row.participantB || "",
-      participantANormalized: getParticipantANormalized(row) || row.participantANormalized || "",
-      participantBNormalized: getParticipantBNormalized(row) || row.participantBNormalized || "",
-      selection: popupSelectionRef.current?.value || row.selection || "",
-      stake: popupStakeRef.current?.value || row.stake || "",
-      oddsUS: popupOddsRef.current?.value || row.oddsUS || "",
-      payout: popupPayoutRef.current?.value || row.payout || "",
-      canonicalSubject: getRefValueForRow(popupSubjectRef, row.id) || row.canonicalSubject || row.canonicalPlayer || "",
-      canonicalPlayer: getRefValueForRow(popupSubjectRef, row.id) || row.canonicalPlayer || row.canonicalSubject || "",
-      playerLastName: popupPlayerLastNameRef.current?.value || row.playerLastName || "",
-      propMarket: popupPropMarketRef.current?.value || row.propMarket || "",
-      reviewBetKind: inferredKind,
-      reviewMarketType: marketContextValue || row.reviewMarketType || "",
-      canonicalMarketContext: marketContextValue || row.canonicalMarketContext || "",
-      betType:
-        inferredKind === "main_line"
-          ? normalizeMainLineMarket(marketContextValue) || row.betType || ""
-          : inferredKind === "player_prop"
-          ? "player prop"
-          : inferredKind === "other"
-          ? "game prop"
-          : inferredKind === "parlay"
-          ? "parlay"
-          : inferredKind === "promo_special"
-          ? "straight"
-          : row.betType || "",
-      mainLineSide: popupMainLineSideRef.current?.value || row.mainLineSide || "",
-      mainLineLine: popupMainLineLineRef.current?.value || row.mainLineLine || "",
-      ...extraUpdates,
-    });
-  }
-
-  function getConfirmBlockers(row = {}) {
-    const workingRow = buildProceedSnapshotFromPopup(row, {
-      reviewResolved: "Y",
-      reviewLater: "N",
-    });
-
-    const blockers = [];
-
-    if (reviewCheck(workingRow)) {
-      if (rowNeedsDateConfirm(workingRow)) blockers.push("Confirm the Bet Date.");
-      if (!workingRow.sportLeague) blockers.push("Enter the League.");
-      if (!workingRow.fixtureEvent && !workingRow.participantANormalized && !workingRow.participantBNormalized) blockers.push("Enter the Event / Context.");
-      if (!workingRow.stake) blockers.push("Enter the Stake.");
-      if (!workingRow.oddsUS) blockers.push("Enter the Odds.");
-      if (!workingRow.payout && !workingRow.toWin) blockers.push("Enter the Payout or To Win amount.");
-      if (!workingRow.selection) blockers.push("Enter the Final Selection.");
-      if (!workingRow.win && !["open", "cashed out", "voided", "void", "push"].includes(String(workingRow.status || "").toLowerCase())) blockers.push("Choose the Result.");
-      if (!rowHasRecognizedPropMarket(workingRow) && !isManualFieldLocked(workingRow, "propMarket")) {
-        blockers.push("Enter a recognized Player Prop market, or manually enter the intended market and confirm the QA warning.");
-      }
-      if (workingRow.reviewLater === "Y") blockers.push("Clear Review Later before confirming.");
-    }
-
-    return Array.from(new Set(blockers));
-  }
-
-  function promptAgainForRemainingConfirmBlockers(row = {}) {
-    if (!row?.id) return false;
-
-    const workingRow = buildProceedSnapshotFromPopup(row);
-    const blockers = getConfirmBlockers(workingRow);
-    if (!blockers.length) return true;
-
-    // The first required-field pass should normally resolve everything. If a
-    // blocker survives because a stale classification or draft value changed
-    // during normalization, run the same field-by-field prompt path once more
-    // against the current visible snapshot instead of silently refusing to move.
-    setReviewActionNotice(
-      `One more required item needs attention: ${blockers[0].replace(/\.$/, "")}`
-    );
-
-    return promptForMissingRequiredFields(workingRow);
-  }
-
-  function confirmAdvisoryReviewIssuesIfNeeded(row = {}) {
-    if (!row?.id) return true;
-
-    const workingRow = buildProceedSnapshotFromPopup(row, {
-      reviewResolved: "Y",
-      reviewLater: "N",
-    });
-    const advisoryIssues = getActiveReviewDataIssues(workingRow, { includeAdvisory: true })
-      .filter((issue) => issue.kind === "advisory");
-
-    if (!advisoryIssues.length) return true;
-
-    const manualConflicts = getManualConflictIssues(workingRow);
-    const promptText = [
-      "The app sees a possible mismatch, but it will not change your reviewed values.",
-      "",
-      ...advisoryIssues.map((issue) => `• ${issue.message}`),
-      "",
-      manualConflicts.length
-        ? "One or more flagged fields were manually edited and are locked as your source of truth."
-        : "This is a warning only; no automatic correction will be applied.",
-      "",
-      "Type YES if you are sure you want to confirm this bet exactly as entered.",
-    ].join("\n");
-
-    const answer = window.prompt(promptText, "");
-    if (String(answer || "").trim().toLowerCase() !== "yes") {
-      setReviewActionNotice("Confirmation paused so you can review the possible mismatch. No fields were changed.");
-      return false;
-    }
-
-    handleRowFieldsChange(row.id, {
-      reviewQaOverrideCodes: stringifyQaOverrideCodes(advisoryIssues.map((issue) => issue.code)),
-      reviewQaOverrideAt: new Date().toISOString(),
-      __changeReason: "Confirmed QA mismatch as entered",
-      __changeSource: "manual",
-    });
-
-    setReviewActionNotice("QA warning acknowledged. Manual values will be kept exactly as entered.");
-    return true;
+    return promptResultIfMissing(row) && promptForHedgeDecisionIfNeeded(row);
   }
 
   function confirmAndAdvanceFromPopup(row = {}) {
@@ -5766,64 +4818,13 @@ export default function ReviewTable({
       }
 
       commitPopupReviewEdits(currentRowId);
-      confirmMyVariableForRow({ ...row, id: currentRowId });
       rememberConfirmedPlayerProp({ ...row, id: currentRowId });
       saveLastReviewedContext(row);
 
-      if (!confirmAdvisoryReviewIssuesIfNeeded({ ...row, id: currentRowId })) {
-        return false;
-      }
-
-      onCaptureUndoSnapshot?.("Confirm + Next", currentRowId);
       handleRowFieldsChange(currentRowId, {
         reviewResolved: "Y",
         reviewLater: "N",
-        reviewDataLocked: "Y",
-        __changeReason: "Confirmed row",
-        __changeSource: "review",
       });
-
-      let blockers = getConfirmBlockers({ ...row, id: currentRowId });
-
-      if (blockers.length) {
-        const prompted = promptAgainForRemainingConfirmBlockers({
-          ...buildProceedSnapshotFromPopup(row),
-          id: currentRowId,
-        });
-
-        if (!prompted) {
-          setReviewActionNotice("Confirmed blocked. Complete the prompted required field first.");
-          handleRowFieldsChange(currentRowId, {
-            reviewResolved: "N",
-          });
-          return false;
-        }
-
-        commitPopupReviewEdits(currentRowId);
-        blockers = getConfirmBlockers({
-          ...buildProceedSnapshotFromPopup(row),
-          id: currentRowId,
-          reviewResolved: "Y",
-          reviewLater: "N",
-        });
-      }
-
-      if (blockers.length) {
-        window.alert(
-          [
-            "This row still would not leave Review All.",
-            "",
-            ...blockers.map((item) => `- ${item}`),
-            "",
-            "The app prompted for required data first. If this remains, the saved classification itself needs correction.",
-          ].join("\n")
-        );
-        setReviewActionNotice("Confirmed blocked after required-field prompts. Correct the remaining classification/data issue.");
-        handleRowFieldsChange(currentRowId, {
-          reviewResolved: "N",
-        });
-        return false;
-      }
 
       setReviewActionNotice("Confirmed. Moving to the next visible row...");
       return true;
@@ -5838,10 +4839,13 @@ export default function ReviewTable({
   }
 
 function getReviewPassStatusForPopup(row = {}) {
-  const issues = getActiveReviewDataIssues(row, { includeAdvisory: true });
-  if (issues.some((issue) => ["missing_bet_date", "bet_date_needs_confirm"].includes(issue.code))) return "Date Confirm";
-  if (issues.some((issue) => issue.severity === "high")) return "Parser Issue";
-  if (issues.length) return "Context Needed";
+  const status = String(row?.status || "").toLowerCase();
+
+  if (!row?.betDate || row?.betDateNeedsConfirm === "Y") return "Date Confirm";
+  if (!row?.stake || !row?.oddsUS || !row?.selection) return "Parser Issue";
+  if (!row?.win && !["open", "cashed out", "voided", "void", "push"].includes(status)) return "Parser Issue";
+  if (rowHasUnresolvedHedgeDecision(row)) return "Hedge Check";
+  if (!row?.sportLeague || !row?.fixtureEvent) return "Context Needed";
   if (row?.reviewResolved === "Y") return "Export Ready";
   return "Clean";
 }
@@ -6265,35 +5269,6 @@ Press OK to confirm the displayed date, or enter a new date in MM/DD/YYYY format
 function canProceedFromPopup(row) {
   if (!row) return false;
 
-  if (getReviewBetKind(row) === "player_prop") {
-    const rawMarket =
-      getRefValueForRow(popupPropMarketRef, row.id) ||
-      row.propMarket ||
-      "";
-    const normalizedMarket = normalizeRecognizedPlayerPropMarket(rawMarket);
-
-    let resolvedMarket = normalizedMarket;
-
-    if (!resolvedMarket) {
-      const inferredMarket = inferPropMarketFromSources([
-        row.marketDetail,
-        row.selection,
-        row.sourceText,
-      ]);
-      resolvedMarket = promptForPlayerPropMarket(
-        String(rawMarket || "").trim() || inferredMarket || ""
-      );
-
-      if (!resolvedMarket) {
-        setReviewActionNotice("Prop Market is still not recognized. Staying on this row.");
-        return false;
-      }
-    }
-
-    if (popupPropMarketRef.current) popupPropMarketRef.current.value = resolvedMarket;
-    handleRowFieldChange(row.id, "propMarket", resolvedMarket);
-  }
-
   if (!ensureBetDateReadyForProceed(row, "Next / No Change")) {
     return false;
   }
@@ -6313,7 +5288,7 @@ function detectKnownPropMarketFromText(value = "") {
   const text = String(value || "")
     .toLowerCase()
     .replace(/[+&]/g, " + ")
-    .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+    .replace(/[–—]/g, "-")
     .replace(/[^a-z0-9+./ -]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -6360,8 +5335,6 @@ function detectKnownPropMarketFromText(value = "") {
     svs: "saves",
     k: "strikeouts",
     ks: "strikeouts",
-    out: "outs",
-    outs: "outs",
     tb: "total bases",
     hr: "home runs",
     hrs: "home runs",
@@ -6398,7 +5371,6 @@ function detectKnownPropMarketFromText(value = "") {
 
   if (/shot.*goal|\bsog\b/.test(text)) return "shots on goal";
   if (/\b(?:strikeouts?|ks)\b/.test(text)) return "strikeouts";
-  if (/\b(?:outs?|outs recorded|pitcher outs?|pitching outs?|total outs)\b/.test(text)) return "outs";
   if (/\b(?:total bases?|tb)\b/.test(text)) return "total bases";
   if (/\b(?:home runs?|homers?|hrs?)\b/.test(text)) return "home runs";
   if (/\brbis?\b/.test(text)) return "rbis";
@@ -6430,9 +5402,6 @@ function normalizePropMarketValue(value = "") {
     .trim();
 
   if (!text) return "";
-
-  const sharedRecognized = normalizeRecognizedPlayerPropMarket(text);
-  if (sharedRecognized) return sharedRecognized;
 
   const known = detectKnownPropMarketFromText(text);
   if (known) return known;
@@ -6466,7 +5435,6 @@ function normalizePropMarketValue(value = "") {
   if (/shot.*goal|sog/.test(text)) return "shots on goal";
   if (/save/.test(text)) return "saves";
   if (/strikeout|ks\b/.test(text)) return "strikeouts";
-  if (/\b(?:outs?|outs recorded|pitcher outs?|pitching outs?|total outs)\b/.test(text)) return "outs";
   if (/total base/.test(text)) return "total bases";
   if (/home run|homer/.test(text)) return "home runs";
   if (/rbi/.test(text)) return "rbis";
@@ -6476,19 +5444,6 @@ function normalizePropMarketValue(value = "") {
   }
 
   return text;
-}
-
-function isRecognizedPropMarketValue(value = "") {
-  return isRecognizedPlayerPropMarket(normalizePropMarketValue(value));
-}
-
-function rowIsPlayerPropForMarketValidation(row = {}) {
-  return getReviewBetKind(row) === "player_prop";
-}
-
-function rowHasRecognizedPropMarket(row = {}) {
-  if (!rowIsPlayerPropForMarketValidation(row)) return true;
-  return isRecognizedPropMarketValue(row.propMarket || "");
 }
 
 function inferPropMarketFromRow(row = {}) {
@@ -6519,94 +5474,17 @@ function normalizeBetTypeValue(value = "") {
 
   if (!text) return "";
 
-  if (/^(?:ml|money|moneyline)$/i.test(text) || /moneyline|match winner|winner/.test(text)) return "moneyline";
-  if (/^(?:sp|spr|spread|line)$/i.test(text) || /spread|puck line|run line|handicap/.test(text)) return "spread";
-  if (/^(?:tot|ttl|total|ou|o\/u|over under)$/i.test(text) || /total|over\/under|o\/u/.test(text)) return "total";
-  if (/^(?:promo|special|promo special)$/i.test(text) || /promo[\s_-]*special|sportsbook[\s_-]*special|promotion[\s_-]*special/.test(text)) return "straight";
-  if (/^(?:gp|gprop|game|game prop|other)$/i.test(text) || getGamePropMarketLabel(text) || /game prop/.test(text)) return "game prop";
-  if (/^(?:pp|pl|player|player prop|prop)$/i.test(text) || /player prop|player|points|rebounds|assists|goals|shots|strikeouts|outs|home runs|total bases/.test(text)) return "player prop";
-  if (/^(?:par|parlay|sgp)$/i.test(text) || /parlay|sgp|same game parlay/.test(text)) return "parlay";
+  if (/moneyline|match winner|winner/.test(text)) return "moneyline";
+  if (/spread|puck line|run line|handicap/.test(text)) return "spread";
+  if (/total|over\/under|o\/u/.test(text)) return "total";
+  if (/promo[\s_-]*special|sportsbook[\s_-]*special|promotion[\s_-]*special/.test(text)) return "straight";
+  if (getGamePropMarketLabel(text) || /game prop/.test(text)) return "game prop";
+  if (/player prop|player|points|rebounds|assists|goals|shots|strikeouts|home runs|total bases/.test(text)) return "player prop";
+  if (/parlay|sgp|same game parlay/.test(text)) return "parlay";
   if (/future/.test(text)) return "futures";
   if (/straight/.test(text)) return "straight";
 
   return text;
-}
-
-function resolveQuickBetTypeChoice(value = "") {
-  const normalized = normalizeBetTypeValue(value);
-
-  if (["moneyline", "spread", "total"].includes(normalized)) {
-    return { kind: "main_line", market: normalized, label: normalized };
-  }
-
-  if (normalized === "player prop") {
-    return { kind: "player_prop", market: "player prop", label: "player prop" };
-  }
-
-  if (normalized === "game prop") {
-    return { kind: "other", market: "game prop", label: "game prop" };
-  }
-
-  if (normalized === "parlay") {
-    return { kind: "parlay", market: "parlay", label: "parlay" };
-  }
-
-  if (normalized === "straight") {
-    return { kind: "promo_special", market: "promo special", label: "promo special" };
-  }
-
-  return null;
-}
-
-function promptForQuickBetType(row = {}) {
-  if (!row?.id) return false;
-
-  const currentKind = getReviewBetKind(row);
-  const currentLabel =
-    currentKind === "main_line"
-      ? normalizeMainLineMarket(
-          popupPropMarketRef.current?.value ||
-            popupMarketContextRef.current?.value ||
-            row.reviewMarketType ||
-            row.betType ||
-            row.canonicalMarketContext ||
-            ""
-        ) || "moneyline"
-      : currentKind === "player_prop"
-      ? "player prop"
-      : currentKind === "other"
-      ? "game prop"
-      : currentKind === "parlay"
-      ? "parlay"
-      : currentKind === "promo_special"
-      ? "promo special"
-      : row.betType || "";
-
-  const input = window.prompt(
-    [
-      "Enter Bet Type",
-      "Shorthand: ml, sp, tot, pp/player, gp/game, par, promo",
-      "Examples: moneyline, spread, total, player prop, game prop, parlay",
-    ].join("\n"),
-    currentLabel
-  );
-
-  if (input === null) return false;
-
-  const choice = resolveQuickBetTypeChoice(input);
-  if (!choice) {
-    window.alert("Bet Type not recognized. Try ml, sp, tot, pp, gp, par, or promo.");
-    return false;
-  }
-
-  if (choice.kind === "main_line") {
-    setMainLineMarketForCurrentRow(row, choice.market);
-  } else {
-    setReviewBetKindForCurrentRow(row, choice.kind);
-  }
-
-  setReviewActionNotice(`Bet Type set to ${choice.label}.`);
-  return true;
 }
 
 function inferBetTypeFromRow(row = {}) {
@@ -6683,8 +5561,6 @@ function normalizeMarketContext(value = "") {
     market = "shots on goal";
   } else if (/strikeout|ks\b/.test(text)) {
     market = "strikeouts";
-  } else if (/\b(?:outs?|outs recorded|pitcher outs?|pitching outs?|total outs)\b/.test(text)) {
-    market = "outs";
   } else if (/total base/.test(text)) {
     market = "total bases";
   } else if (/home run|homer/.test(text)) {
@@ -6752,9 +5628,9 @@ function formatCombatLastName(value = "") {
   if (!text) return "";
 
   return text
-    .split(/([-'\xe2\u20ac\u2122])/)
+    .split(/([-'’])/)
     .map((part) => {
-      if (!part || /^[-'\xe2\u20ac\u2122]$/.test(part)) return part;
+      if (!part || /^[-'’]$/.test(part)) return part;
       return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
     })
     .join("");
@@ -6811,7 +5687,7 @@ function getMmaSubjectLastName(row = {}, value = "") {
     .replace(/\bby\s+(?:points?|(?:unanimous|split|majority|technical)\s+decision|decision|ko\s*\/?\s*tko|tko\s*\/?\s*ko|ko|tko|knockout|submission)\b.*$/i, " ")
     .replace(/\b(?:method of victory|method of win|winning method|win method)\b.*$/i, " ")
     .replace(/\bby\b.*$/i, " ")
-    .replace(/[^A-Za-z.'\xe2\u20ac\u2122\-\s]+/g, " ")
+    .replace(/[^A-Za-z.'’\-\s]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -6871,7 +5747,7 @@ function isMethodOfVictoryMarket(value = "") {
 function getMethodOfVictoryOutcome(value = "") {
   const text = String(value || "")
     .toLowerCase()
-    .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+    .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -6940,7 +5816,6 @@ function getPropMarketSelectionLabel(value = "") {
     "shots on goal": "Shots on Goal",
     saves: "Saves",
     strikeouts: "Strikeouts",
-    outs: "Outs",
     "total bases": "Total Bases",
     "home runs": "Home Runs",
     rbis: "RBIs",
@@ -7076,13 +5951,13 @@ function buildExactPlayerPropSelection(row = {}) {
   if (market === "home runs") {
     if (["Yes", "Over"].includes(normalizedSide)) {
       return cleanSelectionTextForReview(
-        `${subject} Over ${line || "0.5"} Home Runs`
+        `${subject} Over ${line || "0.5"} HR`
       );
     }
 
     if (["No", "Under"].includes(normalizedSide)) {
       return cleanSelectionTextForReview(
-        `${subject} Under ${line || "0.5"} Home Runs`
+        `${subject} Under ${line || "0.5"} HR`
       );
     }
   }
@@ -7490,17 +6365,12 @@ function isYesNoPlayerPropMarket(value = "") {
   const text = String(value || "").toLowerCase();
   const normalizedMarket = normalizePropMarketValue(value);
 
-  // Goals and home runs use the canonical Over/Under 0.5 representation.
-  // Sportsbook wording such as Anytime Goalscorer or To Hit a Home Run may be
-  // binary on the source screen, but the saved/matching market is not Yes/No.
-  if (["goals", "home runs"].includes(normalizedMarket)) return false;
-
   // Method of victory is not a Yes/No market. Its outcome is the winning
   // method itself: Points/Decision, KO/TKO, or Submission.
   return (
     normalizedMarket === "double-double" ||
     normalizedMarket === "triple-double" ||
-    /to record|record a|first basket/.test(text)
+    /to record|record a|anytime|goal scorer|goalscorer|first basket|hit a home run|home run|homer|score a goal/.test(text)
   );
 }
 
@@ -7510,7 +6380,7 @@ function inferYesNoPlayerPropSide(value = "", propMarketValue = "") {
 
   const text = String(value || "")
     .toLowerCase()
-    .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+    .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
   const market = normalizePropMarketValue(propMarketValue);
@@ -7542,7 +6412,7 @@ function inferHomeRunZeroHalfSide(values = []) {
   for (const source of sources) {
     const text = String(source || "")
       .toLowerCase()
-      .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+      .replace(/[–—]/g, "-")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -7584,7 +6454,7 @@ function buildHomeRunZeroHalfSelection(
   const side = inferHomeRunZeroHalfSide(values);
   if (!side) return "";
 
-  return cleanSelectionTextForReview(`${subject} ${side} 0.5 Home Runs`);
+  return cleanSelectionTextForReview(`${subject} ${side} 0.5 HR`);
 }
 
 function inferGoalZeroHalfSide(values = []) {
@@ -7593,7 +6463,7 @@ function inferGoalZeroHalfSide(values = []) {
   for (const source of sources) {
     const text = String(source || "")
       .toLowerCase()
-      .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+      .replace(/[–—]/g, "-")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -7661,7 +6531,7 @@ function canonicalizeAnytimeGoalscorerSelectionForRow(
     visibleMarket || row.propMarket || ""
   );
 
-  if (!["goals", "home runs"].includes(market)) return selectionValue;
+  if (market !== "goals") return selectionValue;
 
   const visibleSubject = getRefValueForRow(popupSubjectRef, rowId);
   const subject =
@@ -7673,17 +6543,16 @@ function canonicalizeAnytimeGoalscorerSelectionForRow(
 
   if (!subject) return selectionValue;
 
-  const sources = [
-    selectionValue,
-    row.selection,
-    row.marketDetail,
-    row.sourceText,
-  ];
-
-  const canonical =
-    market === "home runs"
-      ? buildHomeRunZeroHalfSelection(row, subject, sources)
-      : buildGoalZeroHalfSelection(row, subject, sources);
+  const canonical = buildGoalZeroHalfSelection(
+    row,
+    subject,
+    [
+      selectionValue,
+      row.selection,
+      row.marketDetail,
+      row.sourceText,
+    ]
+  );
 
   return canonical || selectionValue;
 }
@@ -7699,23 +6568,16 @@ function promptForPlayerPropOutcome(currentValue = "", allowOverUnder = true) {
 }
 
 function promptForPlayerPropMarket(currentValue = "") {
-  let promptValue = normalizeRecognizedPlayerPropMarket(currentValue || "") || currentValue || "";
-
-  while (true) {
-    const raw = window.prompt(
-      `Enter / confirm player prop market.
+  const normalizedCurrent = normalizePropMarketValue(currentValue || "");
+  const raw = window.prompt(
+    `Enter / confirm player prop market.
 Examples: points, rebounds, assists, threes / 3 pointers, PRA, shots on goal, strikeouts, home runs, double-double`,
-      promptValue
-    );
+    normalizedCurrent || currentValue || ""
+  );
 
-    if (raw === null) return null;
+  if (raw === null) return null;
 
-    const normalized = normalizeRecognizedPlayerPropMarket(raw);
-    if (normalized) return normalized;
-
-    window.alert(`"${String(raw || "").trim() || "(blank)"}" is not a recognized player prop market.`);
-    promptValue = String(raw || "").trim();
-  }
+  return normalizePropMarketValue(raw || normalizedCurrent || "");
 }
 
 function promptForPlayerPropSubject(currentValue = "") {
@@ -7929,7 +6791,7 @@ function inferZeroHalfPlayerProp(row = {}, ctx = {}, propMarketValue = "") {
     .filter(Boolean)
     .join(" ")
     .toLowerCase()
-    .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+    .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ");
 
   if (!combined) return null;
@@ -7979,7 +6841,7 @@ function getPlayerSelectionUsingManualSubject(row = {}, subjectValue = "") {
     .filter(Boolean)
     .join(" ")
     .toLowerCase()
-    .replace(/[\xe2\u20ac\u201c\xe2\u20ac\u201d]/g, "-")
+    .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ");
 
   const market = propMarket || getZeroHalfPropMarketFromText(combined) || "";
@@ -8460,17 +7322,12 @@ function collectLeagueNormalizationUpdates(row = {}, baseUpdates = {}) {
   const updates = {};
   const workingRow = { ...row, ...baseUpdates };
   const currentLeague = getPreviewLeagueValue(workingRow);
-  const manualLeagueLocked =
-    workingRow.sportLeagueManual === "Y" &&
-    !!String(currentLeague || workingRow.sportLeague || "").trim();
   const isCollegeLeague = isCollegeLeagueForAlias(currentLeague);
-  const inferredLeague = manualLeagueLocked
-    ? ""
-    : inferLeagueFromReviewRow(workingRow, {
-        requireSafeCollegeOverride: isCollegeLeague,
-      });
+  const inferredLeague = inferLeagueFromReviewRow(workingRow, {
+    requireSafeCollegeOverride: isCollegeLeague,
+  });
 
-  let finalLeague = currentLeague || (manualLeagueLocked ? workingRow.sportLeague : "");
+  let finalLeague = currentLeague;
 
   if (inferredLeague) {
     if (!currentLeague) {
@@ -8668,31 +7525,17 @@ function collectSelectionUpdatesForCurrentRow(row = {}, baseUpdates = {}) {
     const playerUpdates = manualSubject
       ? preserveManualPlayerSubjectAndMaybeSelection(workingRow, manualSubject)
       : {};
-    const propMarket = normalizeRecognizedPlayerPropMarket(
-      getRefValueForRow(popupPropMarketRef, workingRow.id) ||
+    const propMarket = normalizePropMarketValue(
+      popupPropMarketRef.current?.value ||
         workingRow.propMarket ||
         inferPropMarketFromRow(workingRow) ||
         ""
     );
-    const visiblePropSide = normalizeSelectionSide(
-      getRefValueForRow(popupPropSideRef, workingRow.id) ||
-        workingRow.propSide ||
-        ""
-    );
-    const visiblePropLine = String(
-      getRefValueForRow(popupPropLineRef, workingRow.id) ||
-        workingRow.propLine ||
-        ""
-    ).trim();
 
     Object.assign(updates, playerUpdates, {
       reviewBetKind: "player_prop",
       betType: "player prop",
       canonicalMarketContext: "player prop",
-      propSide: visiblePropSide,
-      propSideManual: getRefValueForRow(popupPropSideRef, workingRow.id) ? "Y" : workingRow.propSideManual || "",
-      propLine: visiblePropLine,
-      propLineManual: getRefValueForRow(popupPropLineRef, workingRow.id) ? "Y" : workingRow.propLineManual || "",
     });
 
     if (manualSubject) {
@@ -8827,44 +7670,6 @@ function buildSelectionForCurrentRow(row = {}, baseUpdates = {}) {
 function buildBetFieldsForCurrentRow(row = {}) {
   if (!row?.id) return;
 
-  if (row.reviewResolved === "Y" && String(row.reviewDataLocked || "Y").toUpperCase() !== "N") {
-    setReviewActionNotice("This reviewed row is locked. Click Reopen for Editing before normalizing it.");
-    return;
-  }
-
-  // Visible structured review fields are authoritative. Capture them before
-  // inference so clicking Build / Normalize cannot revert a manually edited
-  // Player / Subject, Side, or Line / Threshold to stale OCR values.
-  const visibleStructuredOverrides = {
-    canonicalSubject: getRefValueForRow(popupSubjectRef, row.id) || row.canonicalSubject || row.canonicalPlayer || "",
-    canonicalPlayer: getRefValueForRow(popupSubjectRef, row.id) || row.canonicalPlayer || row.canonicalSubject || "",
-    propMarket: getRefValueForRow(popupPropMarketRef, row.id) || row.propMarket || "",
-    propSide: getRefValueForRow(popupPropSideRef, row.id) || row.propSide || "",
-    propLine: getRefValueForRow(popupPropLineRef, row.id) || row.propLine || "",
-  };
-  row = { ...row, ...visibleStructuredOverrides };
-
-  if (getReviewBetKind(row) === "player_prop") {
-    const rawMarket =
-      getRefValueForRow(popupPropMarketRef, row.id) ||
-      row.propMarket ||
-      "";
-    let recognizedMarket = normalizeRecognizedPlayerPropMarket(rawMarket);
-
-    if (!recognizedMarket && String(rawMarket || "").trim()) {
-      recognizedMarket = promptForPlayerPropMarket(rawMarket);
-      if (!recognizedMarket) {
-        setReviewActionNotice("Cannot normalize yet. Enter a recognized Player Prop market first.");
-        return;
-      }
-    }
-
-    if (recognizedMarket) {
-      if (popupPropMarketRef.current) popupPropMarketRef.current.value = recognizedMarket;
-      handleRowFieldChange(row.id, "propMarket", recognizedMarket);
-    }
-  }
-
   // Performance-critical path: compute every normalization change in memory,
   // then write the row once. The previous path repeatedly mapped/re-enriched
   // the entire rows array for each individual field update.
@@ -8906,61 +7711,8 @@ function buildBetFieldsForCurrentRow(row = {}) {
     parsedContextAutofilled: "Y",
   };
 
-  // Manual review values are sources of truth. Normalize may rebuild dependent
-  // fields such as Selection, but it cannot rewrite a field the reviewer locked.
-  const manualLocks = new Set(getManualLockedFields(row));
-  Object.keys(updates).forEach((field) => {
-    if (!manualLocks.has(field)) return;
-    if (String(updates[field] ?? "") === String(row[field] ?? "")) return;
-    delete updates[field];
-  });
-
-  const previewFields = [
-    "sportLeague",
-    "betType",
-    "reviewBetKind",
-    "fixtureEvent",
-    "participantA",
-    "participantB",
-    "canonicalSubject",
-    "propMarket",
-    "propSide",
-    "propLine",
-    "mainLineSide",
-    "mainLineLine",
-    "selection",
-  ];
-  const previewChanges = previewFields
-    .filter((field) => Object.prototype.hasOwnProperty.call(updates, field))
-    .filter((field) => String(row[field] ?? "") !== String(updates[field] ?? ""))
-    .map((field) => `${field}: ${String(row[field] ?? "(blank)")} -> ${String(updates[field] ?? "(blank)")}`);
-
-  if (previewChanges.length) {
-    const applyChanges = window.confirm(
-      [
-        "Normalization preview",
-        "",
-        ...previewChanges.slice(0, 10),
-        ...(previewChanges.length > 10 ? [`...and ${previewChanges.length - 10} more change(s)`] : []),
-        "",
-        "Apply these normalization changes?",
-      ].join("\n")
-    );
-
-    if (!applyChanges) {
-      setReviewActionNotice("Normalization canceled. No row fields were changed.");
-      return;
-    }
-  }
-
-  onCaptureUndoSnapshot?.("Build / Normalize Bet", row.id);
-
   const changed = runRowUpdateBatch(row.id, () =>
-    applyRowFieldUpdates(row.id, {
-      ...updates,
-      __changeReason: "Build / Normalize Bet",
-      __changeSource: "normalizer",
-    })
+    applyRowFieldUpdates(row.id, updates)
   );
 
   setReviewActionNotice(
@@ -9352,11 +8104,11 @@ function buildDateFromParts(monthValue = "", dayValue = "", yearValue = "") {
 
 function cleanParticipantTextForMatching(value = "") {
   return String(value || "")
-    .replace(/[\xe2\u20ac\u0153\xe2\u20ac\x9d]/g, '"')
-    .replace(/[\xe2\u20ac\u2122]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
     .replace(/(^|\s)#\s*/g, "$1")
-    .replace(/^[\s"'\xe2\u20ac\u0153\xe2\u20ac\x9d*#?&\xe2\u20ac\xa2\xc2\xb7\xe2\u20ac\u201c\xe2\u20ac\u201d-]+/g, " ")
-    .replace(/["'\xe2\u20ac\u0153\xe2\u20ac\x9d#]+$/g, " ")
+    .replace(/^[\s"'“”*#?&•·–—-]+/g, " ")
+    .replace(/["'“”#]+$/g, " ")
     .replace(/[\s,.;:!?&]+$/g, " ")
     .replace(/^[\s,.;:!?&]+/g, " ")
     .replace(/\+/g, " ")
@@ -9374,10 +8126,10 @@ function cleanParticipantTextForMatching(value = "") {
 
 function cleanSelectionTextForReview(value = "") {
   return String(value || "")
-    .replace(/[\xe2\u20ac\u0153\xe2\u20ac\x9d]/g, '"')
-    .replace(/[\xe2\u20ac\u2122]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
     .replace(/(^|\s)#\s*/g, "$1")
-    .replace(/^[\s"'\xe2\u20ac\u0153\xe2\u20ac\x9d*#\xe2\u20ac\xa2\xc2\xb7\xe2\u20ac\u201c\xe2\u20ac\u201d-]+/g, "")
+    .replace(/^[\s"'“”*#•·–—-]+/g, "")
     .replace(/\bNeutral\s+(?:Venue|Site|Court|Field|Stadium|Arena|Ice|Location)\b/gi, " ")
     .replace(/\b(?:Venue|Neutral Site|Neutral Court|Neutral Field|Neutral Stadium|Neutral Arena)\b/gi, " ")
     .replace(/^\s*(?:spread|moneyline|total)\s+(?=yes\b|no\b|over\b|under\b)/i, "")
@@ -9974,20 +8726,8 @@ function setLeagueForReviewRow(rowId, league = "") {
       ""
   );
   const side = popupMainLineSideRef.current?.value || currentRow.mainLineSide || currentRow.selection || "";
-  const participantAManual =
-    currentRow.participantAManual === "Y" ||
-    isManualFieldLocked(currentRow, "participantA") ||
-    isManualFieldLocked(currentRow, "participantANormalized");
-  const participantBManual =
-    currentRow.participantBManual === "Y" ||
-    isManualFieldLocked(currentRow, "participantB") ||
-    isManualFieldLocked(currentRow, "participantBNormalized");
-  const normalizedA = participantA
-    ? (participantAManual ? cleanParticipantTextForMatching(participantA) : normalizeParticipantName(participantA, nextLeague))
-    : "";
-  const normalizedB = participantB
-    ? (participantBManual ? cleanParticipantTextForMatching(participantB) : normalizeParticipantName(participantB, nextLeague))
-    : "";
+  const normalizedA = participantA ? normalizeParticipantName(participantA, nextLeague) : "";
+  const normalizedB = participantB ? normalizeParticipantName(participantB, nextLeague) : "";
   const workingRow = {
     ...currentRow,
     sportLeague: nextLeague,
@@ -10048,7 +8788,6 @@ function setLeagueForReviewRow(rowId, league = "") {
   }
 
   applyRowFieldUpdates(rowId, updates);
-  markReviewFieldsManual(rowId, ["sportLeague"], "Edited League");
 }
 
 function hasStrongMajorLeagueOverrideEvidence(row = {}, inferredSportKey = "") {
@@ -10106,14 +8845,6 @@ function maybeApplyInferredLeague(row = {}, { promptOnMismatch = true } = {}) {
   if (!row?.id) return "";
 
   const currentLeague = getPreviewLeagueValue(row);
-
-  // A manually selected league is an absolute lock. Normalize, Confirm, draft
-  // commits, and parser inference may not replace NCAAM (or any other manual
-  // league) with Baseball/NBA/etc.
-  if (row.sportLeagueManual === "Y" && currentLeague) {
-    if (popupLeagueRef.current) popupLeagueRef.current.value = currentLeague;
-    return currentLeague;
-  }
 
   // Preserve explicit individual/soccer leagues. This also prevents an already
   // corrupted fixture label from feeding MLB evidence back into the next pass.
@@ -10226,16 +8957,7 @@ function getPreviewLeagueValue(row = {}) {
   // While this row is open, the review input is authoritative even when blank.
   // A blank box tells Normalize to infer the league from the current bet text.
   if (current && rowId && refRowId === rowId) {
-    const visibleLeague = String(current.value || "").trim();
-    if (visibleLeague) return visibleLeague;
-
-    // A manually confirmed league remains authoritative even if the uncontrolled
-    // review input is temporarily blank while the row is mounting/re-rendering.
-    if (row?.sportLeagueManual === "Y" && String(row?.sportLeague || "").trim()) {
-      return String(row.sportLeague).trim();
-    }
-
-    return visibleLeague;
+    return String(current.value || "").trim();
   }
 
   return String(row?.sportLeague || "").trim();
@@ -10510,13 +9232,6 @@ function validateParticipantTeamsBeforeProceed(row = {}) {
   const updates = {};
 
   for (const [field, result] of results) {
-    const normalizedField = field === "participantB" ? "participantBNormalized" : "participantANormalized";
-    const manuallyLocked = isManualFieldLocked(row, field) || isManualFieldLocked(row, normalizedField);
-
-    // Manual participant/team entry is source-of-truth. Validation may surface
-    // a QA warning later, but it may not rewrite or block the reviewer here.
-    if (manuallyLocked) continue;
-
     if (result.ok) {
       if (result.normalized) {
         updates[field === "participantB" ? "participantBNormalized" : "participantANormalized"] = result.normalized;
@@ -10580,42 +9295,13 @@ function validateMainLineSideForProceed(row = {}, market = "", sideValue = "") {
     return { ok: true, side: normalizeMainLineSideValue(side, row, market), message: "" };
   }
 
-  // Exact current-row participant matches are authoritative. Check these before
-  // fuzzy/alias matching so college names such as Iowa State / Tennessee State
-  // cannot be rejected because they share a generic word like "State".
-  const sideCompareKey = normalizeSideCompareKey(side);
-  const exactChoice = choices.find((choice) => {
-    const candidateValues = [
-      choice?.display,
-      choice?.raw,
-    ].filter(Boolean);
-
-    return candidateValues.some(
-      (candidate) => normalizeSideCompareKey(candidate) === sideCompareKey
-    );
-  });
-
-  if (exactChoice?.display) {
-    return { ok: true, side: exactChoice.display, message: "" };
-  }
-
   const match = findParticipantMatchForSide(side, row);
   if (match?.display) return { ok: true, side: match.display, message: "" };
-
-  const allowDraw =
-    cleanMarket === "moneyline" &&
-    isSoccerLeagueForReview(getPreviewLeagueValue(row));
 
   return {
     ok: false,
     side,
-    message: allowDraw
-      ? `Selected Side must match Participant A, Participant B, or Draw before continuing.
-
-Current side: ${side}
-Participant A/B: ${choices.map((choice) => choice.display).join(" / ")}
-Third side: Draw`
-      : `Selected Side / Team must match Participant A or Participant B before continuing.
+    message: `Selected Side / Team must match Participant A or Participant B before continuing.
 
 Current side: ${side}
 Participant A/B: ${choices.map((choice) => choice.display).join(" / ")}`,
@@ -10625,10 +9311,6 @@ Participant A/B: ${choices.map((choice) => choice.display).join(" / ")}`,
 function validatePopupMainLineSideBeforeProceed(row = {}) {
   if (!row?.id) return true;
   if (getReviewBetKind(row) !== "main_line") return true;
-
-  if (isManualFieldLocked(row, "mainLineSide") || isManualFieldLocked(row, "selection")) {
-    return true;
-  }
 
   const market = normalizeMainLineMarket(
     popupPropMarketRef.current?.value ||
@@ -10650,11 +9332,7 @@ function validatePopupMainLineSideBeforeProceed(row = {}) {
       popupMainLineSideRef.current.focus();
       popupMainLineSideRef.current.select?.();
     }
-    setReviewActionNotice(
-      isSoccerLeagueForReview(getPreviewLeagueValue(row)) && market === "moneyline"
-        ? "Selected Side must match Participant A, Participant B, or Draw before continuing."
-        : "Selected Side / Team must match Participant A or Participant B before continuing."
-    );
+    setReviewActionNotice("Selected Side / Team must match Participant A or Participant B before continuing.");
     return false;
   }
 
@@ -10739,21 +9417,15 @@ function getPreviousRowDate(rowId) {
 
 function setBetDateForRow(rowId, value) {
   if (!rowId) return;
-  markReviewFieldsManual(rowId, ["betDate", "eventDate"], "Edited Bet Date");
 
   const parts = getDateParts(value || "");
-  const nextParts = {
+
+  setReviewDateParts({
     rowId,
     month: parts.month || "",
     day: parts.day || "",
     year: parts.year || "",
-  };
-
-  // Keep an immediate mutable copy in addition to React state. Repeated +/-1
-  // clicks can happen before the parent row save/render finishes, so using only
-  // row.betDate would repeatedly shift from the same stale date.
-  reviewDatePartsRef.current = nextParts;
-  setReviewDateParts(nextParts);
+  });
 
   handleRowFieldChange(rowId, "betDate", value);
   handleRowFieldChange(rowId, "betDateNeedsConfirm", "Y");
@@ -10771,24 +9443,7 @@ function shiftBetDateForRow(rowId, deltaDays) {
   const row = rows.find((r) => r.id === rowId);
   if (!row) return;
 
-  const activeParts = reviewDatePartsRef.current;
-  const activeDisplayedDate =
-    String(activeParts?.rowId || "") === String(rowId)
-      ? buildDateFromParts(
-          activeParts.month || "",
-          activeParts.day || "",
-          activeParts.year || ""
-        )
-      : "";
-
-  const draftDate = normalizeReviewDateValue(
-    reviewDraftByRowIdRef.current?.[rowId]?.betDate || ""
-  );
-  const baseDateText =
-    activeDisplayedDate ||
-    draftDate ||
-    normalizeReviewDateValue(row.betDate || "") ||
-    getPreviousRowDate(rowId);
+  const baseDateText = row.betDate || getPreviousRowDate(rowId);
   const baseDate = parseDateInput(baseDateText);
 
   if (!baseDate) return;
@@ -10856,9 +9511,9 @@ function getParsedResultStyle(row) {
 
   if (label === "CASHED OUT") {
     return {
-      background: "#f3f4f6",
-      border: "3px solid #6b7280",
-      color: "#374151",
+      background: "#dbeafe",
+      border: "3px solid #1d4ed8",
+      color: "#1e3a8a",
     };
   }
 
@@ -10905,9 +9560,10 @@ function getReviewReasonItems(row = {}) {
   if (!row.oddsUS) reasons.push("Odds missing");
   if (!row.payout && !row.toWin) reasons.push("Payout/return missing");
   if (!row.win && !["open", "cashed out", "voided", "void", "push"].includes(status)) reasons.push("Result missing");
-  if (!rowHasRecognizedPropMarket(row)) reasons.push("Prop market unrecognized");
   if (row.likelyParserIssue === "Y" || row.parseWarning) reasons.push("Parser warning");
   if (row.reviewLater === "Y") reasons.push("Review later");
+  if (row.largeStakeHedgeReview === "Y") reasons.push("Large stake hedge check");
+  if (rowHasUnresolvedHedgeDecision(row)) reasons.push("Hedge decision needed");
 
   return Array.from(new Set(reasons));
 }
@@ -10921,7 +9577,8 @@ function getHedgeReasonItems(row = {}) {
   const stakeAmount = Number(String(row.stake || "").replace(/[^0-9.-]/g, ""));
 
   if (String(row.hedgeOverride || "").toUpperCase() === "Y") reasons.push("Confirmed hedge");
-  if (row.largeStakeHedgeReview === "Y" || (Number.isFinite(stakeAmount) && stakeAmount > 250)) reasons.push("Large stake hedge check");
+  if (row.largeStakeHedgeReview === "Y" || (Number.isFinite(stakeAmount) && stakeAmount > 200)) reasons.push("Large stake hedge check");
+  if (rowHasUnresolvedHedgeDecision(row)) reasons.push("Hedge decision needed");
   if (row.guaranteedProfit === "Y") reasons.push("Guaranteed profit");
   if (quality.includes("payout match")) reasons.push("Payout match");
   if (quality.includes("middle")) reasons.push("Middle check");
@@ -10930,14 +9587,14 @@ function getHedgeReasonItems(row = {}) {
   if (!row.oddsUS) reasons.push("Odds missing");
   if (!row.payout && !row.toWin) reasons.push("Payout/return missing");
   if (!row.fixtureEvent && !row.participantANormalized && !row.participantBNormalized) reasons.push("Event/context weak");
-  if (betType.includes("player prop") && (!row.playerLastName || !rowHasRecognizedPropMarket(row))) reasons.push("Player prop context weak");
+  if (betType.includes("player prop") && (!row.playerLastName || !row.propMarket)) reasons.push("Player prop context weak");
 
   return Array.from(new Set(reasons));
 }
 
 function formatReasonLine(items = [], fallback = "No review reason") {
   if (!items.length) return fallback;
-  return items.slice(0, 5).join(" | ") + (items.length > 5 ? " | ..." : "");
+  return items.slice(0, 5).join(" · ") + (items.length > 5 ? " · …" : "");
 }
 
 function hasMissingHedgeMoney(row = {}) {
@@ -10964,7 +9621,6 @@ function nextNoChangeFromPopup(row = {}) {
   runRowUpdateBatch(currentRowId, () => {
     if (!canProceedFromPopup(row)) return;
     commitPopupReviewEdits(currentRowId);
-    confirmMyVariableForRow({ ...row, id: currentRowId });
     shouldAdvance = true;
   });
 
@@ -11083,14 +9739,12 @@ function commitPopupReviewEdits(rowId) {
   if (popupParticipantARef.current) {
     const raw = popupParticipantARef.current.value;
     handleRowFieldChange(rowId, "participantA", raw);
-    handleRowFieldChange(rowId, "participantAManual", "Y");
     handleRowFieldChange(rowId, "participantANormalized", normalizeParticipantName(raw, leagueValue));
   }
 
   if (popupParticipantBRef.current) {
     const raw = popupParticipantBRef.current.value;
     handleRowFieldChange(rowId, "participantB", raw);
-    handleRowFieldChange(rowId, "participantBManual", "Y");
     handleRowFieldChange(rowId, "participantBNormalized", normalizeParticipantName(raw, leagueValue));
   }
 
@@ -11169,11 +9823,10 @@ function commitPopupReviewEdits(rowId) {
     const rawMarketValue = popupPropMarketRef.current.value;
 
     if (activeReviewKind === "player_prop") {
-      const normalizedPlayerPropMarket = normalizeRecognizedPlayerPropMarket(rawMarketValue);
       handleRowFieldChange(
         rowId,
         "propMarket",
-        normalizedPlayerPropMarket || String(rawMarketValue || "").trim()
+        normalizePropMarketValue(rawMarketValue)
       );
     } else if (activeReviewKind === "other") {
       const gamePropMarket =
@@ -11503,50 +10156,8 @@ if (nextDate) {
       const row = previewRow;
       if (!row?.id) return;
 
-      const activeElement = document.activeElement;
-      const typing =
-        isTypingTarget(event.target) ||
-        isTypingTarget(activeElement) ||
-        !!event.target?.closest?.("input, textarea, select, [contenteditable='true']");
+      const typing = isTypingTarget(event.target);
       const key = String(event.key || "").toLowerCase();
-
-      // Never let full-page keyboard shortcuts interfere with normal player-name typing.
-      if (
-        (event.code === "Space" || event.key === " ") &&
-        (event.target === popupSubjectRef.current || activeElement === popupSubjectRef.current)
-      ) {
-        return;
-      }
-
-      // From blank/full-page review, Tab starts at Event. Once inside the
-      // review form, Tab/Shift+Tab move only through editable fields and skip
-      // action buttons so data entry stays keyboard-first.
-      if (key === "tab" && workflowView !== "hedge_review") {
-        const reviewForm = event.target?.closest?.(".full-review-form-columns");
-
-        if (!typing) {
-          event.preventDefault();
-          popupFixtureRef.current?.focus?.();
-          popupFixtureRef.current?.select?.();
-          return;
-        }
-
-        if (reviewForm) {
-          const fields = Array.from(
-            reviewForm.querySelectorAll("input:not([disabled]), textarea:not([disabled]), select:not([disabled])")
-          ).filter((field) => field.offsetParent !== null && field.tabIndex !== -1);
-          const currentIndex = fields.indexOf(event.target);
-          if (currentIndex >= 0 && fields.length) {
-            event.preventDefault();
-            const delta = event.shiftKey ? -1 : 1;
-            const nextIndex = (currentIndex + delta + fields.length) % fields.length;
-            const nextField = fields[nextIndex];
-            nextField?.focus?.();
-            if (typeof nextField?.select === "function") nextField.select();
-            return;
-          }
-        }
-      }
 
       if ((event.ctrlKey || event.metaKey) && key === "s") {
         event.preventDefault();
@@ -11555,18 +10166,6 @@ if (nextDate) {
       }
 
       if (typing) {
-        if ((event.ctrlKey || event.metaKey) && key === "enter") {
-          event.preventDefault();
-          confirmAndAdvanceFromPopup(row);
-          return;
-        }
-
-        if ((event.ctrlKey || event.metaKey) && key === "b") {
-          event.preventDefault();
-          promptForQuickBetType(row);
-          return;
-        }
-
         if (key === "m" && (event.ctrlKey || event.altKey || event.metaKey)) {
           event.preventDefault();
           const activeTarget = event.target;
@@ -11584,32 +10183,7 @@ if (nextDate) {
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && key === "b") {
-        event.preventDefault();
-        promptForQuickBetType(row);
-        return;
-      }
-
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-
-      if (workflowView === "hedge_review") {
-        const pair = activeHedgeReviewPair;
-        if (key === "m") {
-          event.preventDefault();
-          if (pair?.rowA && pair?.rowB) resolveHedgeReviewDecision(pair.rowA, pair.rowB, "confirm");
-          return;
-        }
-        if (key === "n") {
-          event.preventDefault();
-          if (pair?.rowA && pair?.rowB) resolveHedgeReviewDecision(pair.rowA, pair.rowB, "ignore");
-          return;
-        }
-        if (key === "escape") {
-          event.preventDefault();
-          skipActiveHedgeReviewPair();
-          return;
-        }
-      }
 
       if (key === "enter" && event.shiftKey) {
         event.preventDefault();
@@ -11623,19 +10197,6 @@ if (nextDate) {
         return;
       }
 
-      if (key === "p" && workflowView !== "hedge_review") {
-        if (getReviewBetKind(row) !== "player_prop") {
-          setReviewActionNotice("P edits Player / Subject only when this row is already a Player Prop.");
-          return;
-        }
-
-        event.preventDefault();
-        popupSubjectRef.current?.focus?.();
-        popupSubjectRef.current?.select?.();
-        setReviewActionNotice("Player / Subject selected. Type the corrected full name.");
-        return;
-      }
-
       const actions = {
         b: () => goBackToPreviousReviewRow(),
         l: () => laterAndNextFromPopup(row),
@@ -11643,6 +10204,8 @@ if (nextDate) {
         x: () => markPopupResult(row.id, "N"),
         v: () => markPopupResult(row.id, "V"),
         c: () => markPopupResult(row.id, "C"),
+        h: () => confirmHedgeCluster(row, false),
+        n: () => ignoreCurrentHedgeMatch(row),
         m: () => buildBetFieldsForCurrentRow(row),
         r: () => onReattachSingleScreenshot?.(row.id),
         a: () => autoFillCalculatedFields(row),
@@ -11902,78 +10465,6 @@ if (nextDate) {
       );
     }
 
-    if (colKey === "tipper") {
-      return (
-        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
-          <input
-            type="text"
-            value={row.tipper || ""}
-            onChange={(e) => {
-              e.stopPropagation();
-              handleRowFieldChange(row.id, "tipper", e.target.value);
-            }}
-            style={{
-              width: "100%",
-              border: "none",
-              background: "transparent",
-              outline: "none",
-              fontSize: 13,
-            }}
-            placeholder="Notes..."
-          />
-        </td>
-      );
-    }
-
-    if (colKey === "myVariable") {
-      const variableState = getMyVariableState(row);
-      const variableValue = getSuggestedMyVariable(row);
-      const variableLocked = ["hedge", "parlay"].includes(
-        String(variableState.autoSource || "").toLowerCase()
-      );
-
-      return (
-        <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
-          <input
-            type="text"
-            list={`my-variable-options-${row.id}`}
-            value={variableValue}
-            disabled={variableLocked}
-            onChange={(e) => {
-              e.stopPropagation();
-              updateMyVariableForRow(row, e.target.value);
-            }}
-            style={{
-              width: "100%",
-              border: variableState.needsReview
-                ? "1px solid #d97706"
-                : "1px solid transparent",
-              borderRadius: 5,
-              background: variableLocked ? "#f0fdf4" : "#ffffff",
-              color: variableLocked ? "#166534" : "#0f172a",
-              outline: "none",
-              fontSize: 13,
-              fontWeight: 800,
-              padding: "4px 6px",
-              boxSizing: "border-box",
-            }}
-            title={
-              variableLocked
-                ? `Automatically tagged from ${variableState.autoSource}.`
-                : variableState.automatic
-                ? `Auto default from ${variableState.autoSource}; editable.`
-                : variableState.reason
-            }
-          />
-          <datalist id={`my-variable-options-${row.id}`}>
-            {MY_VARIABLE_SUGGESTIONS.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-        </td>
-      );
-    }
-
     if (colKey === "bookmaker") {
       return (
         <td key={reactKey} style={{ ...cellStyle, backgroundColor: rowBg }}>
@@ -12094,7 +10585,7 @@ if (nextDate) {
               </span>
             </div>
           ) : (
-            <div style={{ marginBottom: 8, color: "#6b7280" }}>-</div>
+            <div style={{ marginBottom: 8, color: "#6b7280" }}>—</div>
           )}
 
           {getIgnoredHedgeMatchItems(row).map((item) => (
@@ -12282,291 +10773,6 @@ if (nextDate) {
     return renderInlineEditor(row, rowBg, colKey, reactKey);
   };
 
-  function getPairPotentialReturn(row = {}) {
-    const payout = getNumericMoney(row.payout);
-    const stake = getNumericMoney(row.stake);
-    const toWin = getNumericMoney(row.toWin);
-    const odds = Number(String(row.oddsUS || "").replace(/[^0-9+-]/g, ""));
-
-    if (Number.isFinite(payout) && payout > 0) return payout;
-    if (Number.isFinite(stake) && stake > 0 && Number.isFinite(toWin) && toWin > 0) {
-      return stake + toWin;
-    }
-    if (Number.isFinite(stake) && stake > 0 && Number.isFinite(odds) && odds !== 0) {
-      const profit = odds > 0
-        ? (stake * odds) / 100
-        : (stake * 100) / Math.abs(odds);
-      return stake + profit;
-    }
-    return NaN;
-  }
-
-  function getHedgePairEconomics(row = {}, partner = {}) {
-    if (!row?.id || !partner?.id) return null;
-
-    const stakeA = getNumericMoney(row.stake);
-    const stakeB = getNumericMoney(partner.stake);
-    const returnA = getPairPotentialReturn(row);
-    const returnB = getPairPotentialReturn(partner);
-
-    if (
-      !Number.isFinite(stakeA) || stakeA <= 0 ||
-      !Number.isFinite(stakeB) || stakeB <= 0 ||
-      !Number.isFinite(returnA) || returnA <= 0 ||
-      !Number.isFinite(returnB) || returnB <= 0
-    ) {
-      return null;
-    }
-
-    const totalStake = stakeA + stakeB;
-    const profitIfCurrentWins = returnA - totalStake;
-    const profitIfPartnerWins = returnB - totalStake;
-    const low = Math.min(profitIfCurrentWins, profitIfPartnerWins);
-    const high = Math.max(profitIfCurrentWins, profitIfPartnerWins);
-
-    return {
-      totalStake,
-      profitIfCurrentWins,
-      profitIfPartnerWins,
-      low,
-      high,
-      guaranteedProfit: low >= 0,
-      guaranteedLoss: high < 0,
-    };
-  }
-
-  function formatSignedReviewMoney(value = NaN) {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return "-";
-    if (number > 0) return `+$${number.toFixed(2)}`;
-    if (number < 0) return `-$${Math.abs(number).toFixed(2)}`;
-    return "$0.00";
-  }
-
-  function renderDedicatedHedgeReviewWorkspace() {
-    if (workflowView !== "hedge_review" || !hoverPreview.locked) return null;
-
-    const pair = activeHedgeReviewPair;
-    const currentRow = pair?.rowA || null;
-    const partnerRow = pair?.rowB || null;
-    const pairEconomics = currentRow && partnerRow
-      ? getHedgePairEconomics(currentRow, partnerRow)
-      : null;
-
-    const sessionPairs = hedgeReviewSessionPairs.length
-      ? hedgeReviewSessionPairs
-      : hedgeReviewPairs.map((item) => ({
-          key: item.key,
-          rowAId: item.rowA?.id || "",
-          rowBId: item.rowB?.id || "",
-          bookA: getDisplayedBookmaker(item.rowA) || item.rowA?.bookmaker || "Book",
-          bookB: getDisplayedBookmaker(item.rowB) || item.rowB?.bookmaker || "Book",
-        }));
-    const pairTotal = sessionPairs.length;
-    const currentSessionIndex = pair
-      ? Math.max(sessionPairs.findIndex((item) => item.key === pair.key), 0)
-      : Math.max(pairTotal - 1, 0);
-    const pairPosition = pairTotal ? currentSessionIndex + 1 : 0;
-    const decisionValues = Object.values(hedgeReviewSessionDecisions || {});
-    const decidedCount = decisionValues.filter(
-      (item) => item?.decision && item.decision !== "skip"
-    ).length;
-    const skippedCount = decisionValues.filter((item) => item?.decision === "skip").length;
-    const progressPercent = pairTotal
-      ? Math.max(0, Math.min(100, (decidedCount / pairTotal) * 100))
-      : 100;
-    const currentBook = currentRow
-      ? getDisplayedBookmaker(currentRow) || currentRow.bookmaker || "Book"
-      : "Book";
-    const partnerBook = partnerRow
-      ? getDisplayedBookmaker(partnerRow) || partnerRow.bookmaker || "Book"
-      : "Candidate";
-
-    const panel = {
-      border: "1px solid rgba(71, 85, 105, 0.72)",
-      borderRadius: 14,
-      background: "rgba(5, 18, 31, 0.92)",
-    };
-    const metaBox = {
-      border: "1px solid rgba(51, 65, 85, 0.95)",
-      borderRadius: 10,
-      background: "rgba(2, 8, 23, 0.86)",
-      padding: "8px 9px",
-      minWidth: 0,
-    };
-    const imageStyle = {
-      width: "100%",
-      height: "min(43vh, 440px)",
-      objectFit: "contain",
-      borderRadius: 12,
-      border: "1px solid rgba(71, 85, 105, 0.9)",
-      background: "#020617",
-      cursor: "pointer",
-    };
-
-    function renderMeta(label, value) {
-      return (
-        <div style={metaBox}>
-          <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-          <div style={{ marginTop: 3, color: "#f8fafc", fontSize: 12, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={String(value || "-")}>{value || "-"}</div>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ position: "absolute", inset: 0, zIndex: 80, background: "radial-gradient(circle at top, #102a43 0%, #071522 40%, #020817 100%)", color: "#e5e7eb", padding: 12, boxSizing: "border-box", overflow: "auto" }}>
-        <div style={{ maxWidth: 1700, margin: "0 auto", display: "grid", gap: 12 }}>
-          <div style={{ ...panel, padding: "11px 13px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "auto auto 1fr auto", gap: 12, alignItems: "center" }}>
-              <div style={{ fontSize: 17, fontWeight: 950, color: "#f8fafc" }}>Hedge Review Mode</div>
-              <div style={{ padding: "5px 9px", borderRadius: 999, border: "1px solid rgba(52,211,153,.4)", color: "#86efac", background: "rgba(6,78,59,.22)", fontSize: 11, fontWeight: 950 }}>
-                {pair ? `PAIR ${pairPosition} OF ${pairTotal}` : "SESSION COMPLETE"}
-              </div>
-              <div style={{ minWidth: 200 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8", fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
-                  <span>Decided</span><span>{decidedCount} / {pairTotal}</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 999, background: "#1e293b", overflow: "hidden" }}>
-                  <div style={{ width: `${progressPercent}%`, height: "100%", background: "#22c55e" }} />
-                </div>
-              </div>
-              <button type="button" onClick={closeHoverPreview} style={{ ...smallButtonStyle, padding: "8px 12px", border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0", fontWeight: 900 }}>Close Hedge Review</button>
-            </div>
-            <div style={{ marginTop: 9, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <div style={{ color: "#cbd5e1", fontSize: 12 }}>
-                Only bets already completed with Confirm + Next are eligible. Each unordered candidate pair appears once per session.
-              </div>
-              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", fontSize: 11, fontWeight: 900 }}>
-                <span style={{ padding: "4px 7px", border: "1px solid #166534", borderRadius: 6, color: "#86efac" }}>M = Match</span>
-                <span style={{ padding: "4px 7px", border: "1px solid #991b1b", borderRadius: 6, color: "#fca5a5" }}>N = Not a Match</span>
-                <span style={{ padding: "4px 7px", border: "1px solid #475569", borderRadius: 6, color: "#cbd5e1" }}>Esc = Skip Pair</span>
-              </div>
-            </div>
-          </div>
-
-          {!pair ? (
-            <div style={{ ...panel, padding: 28, textAlign: "center", display: "grid", gap: 12 }}>
-              <div style={{ fontSize: 24, fontWeight: 950, color: skippedCount ? "#fde68a" : "#86efac" }}>
-                {skippedCount ? "No active pairs remain" : "Hedge Review session complete"}
-              </div>
-              <div style={{ color: "#cbd5e1", fontSize: 13 }}>
-                {skippedCount
-                  ? `${skippedCount} pair${skippedCount === 1 ? " was" : "s were"} skipped. Reopen one below or close Hedge Review.`
-                  : "Every unique unresolved pair in this session has been decided."}
-              </div>
-              {skippedCount > 0 && (
-                <div style={{ maxWidth: 620, margin: "0 auto", width: "100%", display: "grid", gap: 7 }}>
-                  {sessionPairs.filter((item) => hedgeReviewSessionDecisions?.[item.key]?.decision === "skip").map((item) => (
-                    <button key={`reopen-skip-${item.key}`} type="button" onClick={() => openHedgeReviewSessionPair(item.key)} style={{ ...smallButtonStyle, padding: "9px 12px", border: "1px solid #a16207", background: "rgba(120,53,15,.28)", color: "#fde68a", fontWeight: 900 }}>
-                      Reopen {item.bookA} → {item.bookB}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <div style={{ ...panel, padding: "10px 12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ color: "#f8fafc", fontSize: 12, fontWeight: 950 }}>PAIR PROFIT / LOSS</div>
-                  <div style={{ color: pairEconomics?.guaranteedProfit ? "#4ade80" : pairEconomics?.guaranteedLoss ? "#f87171" : "#fde68a", fontSize: 12, fontWeight: 950 }}>
-                    {!pairEconomics
-                      ? "Need stake + payout/odds for both bets"
-                      : pairEconomics.guaranteedProfit
-                      ? `Guaranteed Profit: ${formatSignedReviewMoney(pairEconomics.low)} minimum`
-                      : pairEconomics.guaranteedLoss
-                      ? `Guaranteed Loss: ${formatSignedReviewMoney(pairEconomics.high)} best case`
-                      : `Outcome Range: ${formatSignedReviewMoney(pairEconomics.low)} to ${formatSignedReviewMoney(pairEconomics.high)}`}
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: 7 }}>
-                  {renderMeta("Combined Stake", pairEconomics ? `$${pairEconomics.totalStake.toFixed(2)}` : "-")}
-                  {renderMeta(`${currentBook} Wins`, pairEconomics ? formatSignedReviewMoney(pairEconomics.profitIfCurrentWins) : "-")}
-                  {renderMeta(`${partnerBook} Wins`, pairEconomics ? formatSignedReviewMoney(pairEconomics.profitIfPartnerWins) : "-")}
-                  {renderMeta("Worst Outcome", pairEconomics ? formatSignedReviewMoney(pairEconomics.low) : "-")}
-                  {renderMeta("Best Outcome", pairEconomics ? formatSignedReviewMoney(pairEconomics.high) : "-")}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) 250px", gap: 12, alignItems: "start" }}>
-                {[currentRow, partnerRow].map((betRow, sideIndex) => {
-                  const book = sideIndex === 0 ? currentBook : partnerBook;
-                  return (
-                    <div key={`hedge-pair-side-${betRow?.id || sideIndex}`} style={{ ...panel, padding: 11, display: "grid", gap: 9 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                        <div style={{ color: sideIndex === 0 ? "#4ade80" : "#60a5fa", fontWeight: 950, fontSize: 13 }}>
-                          {sideIndex === 0 ? "BET A" : "BET B / POTENTIAL HEDGE"}
-                        </div>
-                        <div style={{ color: "#86efac", fontSize: 11, fontWeight: 900 }}>Normal review confirmed</div>
-                      </div>
-                      <div style={{ color: "#f8fafc", fontSize: 14, fontWeight: 950 }}>{book}</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: 6 }}>
-                        {renderMeta("Date", betRow?.betDate || betRow?.eventDate || "-")}
-                        {renderMeta("Stake", betRow?.stake ? `$${betRow.stake}` : "-")}
-                        {renderMeta("Odds", betRow?.oddsUS || "-")}
-                        {renderMeta("Type", betRow?.betType || betRow?.marketType || "-")}
-                        {renderMeta("Market", betRow?.propMarket || betRow?.reviewMarketType || betRow?.marketDetail || "-")}
-                      </div>
-                      {betRow?.sourceImageUrl
-                        ? <img src={betRow.sourceImageUrl} alt={betRow.sourceFileName || "hedge bet screenshot"} onClick={() => openHedgeDetailPopup(betRow)} style={imageStyle} />
-                        : <div style={{ ...imageStyle, display: "grid", placeItems: "center", color: "#94a3b8", fontWeight: 900 }}>No screenshot attached</div>}
-                      <div style={{ color: "#f8fafc", fontWeight: 950, fontSize: 13 }}>{betRow?.selection || "-"}</div>
-                      <div style={{ color: "#94a3b8", fontSize: 12 }}>{betRow?.fixtureEvent || "-"}</div>
-                    </div>
-                  );
-                })}
-
-                <div style={{ ...panel, padding: 10, display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 950, color: "#e2e8f0" }}>PAIRS IN THIS SESSION</div>
-                  <div style={{ display: "grid", gap: 6, maxHeight: "56vh", overflowY: "auto", paddingRight: 2 }}>
-                    {sessionPairs.map((sessionPair, index) => {
-                      const decision = hedgeReviewSessionDecisions?.[sessionPair.key]?.decision || "";
-                      const livePair = hedgeReviewPairs.find((item) => item.key === sessionPair.key) || null;
-                      const active = pair?.key === sessionPair.key;
-                      const statusText = active
-                        ? "Reviewing"
-                        : decision === "match"
-                        ? "Match"
-                        : decision === "not_match"
-                        ? "Not a Match"
-                        : decision === "skip"
-                        ? "Skipped"
-                        : decision === "clear"
-                        ? "Cleared"
-                        : livePair
-                        ? "Pending"
-                        : "Resolved";
-                      const statusColor = active ? "#60a5fa" : decision === "match" ? "#4ade80" : decision === "not_match" ? "#f87171" : decision === "skip" ? "#fde68a" : "#94a3b8";
-                      const canOpen = !!livePair;
-                      return (
-                        <button key={`hedge-session-${sessionPair.key}`} type="button" disabled={!canOpen} onClick={() => canOpen && openHedgeReviewSessionPair(sessionPair.key)} style={{ textAlign: "left", padding: "8px 9px", borderRadius: 9, border: active ? "1px solid #3b82f6" : "1px solid #334155", background: active ? "rgba(30,64,175,.24)" : "rgba(15,23,42,.62)", color: "#e5e7eb", cursor: canOpen ? "pointer" : "default", opacity: canOpen || decision ? 1 : .7 }}>
-                          <div style={{ fontSize: 11, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{index + 1}. {sessionPair.bookA} → {sessionPair.bookB}</div>
-                          <div style={{ marginTop: 4, color: statusColor, fontSize: 10, fontWeight: 900 }}>{statusText}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    <button type="button" disabled={activeHedgeReviewPairs.length <= 1} onClick={() => stepActiveHedgeReviewPair(-1)} style={{ ...smallButtonStyle, background: "#0f172a", color: "#dbeafe", border: "1px solid #3b82f6", opacity: activeHedgeReviewPairs.length <= 1 ? .5 : 1 }}>Previous Pair</button>
-                    <button type="button" disabled={activeHedgeReviewPairs.length <= 1} onClick={() => stepActiveHedgeReviewPair(1)} style={{ ...smallButtonStyle, background: "#0f172a", color: "#dbeafe", border: "1px solid #3b82f6", opacity: activeHedgeReviewPairs.length <= 1 ? .5 : 1 }}>Next Pair</button>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ ...panel, padding: 11, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 10 }}>
-                <button type="button" onClick={() => resolveHedgeReviewDecision(currentRow, partnerRow, "confirm")} style={{ padding: "14px 12px", borderRadius: 12, border: "1px solid #16a34a", background: "#16a34a", color: "#f0fdf4", fontWeight: 950, cursor: "pointer" }}>✓ MATCH<div style={{ marginTop: 3, fontSize: 11, fontWeight: 700 }}>Confirm this hedge pair</div></button>
-                <button type="button" onClick={() => resolveHedgeReviewDecision(currentRow, partnerRow, "ignore")} style={{ padding: "14px 12px", borderRadius: 12, border: "1px solid #dc2626", background: "#b91c1c", color: "#fef2f2", fontWeight: 950, cursor: "pointer" }}>✕ NOT A MATCH<div style={{ marginTop: 3, fontSize: 11, fontWeight: 700 }}>Hide only this pairing</div></button>
-                <button type="button" onClick={skipActiveHedgeReviewPair} style={{ padding: "14px 12px", borderRadius: 12, border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0", fontWeight: 950, cursor: "pointer" }}>→ SKIP PAIR<div style={{ marginTop: 3, fontSize: 11, fontWeight: 700 }}>Come back later this session</div></button>
-              </div>
-            </>
-          )}
-
-          {reviewActionNotice && <div style={{ ...panel, padding: "8px 10px", color: "#cbd5e1", fontSize: 11, fontWeight: 800 }}>{reviewActionNotice}</div>}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ marginTop: 20 }}>
 
@@ -12617,7 +10823,7 @@ if (nextDate) {
                   <div style={{ display: "grid", gap: 3 }}>
                     <strong>Possible Hedge Screenshot</strong>
                     <span style={{ fontSize: 13, color: "#475569" }}>
-                      {getDisplayedBookmaker(detailRow) || detailRow.bookmaker || "Book"} | {detailRow.selection || "-"} | {detailRow.fixtureEvent || "-"}
+                      {getDisplayedBookmaker(detailRow) || detailRow.bookmaker || "Book"} · {detailRow.selection || "—"} · {detailRow.fixtureEvent || "—"}
                     </span>
                   </div>
 
@@ -12643,15 +10849,15 @@ if (nextDate) {
                       fontSize: 13,
                     }}
                   >
-                    <div><strong>Book:</strong> {getDisplayedBookmaker(detailRow) || detailRow.bookmaker || "-"}</div>
-                    <div><strong>Selection:</strong> {detailRow.selection || "-"}</div>
-                    <div><strong>Event:</strong> {detailRow.fixtureEvent || "-"}</div>
-                    <div><strong>League:</strong> {detailRow.sportLeague || "-"}</div>
-                    <div><strong>Stake:</strong> {detailRow.stake ? `$${detailRow.stake}` : "-"}</div>
-                    <div><strong>Odds:</strong> {detailRow.oddsUS || "-"}</div>
-                    <div><strong>Payout:</strong> {detailRow.payout ? `$${detailRow.payout}` : "-"}</div>
+                    <div><strong>Book:</strong> {getDisplayedBookmaker(detailRow) || detailRow.bookmaker || "—"}</div>
+                    <div><strong>Selection:</strong> {detailRow.selection || "—"}</div>
+                    <div><strong>Event:</strong> {detailRow.fixtureEvent || "—"}</div>
+                    <div><strong>League:</strong> {detailRow.sportLeague || "—"}</div>
+                    <div><strong>Stake:</strong> {detailRow.stake ? `$${detailRow.stake}` : "—"}</div>
+                    <div><strong>Odds:</strong> {detailRow.oddsUS || "—"}</div>
+                    <div><strong>Payout:</strong> {detailRow.payout ? `$${detailRow.payout}` : "—"}</div>
                     <div><strong>Result:</strong> {getParsedResultLabel(detailRow)}</div>
-                    <div><strong>Hedge Quality:</strong> {detailRow.hedgeQuality || "-"}</div>
+                    <div><strong>Hedge Quality:</strong> {detailRow.hedgeQuality || "—"}</div>
                   </div>
 
                   <div
@@ -12751,7 +10957,7 @@ if (nextDate) {
             inset: 0,
             zIndex: 9999,
             pointerEvents: hoverPreview.locked ? "auto" : "none",
-            background: previewRow ? getParsedResultStyle(previewRow).background : "#fef3c7",
+            background: "#fff",
             border: "none",
             borderRadius: 0,
             boxShadow: "none",
@@ -12771,9 +10977,9 @@ if (nextDate) {
         >
           <style>{`
             .review-card {
-              border: 1px solid #dbe4ea;
+              border: 1px solid #bfdbfe;
               border-radius: 12px;
-              background: #ffffff;
+              background: #eff6ff;
               box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
             }
 
@@ -12781,12 +10987,12 @@ if (nextDate) {
               position: sticky;
               top: 0;
               z-index: 20;
-              margin-bottom: 7px;
-              padding: 9px 10px;
+              margin-bottom: 6px;
+              padding: 7px 8px;
               border: 1px solid #bbf7d0;
               border-radius: 12px;
-              background: #f8fffb;
-              box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10);
+              background: #f0fdf4;
+              box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
               flex-shrink: 0;
             }
 
@@ -12939,15 +11145,6 @@ if (nextDate) {
               font-size: 13px !important;
             }
 
-            .review-data-locked input,
-            .review-data-locked select,
-            .review-data-locked textarea {
-              pointer-events: none !important;
-              background: #f1f5f9 !important;
-              color: #64748b !important;
-              -webkit-text-fill-color: #64748b !important;
-            }
-
             @media (max-width: 1250px) {
               .full-review-form-columns > div,
               .full-review-form-columns .review-build-market-section {
@@ -12960,8 +11157,6 @@ if (nextDate) {
               }
             }
           `}</style>
-
-          {renderDedicatedHedgeReviewWorkspace()}
 
           <div
             style={{
@@ -12986,276 +11181,140 @@ if (nextDate) {
             )}
           </div>
 
-          {hoverPreview.locked && previewRow && (() => {
-            const variableState = getMyVariableState(previewRow);
-            const variableValue = getSuggestedMyVariable(previewRow);
-            const resultTheme = getParsedResultStyle(previewRow);
-            const variableLocked = ["hedge", "parlay"].includes(
-              String(variableState.autoSource || "").toLowerCase()
-            );
-            const queueReason =
-              String(previewRow.reviewQueueReason || "").trim() ||
-              getReviewQueueReasonSummary(previewRow);
-            const technicalDetail = getReviewQueueTechnicalDetail(previewRow);
-            const reviewPassStatus = getReviewPassStatusForPopup(previewRow);
-            const hasCurrentIssue = !["Export Ready", "Clean"].includes(
-              reviewPassStatus
-            );
-            const resultGood =
-              !!previewRow.win ||
-              ["open", "voided", "void", "push", "cashed out"].includes(
-                String(previewRow.status || "").toLowerCase()
-              );
-
-            return (
+          {hoverPreview.locked && previewRow && (
+            <div className="review-action-bar">
               <div
-                className="review-action-bar"
                 style={{
-                  background: resultTheme.background,
-                  border: String(resultTheme.border || "1px solid #cbd5e1").replace(/^3px/, "1px"),
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "center",
+                  justifyContent: "space-between",
                 }}
               >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(300px, 0.9fr) minmax(420px, 1.35fr)",
-                    gap: 10,
-                    alignItems: "stretch",
-                  }}
-                >
-                  <div
-                    style={{
-                      minWidth: 0,
-                      display: "grid",
-                      alignContent: "center",
-                      gap: 3,
-                      padding: "3px 2px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#166534",
-                        fontWeight: 900,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.04em",
-                      }}
-                    >
-                      Row {getVisibleRowPosition(previewRow.id) || "-"} |{" "}
-                      {getDisplayedBookmaker(previewRow) ||
-                        previewRow.bookmaker ||
-                        "Book"}{" "}
-                      | {previewRow.sportLeague || "League"}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 20,
-                        lineHeight: 1.15,
-                        fontWeight: 950,
-                        color: "#0f172a",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={buildExactExportedSelection(previewRow) || ""}
-                    >
-                      {previewRow.bonusBet === "Y" && (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            marginRight: 8,
-                            padding: "2px 7px",
-                            borderRadius: 999,
-                            border: "1px solid #f97316",
-                            background: "#ffedd5",
-                            color: "#9a3412",
-                            fontSize: 11,
-                            fontWeight: 950,
-                            verticalAlign: "middle",
-                          }}
-                        >
-                          BONUS
-                        </span>
-                      )}
-                      {buildExactExportedSelection(previewRow) || "No selection"}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 750,
-                        color: "#475569",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={previewRow.fixtureEvent || ""}
-                    >
-                      {previewRow.fixtureEvent || "No event"}
-                    </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "#166534", fontWeight: 900 }}>
+                    Current row {getVisibleRowPosition(previewRow.id) || ""} · {getDisplayedBookmaker(previewRow) || previewRow.bookmaker || "Book"} · {previewRow.sportLeague || "League"}
                   </div>
-
                   <div
                     style={{
-                      border: hasCurrentIssue
-                        ? "1px solid #f59e0b"
-                        : "1px solid #86efac",
-                      borderRadius: 11,
-                      background: hasCurrentIssue ? "#fffbeb" : "#f0fdf4",
-                      padding: "8px 10px",
-                      display: "grid",
-                      gridTemplateColumns: "32px minmax(0, 1fr)",
-                      gap: 9,
-                      alignItems: "start",
+                      marginTop: 2,
+                      fontSize: 15,
+                      fontWeight: 900,
+                      color: "#0f172a",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                     }}
+                    title={previewRow.selection || ""}
                   >
-                    <div
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 999,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: hasCurrentIssue ? "#f59e0b" : "#16a34a",
-                        color: "#ffffff",
-                        fontWeight: 950,
-                        fontSize: 16,
-                      }}
-                    >
-                      {hasCurrentIssue ? "?" : "OK"}
-                    </div>
-
-                    <div style={{ minWidth: 0 }}>
-                      <div
+                    {previewRow.bonusBet === "Y" && (
+                      <span
                         style={{
-                          fontWeight: 950,
-                          color: "#0f172a",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          marginRight: 8,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          border: "2px solid #f97316",
+                          background: "#ffedd5",
+                          color: "#9a3412",
                           fontSize: 13,
+                          fontWeight: 950,
+                          verticalAlign: "middle",
                         }}
                       >
-                        Why you're reviewing this
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          color: "#334155",
-                          fontSize: 12,
-                          fontWeight: 800,
-                        }}
-                      >
-                        {queueReason}
-                      </div>
-
-                      {technicalDetail &&
-                        technicalDetail !== queueReason && (
-                          <div
-                            style={{
-                              marginTop: 3,
-                              color: "#64748b",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={technicalDetail}
-                          >
-                            Detail: {technicalDetail}
-                          </div>
-                        )}
-
-                      {previewRow.reviewQueueCapturedAt && (
-                        <div
-                          style={{
-                            marginTop: 3,
-                            color: "#64748b",
-                            fontSize: 10,
-                            fontWeight: 700,
-                          }}
-                        >
-                          Queue reason saved for this row.
-                        </div>
-                      )}
-                    </div>
+                        BONUS
+                      </span>
+                    )}
+                    {buildExactExportedSelection(previewRow) || "No selection"}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 15,
+                      fontWeight: 900,
+                      color: "#0f172a",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={previewRow.fixtureEvent || ""}
+                  >
+                    {previewRow.fixtureEvent || "No event"}
                   </div>
                 </div>
 
                 <div
                   style={{
+                    padding: 8,
+                    border: "1px solid #d1d5db",
+                    borderRadius: 10,
+                    background: "#ffffff",
                     display: "flex",
                     gap: 6,
                     flexWrap: "wrap",
                     alignItems: "center",
-                    marginTop: 8,
+                    minWidth: 0,
                   }}
                 >
-                  {getFieldPill(
-                    reviewPassStatus,
-                    reviewPassStatus === "Export Ready" ? "good" : "info"
-                  )}
-                  {getFieldPill(
-                    "Date",
-                    previewRow.betDateNeedsConfirm === "Y" || !previewRow.betDate
-                      ? "warn"
-                      : "good"
-                  )}
-                  {getFieldPill(
-                    "Money",
-                    previewRow.stake && previewRow.oddsUS ? "good" : "bad"
-                  )}
-                  {getFieldPill("Result", resultGood ? "good" : "bad")}
-                  {getFieldPill(
-                    "Context",
-                    previewRow.sportLeague &&
-                      (previewRow.fixtureEvent ||
-                        previewRow.participantANormalized ||
-                        previewRow.participantBNormalized)
-                      ? "good"
-                      : "warn"
-                  )}
-                  {getFieldPill(
-                    `My Variable: ${variableValue}`,
-                    variableState.needsReview ? "warn" : "good"
-                  )}
+                  <strong style={{ marginRight: 4, color: "#0f172a" }}>Review Pass:</strong>
+                  {getFieldPill(getReviewPassStatusForPopup(previewRow), "info")}
+                  {getFieldPill("Date", previewRow.betDateNeedsConfirm === "Y" || !previewRow.betDate ? "warn" : "good")}
+                  {getFieldPill("Money", previewRow.stake && previewRow.oddsUS ? "good" : "bad")}
+                  {getFieldPill("Result", previewRow.win || ["open", "voided", "void", "push", "cashed out"].includes(String(previewRow.status || "").toLowerCase()) ? "good" : "bad")}
+                  {getFieldPill("Context", previewRow.sportLeague && (previewRow.fixtureEvent || previewRow.participantANormalized || previewRow.participantBNormalized) ? "good" : "warn")}
+                  {String(previewRow.hedgeOverride || "").toUpperCase() === "Y"
+                    ? getFieldPill("Confirmed Hedge", "good")
+                    : getFieldPill("Hedge", rowHasUnresolvedHedgeDecision(previewRow) ? "warn" : "good")}
+
+                  <div
+                    style={{
+                      flexBasis: "100%",
+                      display: "grid",
+                      gap: 3,
+                      marginTop: 4,
+                      paddingTop: 6,
+                      borderTop: "1px solid #e5e7eb",
+                      fontSize: 12,
+                      color: "#334155",
+                      fontWeight: 800,
+                    }}
+                  >
+                    <div>
+                      <strong>Review reason:</strong>{" "}
+                      {formatReasonLine(getReviewReasonItems(previewRow), "No blocking review issue")}
+                    </div>
+                    {getHedgeReasonItems(previewRow).length > 0 && (
+                      <div style={{ color: "#6d28d9" }}>
+                        <strong>Hedge focus:</strong>{" "}
+                        {formatReasonLine(getHedgeReasonItems(previewRow), "No hedge issue")}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 8,
-                    border: "1px solid #dbe4ea",
-                    borderRadius: 10,
-                    background: "#ffffff",
-                    padding: 7,
-                    display: "flex",
-                    gap: 7,
-                    flexWrap: "wrap",
-                    alignItems: "stretch",
-                  }}
-                >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <div className="review-money-card" style={{ minWidth: 150 }}>
+                    <span className="review-money-label">Parsed League</span>
+                    <span className="review-money-value">
+                      {previewRow.sportLeague || "—"}
+                    </span>
+                    <span style={{ display: "block", marginTop: 3, fontSize: 10, color: "#64748b", fontWeight: 800 }}>
+                      Review box below starts blank for auto-detect.
+                    </span>
+                  </div>
+
                   <div
                     className="review-money-card"
                     style={{
-                      minWidth: 205,
-                      border: rowNeedsDateConfirm(previewRow)
-                        ? "1px solid #d97706"
-                        : "1px solid #d1fae5",
-                      background: rowNeedsDateConfirm(previewRow)
-                        ? "#fffbeb"
-                        : "#ffffff",
+                      minWidth: 230,
+                      border: rowNeedsDateConfirm(previewRow) ? "2px solid #b45309" : "1px solid #d1fae5",
+                      background: rowNeedsDateConfirm(previewRow) ? "#fef3c7" : "#ffffff",
                     }}
                   >
                     <span className="review-money-label">Bet Date</span>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 3,
-                        alignItems: "center",
-                        marginTop: 3,
-                      }}
-                    >
+                    <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 3 }}>
                       <input
                         tabIndex={2}
                         ref={popupBetMonthRef}
@@ -13265,18 +11324,13 @@ if (nextDate) {
                         onChange={(e) =>
                           setReviewDateParts((prev) => ({
                             ...prev,
-                            rowId: previewRow.id,
+                            rowId: previewRow?.id || prev.rowId,
                             month: e.target.value,
                           }))
                         }
-                        style={{
-                          width: 34,
-                          padding: "4px 5px",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: 5,
-                          fontWeight: 850,
-                        }}
+                        style={{ width: 34, padding: "4px 5px", border: "1px solid #cbd5e1", borderRadius: 5, fontSize: 13, fontWeight: 800 }}
                       />
+
                       <input
                         tabIndex={3}
                         ref={popupBetDayRef}
@@ -13286,18 +11340,13 @@ if (nextDate) {
                         onChange={(e) =>
                           setReviewDateParts((prev) => ({
                             ...prev,
-                            rowId: previewRow.id,
+                            rowId: previewRow?.id || prev.rowId,
                             day: e.target.value,
                           }))
                         }
-                        style={{
-                          width: 34,
-                          padding: "4px 5px",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: 5,
-                          fontWeight: 850,
-                        }}
+                        style={{ width: 34, padding: "4px 5px", border: "1px solid #cbd5e1", borderRadius: 5, fontSize: 13, fontWeight: 800 }}
                       />
+
                       <input
                         tabIndex={4}
                         ref={popupBetYearRef}
@@ -13307,11 +11356,13 @@ if (nextDate) {
                         onChange={(e) =>
                           setReviewDateParts((prev) => ({
                             ...prev,
-                            rowId: previewRow.id,
+                            rowId: previewRow?.id || prev.rowId,
                             year: e.target.value,
                           }))
                         }
                         onBlur={() => {
+                          if (!previewRow) return;
+
                           const parts = getActiveReviewDateParts(previewRow);
                           const dateFromParts = buildDateFromParts(
                             parts.month,
@@ -13323,82 +11374,39 @@ if (nextDate) {
                             setBetDateForRow(previewRow.id, dateFromParts);
                           }
                         }}
-                        style={{
-                          width: 50,
-                          padding: "4px 5px",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: 5,
-                          fontWeight: 850,
-                        }}
+                        style={{ width: 48, padding: "4px 5px", border: "1px solid #cbd5e1", borderRadius: 5, fontSize: 13, fontWeight: 800 }}
                       />
+
                       <button
                         tabIndex={5}
                         type="button"
-                        onClick={() => confirmPopupDate(previewRow.id)}
+                        onClick={() => previewRow && confirmPopupDate(previewRow.id)}
                         style={{
                           ...smallButtonStyle,
                           padding: "4px 7px",
-                          minHeight: 27,
-                          border: "1px solid #16a34a",
+                          minHeight: 26,
+                          border: "1px solid #166534",
                           background: "#dcfce7",
-                          color: "#166534",
+                          color: "#14532d",
+                          fontSize: 12,
                           fontWeight: 900,
                         }}
                       >
                         Confirm
                       </button>
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 4,
-                        alignItems: "center",
-                        marginTop: 4,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: "#64748b",
-                          fontWeight: 850,
-                        }}
-                      >
+
+                    <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: rowNeedsDateConfirm(previewRow) ? "#92400e" : "#64748b", fontWeight: 900 }}>
                         {getPopupDateValue(previewRow) || "No date"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => usePreviousBetDateForRow(previewRow.id)}
-                        style={{
-                          ...smallButtonStyle,
-                          padding: "1px 5px",
-                          minHeight: 20,
-                          fontSize: 10,
-                        }}
-                      >
+                      <button tabIndex={6} type="button" onClick={() => previewRow && usePreviousBetDateForRow(previewRow.id)} style={{ ...smallButtonStyle, padding: "2px 6px", minHeight: 22, fontSize: 11 }}>
                         Prev
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => shiftBetDateForRow(previewRow.id, -1)}
-                        style={{
-                          ...smallButtonStyle,
-                          padding: "1px 5px",
-                          minHeight: 20,
-                          fontSize: 10,
-                        }}
-                      >
+                      <button tabIndex={7} type="button" onClick={() => previewRow && shiftBetDateForRow(previewRow.id, -1)} style={{ ...smallButtonStyle, padding: "2px 6px", minHeight: 22, fontSize: 11 }}>
                         -1
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => shiftBetDateForRow(previewRow.id, 1)}
-                        style={{
-                          ...smallButtonStyle,
-                          padding: "1px 5px",
-                          minHeight: 20,
-                          fontSize: 10,
-                        }}
-                      >
+                      <button tabIndex={8} type="button" onClick={() => previewRow && shiftBetDateForRow(previewRow.id, 1)} style={{ ...smallButtonStyle, padding: "2px 6px", minHeight: 22, fontSize: 11 }}>
                         +1
                       </button>
                     </div>
@@ -13411,23 +11419,15 @@ if (nextDate) {
                       ref={popupStakeRef}
                       value={previewRow.stake || ""}
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) =>
-                        handleManualReviewFieldChange(
-                          previewRow.id,
-                          "stake",
-                          e.target.value,
-                          "Edited Stake"
-                        )
-                      }
+                      onChange={(e) => handleRowFieldChange(previewRow.id, "stake", e.target.value)}
                       style={{
-                        width: 86,
-                        border: previewRow.stake
-                          ? "1px solid #bbf7d0"
-                          : "1px solid #dc2626",
+                        width: 88,
+                        border: previewRow.stake ? "1px solid #bbf7d0" : "2px solid #dc2626",
                         borderRadius: 6,
                         padding: "4px 6px",
                         fontSize: 16,
                         fontWeight: 950,
+                        color: "#0f172a",
                       }}
                     />
                   </div>
@@ -13439,102 +11439,106 @@ if (nextDate) {
                       ref={popupOddsRef}
                       value={previewRow.oddsUS || ""}
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) =>
-                        handleManualReviewFieldChange(
-                          previewRow.id,
-                          "oddsUS",
-                          e.target.value,
-                          "Edited Odds"
-                        )
-                      }
+                      onChange={(e) => handleRowFieldChange(previewRow.id, "oddsUS", e.target.value)}
                       style={{
-                        width: 72,
-                        border: previewRow.oddsUS
-                          ? "1px solid #bbf7d0"
-                          : "1px solid #dc2626",
+                        width: 76,
+                        border: previewRow.oddsUS ? "1px solid #bbf7d0" : "2px solid #dc2626",
                         borderRadius: 6,
                         padding: "4px 6px",
                         fontSize: 16,
                         fontWeight: 950,
+                        color: "#0f172a",
                       }}
                     />
                   </div>
 
-                  <div
-                    className="review-money-card"
-                    style={{ minWidth: 165 }}
-                  >
-                    <span className="review-money-label">Result</span>
-                    <div
-                      style={{
-                        marginTop: 3,
-                        fontSize: 14,
-                        fontWeight: 950,
-                        color:
-                          getParsedResultLabel(previewRow) === "WIN"
-                            ? "#166534"
-                            : getParsedResultLabel(previewRow) === "LOSS"
-                            ? "#991b1b"
-                            : "#334155",
-                      }}
-                    >
-                      {getParsedResultLabel(previewRow)}
+                  <div className="review-money-card" style={{ minWidth: 220 }}>
+                    <span className="review-money-label">Parsed Result / Quick Fix</span>
+                    <div style={getParsedResultPillStyle(previewRow)}>
+                      <span>{getParsedResultLabel(previewRow)}</span>
+                      {previewRow.status && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            opacity: 0.78,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {previewRow.status}
+                        </span>
+                      )}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 3,
-                        marginTop: 4,
-                        flexWrap: "wrap",
-                      }}
-                    >
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                       <button
+                        tabIndex={12}
                         type="button"
                         onClick={() => markPopupResult(previewRow.id, "Y")}
                         style={{
                           ...smallButtonStyle,
-                          padding: "3px 6px",
+                          padding: "4px 7px",
+                          minHeight: 28,
+                          border: "1px solid #166534",
                           background: "#dcfce7",
-                          color: "#166534",
-                          border: "1px solid #86efac",
+                          color: "#14532d",
+                          fontSize: 12,
                           fontWeight: 900,
                         }}
+                        title="Mark this row as won, save edits, and move on if date is confirmed"
                       >
                         Win
                       </button>
                       <button
+                        tabIndex={13}
                         type="button"
                         onClick={() => markPopupResult(previewRow.id, "N")}
                         style={{
                           ...smallButtonStyle,
-                          padding: "3px 6px",
+                          padding: "4px 7px",
+                          minHeight: 28,
+                          border: "1px solid #991b1b",
                           background: "#fee2e2",
-                          color: "#991b1b",
-                          border: "1px solid #fca5a5",
+                          color: "#7f1d1d",
+                          fontSize: 12,
                           fontWeight: 900,
                         }}
+                        title="Mark this row as lost, zero payout, save edits, and move on if date is confirmed"
                       >
                         Loss
                       </button>
                       <button
+                        tabIndex={14}
                         type="button"
                         onClick={() => markPopupResult(previewRow.id, "V")}
                         style={{
                           ...smallButtonStyle,
-                          padding: "3px 6px",
-                          fontWeight: 850,
+                          padding: "4px 7px",
+                          minHeight: 28,
+                          border: "1px solid #4b5563",
+                          background: "#f3f4f6",
+                          color: "#111827",
+                          fontSize: 12,
+                          fontWeight: 900,
                         }}
+                        title="Mark this row as voided, zero payout, save edits, and move on if date is confirmed"
                       >
                         Void
                       </button>
                       <button
+                        tabIndex={15}
                         type="button"
                         onClick={() => markPopupResult(previewRow.id, "C")}
                         style={{
                           ...smallButtonStyle,
-                          padding: "3px 6px",
-                          fontWeight: 850,
+                          padding: "4px 7px",
+                          minHeight: 28,
+                          border: "1px solid #1d4ed8",
+                          background: "#dbeafe",
+                          color: "#1e3a8a",
+                          fontSize: 12,
+                          fontWeight: 900,
                         }}
+                        title="Mark this row as cashed out, keep payout as entered, save edits, and move on if date is confirmed"
                       >
                         Cash Out
                       </button>
@@ -13548,478 +11552,272 @@ if (nextDate) {
                       ref={popupPayoutRef}
                       value={previewRow.payout || ""}
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) =>
-                        handleManualReviewFieldChange(
-                          previewRow.id,
-                          "payout",
-                          e.target.value,
-                          "Edited Payout"
-                        )
-                      }
+                      onChange={(e) => handleRowFieldChange(previewRow.id, "payout", e.target.value)}
                       style={{
-                        width: 86,
-                        border:
-                          previewRow.payout || previewRow.toWin
-                            ? "1px solid #bbf7d0"
-                            : "1px solid #dc2626",
+                        width: 92,
+                        border: previewRow.payout || previewRow.toWin ? "1px solid #bbf7d0" : "2px solid #dc2626",
                         borderRadius: 6,
                         padding: "4px 6px",
                         fontSize: 16,
                         fontWeight: 950,
-                      }}
-                    />
-                  </div>
-
-                  <div
-                    className="review-money-card"
-                    style={{
-                      minWidth: 150,
-                      border: variableState.needsReview
-                        ? "1px solid #d97706"
-                        : "1px solid #86efac",
-                      background: variableLocked
-                        ? "#f0fdf4"
-                        : variableState.needsReview
-                        ? "#fffbeb"
-                        : "#ffffff",
-                    }}
-                  >
-                    <span className="review-money-label">My Variable</span>
-                    <input
-                      type="text"
-                      list={`my-variable-popup-options-${previewRow.id}`}
-                      value={variableValue}
-                      disabled={variableLocked}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) =>
-                        updateMyVariableForRow(previewRow, e.target.value)
-                      }
-                      style={{
-                        width: 130,
-                        marginTop: 3,
-                        border: "1px solid #cbd5e1",
-                        borderRadius: 6,
-                        padding: "4px 6px",
-                        background: variableLocked
-                          ? "#f0fdf4"
-                          : "#ffffff",
                         color: "#0f172a",
-                        fontSize: 14,
-                        fontWeight: 950,
                       }}
                     />
-                    <datalist
-                      id={`my-variable-popup-options-${previewRow.id}`}
-                    >
-                      {MY_VARIABLE_SUGGESTIONS.map((value) => (
-                        <option key={value} value={value} />
-                      ))}
-                    </datalist>
-                    <div
-                      style={{
-                        marginTop: 3,
-                        fontSize: 10,
-                        fontWeight: 800,
-                        color: variableState.needsReview
-                          ? "#92400e"
-                          : "#166534",
-                      }}
-                    >
-                      {variableLocked
-                        ? `Auto: ${variableState.autoSource}`
-                        : variableState.automatic
-                        ? `Auto default: ${variableState.autoSource} (editable)`
-                        : variableState.needsReview
-                        ? "Review before export"
-                        : "Reviewed"}
-                    </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  {previewRow.archived === "Y" && (
                     <button
                       type="button"
-                      onClick={() => setShowDecisionInspectorByRowId((prev) => ({ ...prev, [previewRow.id]: !prev[previewRow.id] }))}
-                      style={{ ...smallButtonStyle, fontWeight: 900 }}
-                    >
-                      Why This Classification?
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAuditHistoryByRowId((prev) => ({ ...prev, [previewRow.id]: !prev[previewRow.id] }))}
-                      style={{ ...smallButtonStyle, fontWeight: 900 }}
-                    >
-                      History ({getAuditTrail(previewRow).length})
-                    </button>
-                    {previewRow.reviewResolved === "Y" && String(previewRow.reviewDataLocked || "Y").toUpperCase() !== "N" && (
-                      <button
-                        type="button"
-                        onClick={() => reopenReviewedRowForEditing(previewRow)}
-                        style={{ ...smallButtonStyle, border: "1px solid #b45309", background: "#fffbeb", color: "#92400e", fontWeight: 950 }}
-                      >
-                        Reopen for Editing
-                      </button>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      marginLeft: "auto",
-                      display: "flex",
-                      gap: 7,
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={goBackToPreviousReviewRow}
-                      disabled={!reviewHistory.length}
-                      style={{
-                        ...smallButtonStyle,
-                        minWidth: 105,
-                        border: "1px solid #94a3b8",
-                        background: reviewHistory.length
-                          ? "#f8fafc"
-                          : "#e5e7eb",
-                        color: "#334155",
-                        fontWeight: 900,
-                        opacity: reviewHistory.length ? 1 : 0.6,
+                      onClick={() => {
+                        handleRowFieldChange(previewRow.id, "archived", "N");
+                        setReviewActionNotice("Row unarchived. It will return to active views after filters refresh.");
                       }}
-                    >
-                      {"<- Back"}
-                      {reviewHistory.length
-                        ? ` (${reviewHistory.length})`
-                        : ""}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => confirmAndAdvanceFromPopup(previewRow)}
                       style={{
                         ...smallButtonStyle,
-                        minWidth: 155,
-                        border: "1px solid #15803d",
-                        background: "#16a34a",
-                        color: "#ffffff",
+                        minHeight: 46,
+                        padding: "10px 14px",
+                        border: "1px solid #166534",
+                        background: "#dcfce7",
+                        color: "#14532d",
                         fontWeight: 950,
                         fontSize: 14,
                       }}
+                      title="Restore this archived row to active rows"
                     >
-                      {"Confirm + Next ->"}
+                      Unarchive
                     </button>
-                  </div>
-                </div>
+                  )}
 
-                <div
-                  style={{
-                    marginTop: 7,
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
                   <button
+                    tabIndex={16}
                     type="button"
-                    onClick={() => buildBetFieldsForCurrentRow(previewRow)}
+                    onClick={goBackToPreviousReviewRow}
+                    disabled={!reviewHistory.length}
                     style={{
                       ...smallButtonStyle,
-                      border: "1px solid #2563eb",
-                      background: "#eff6ff",
-                      color: "#1d4ed8",
-                      fontWeight: 950,
-                    }}
-                    title="Keyboard: M"
-                  >
-                    Build / Normalize
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => laterAndNextFromPopup(previewRow)}
-                    style={smallButtonStyle}
-                  >
-                    Later + Next
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      jumpToNextMatchingReviewRow(
-                        previewRow.id,
-                        "issue",
-                        (row) =>
-                          reviewCheck(row) || row.reviewLater === "Y"
-                      )
-                    }
-                    style={smallButtonStyle}
-                  >
-                    Next Issue
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onReattachSingleScreenshot?.(previewRow.id)
-                    }
-                    style={{
-                      ...smallButtonStyle,
-                      border: "1px solid #86efac",
-                      background: "#f0fdf4",
-                      color: "#166534",
+                      minHeight: 46,
+                      padding: "10px 14px",
+                      border: "1px solid #64748b",
+                      background: reviewHistory.length ? "#f8fafc" : "#e5e7eb",
+                      color: "#334155",
                       fontWeight: 900,
+                      fontSize: 14,
+                      opacity: reviewHistory.length ? 1 : 0.6,
                     }}
                   >
-                    Reattach Screenshot
+                    ← Back{reviewHistory.length ? ` (${reviewHistory.length})` : ""}
                   </button>
 
-                  <details
+                  <button
+                    tabIndex={17}
+                    type="button"
+                    onClick={() => confirmAndAdvanceFromPopup(previewRow)}
                     style={{
-                      position: "relative",
+                      ...smallButtonStyle,
+                      minHeight: 46,
+                      padding: "10px 16px",
+                      border: "1px solid #166534",
+                      background: "#16a34a",
+                      color: "#ffffff",
+                      fontWeight: 950,
+                      fontSize: 15,
                     }}
                   >
-                    <summary
-                      style={{
-                        ...smallButtonStyle,
-                        listStyle: "none",
-                        fontWeight: 850,
-                        userSelect: "none",
-                      }}
-                    >
-                      More
-                    </summary>
-                    <div
-                      style={{
-                        position: "absolute",
-                        zIndex: 30,
-                        top: "calc(100% + 4px)",
-                        left: 0,
-                        width: 420,
-                        maxWidth: "80vw",
-                        padding: 8,
-                        border: "1px solid #cbd5e1",
-                        borderRadius: 9,
-                        background: "#ffffff",
-                        boxShadow: "0 10px 30px rgba(15,23,42,0.16)",
-                        display: "flex",
-                        gap: 6,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => savePopupAndStay(previewRow)}
-                        style={smallButtonStyle}
-                      >
-                        Save / Stay
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => nextNoChangeFromPopup(previewRow)}
-                        style={smallButtonStyle}
-                      >
-                        Next / No Change
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          jumpToNextMatchingReviewRow(
-                            previewRow.id,
-                            "missing-money",
-                            hasMissingHedgeMoney
-                          )
-                        }
-                        style={smallButtonStyle}
-                      >
-                        Next Missing Money
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleRowFieldChange(
-                            previewRow.id,
-                            "bonusBet",
-                            previewRow.bonusBet === "Y" ? "N" : "Y"
-                          )
-                        }
-                        style={smallButtonStyle}
-                      >
-                        {previewRow.bonusBet === "Y"
-                          ? "BONUS On"
-                          : "Toggle Bonus"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => autoFillCalculatedFields(previewRow)}
-                        style={smallButtonStyle}
-                      >
-                        Calc Odds
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          calculatePayoutFromStakeAndOdds(previewRow, {
-                            showNotice: true,
-                          })
-                        }
-                        style={smallButtonStyle}
-                      >
-                        Calc Payout
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteCurrentRowScreenshot(previewRow)}
-                        disabled={
-                          !hoverPreview.src && !previewRow.sourceImageUrl
-                        }
-                        style={{
-                          ...smallButtonStyle,
-                          color: "#991b1b",
-                        }}
-                      >
-                        Delete Screenshot
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onClearReviewedScreenshots?.()}
-                        style={smallButtonStyle}
-                      >
-                        Delete Reviewed Screenshots
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          closeHoverPreview();
-                          deleteRow(previewRow.id);
-                        }}
-                        style={{
-                          ...smallButtonStyle,
-                          color: "#991b1b",
-                          fontWeight: 900,
-                        }}
-                      >
-                        Delete Bet
-                      </button>
-                    </div>
-                  </details>
-
-                  <div
-                    style={{
-                      marginLeft: "auto",
-                      padding: "5px 9px",
-                      borderRadius: 8,
-                      border: "1px solid #dbe4ea",
-                      background: "#f8fafc",
-                      color: "#475569",
-                      fontSize: 11,
-                      fontWeight: 800,
-                    }}
-                  >
-                    Overall:{" "}
-                    <span
-                      style={{
-                        color:
-                          performanceTracker.total.net >= 0
-                            ? "#166534"
-                            : "#991b1b",
-                        fontWeight: 950,
-                      }}
-                    >
-                      {formatTrackerMoney(performanceTracker.total.net, {
-                        signed: true,
-                      })}
-                    </span>{" "}
-                    | Matched:{" "}
-                    <span
-                      style={{
-                        color:
-                          performanceTracker.hedge.net >= 0
-                            ? "#166534"
-                            : "#991b1b",
-                        fontWeight: 950,
-                      }}
-                    >
-                      {formatTrackerMoney(performanceTracker.hedge.net, {
-                        signed: true,
-                      })}
-                    </span>
-                  </div>
+                    Confirm + Next
+                  </button>
                 </div>
+              </div>
 
-                <div
+              <div
+                style={{
+                  marginTop: 8,
+                  paddingTop: 8,
+                  borderTop: "1px solid #bbf7d0",
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontSize: 12, color: "#166534", fontWeight: 900, marginRight: 4 }}>
+                  Shortcuts: Enter Confirm · M Normalize · Ctrl/Alt+M normalize from a field · Shift+Enter Next · Ctrl+S Save · W/X/V/C Result · H Hedge · N Not Match · R Reattach · Z Zoom · Esc/F2 exits field
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => savePopupAndStay(previewRow)}
+                  style={smallButtonStyle}
+                  title="Keyboard: Ctrl+S"
+                >
+                  Save / Stay
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && buildBetFieldsForCurrentRow(previewRow)}
                   style={{
-                    marginTop: 5,
-                    color: "#64748b",
-                    fontSize: 10,
-                    fontWeight: 750,
+                    ...smallButtonStyle,
+                    border: "1px solid #2563eb",
+                    background: "#dbeafe",
+                    color: "#1e3a8a",
+                    fontWeight: 950,
+                  }}
+                  title="Keyboard: M. Fill parsed context, build event, set market/bet type, and build selection."
+                >
+                  Build / Normalize Bet
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && onReattachSingleScreenshot?.(previewRow.id)}
+                  style={{
+                    ...smallButtonStyle,
+                    border: "1px solid #2563eb",
+                    background: hoverPreview.src ? "#f8fafc" : "#eff6ff",
+                    color: "#1d4ed8",
+                    fontWeight: 800,
+                  }}
+                  title={`Keyboard: R. Choose ${previewRow?.uploadBatchFolder || previewRow?.folder || previewRow?.parentFolder || "the original folder"}; app will reattach only this row's screenshot.`}
+                >
+                  Reattach Screenshot
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => previewRow && deleteCurrentRowScreenshot(previewRow)}
+                  disabled={!hoverPreview.src && !previewRow?.sourceImageUrl}
+                  style={{
+                    ...smallButtonStyle,
+                    border: "1px solid #dc2626",
+                    background: hoverPreview.src || previewRow?.sourceImageUrl ? "#fef2f2" : "#e5e7eb",
+                    color: hoverPreview.src || previewRow?.sourceImageUrl ? "#991b1b" : "#6b7280",
+                    fontWeight: 800,
+                    opacity: hoverPreview.src || previewRow?.sourceImageUrl ? 1 : 0.65,
+                  }}
+                  title="Delete only this row's attached screenshot preview. Row data and source filename stay saved."
+                >
+                  Delete Screenshot
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => jumpToNextMatchingReviewRow(previewRow.id, "issue", (row) => reviewCheck(row) || row.reviewLater === "Y")}
+                  style={smallButtonStyle}
+                >
+                  Next Issue
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => jumpToNextMatchingReviewRow(previewRow.id, "hedge", (row) => rowHasUnresolvedHedgeDecision(row))}
+                  style={smallButtonStyle}
+                >
+                  Next Hedge
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => jumpToNextMatchingReviewRow(previewRow.id, "missing-money", hasMissingHedgeMoney)}
+                  style={smallButtonStyle}
+                >
+                  Next Missing Money
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => nextNoChangeFromPopup(previewRow)}
+                  style={smallButtonStyle}
+                >
+                  Next / No Change
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => laterAndNextFromPopup(previewRow)}
+                  style={smallButtonStyle}
+                >
+                  Later + Next
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleRowFieldChange(
+                      previewRow.id,
+                      "bonusBet",
+                      previewRow.bonusBet === "Y" ? "N" : "Y"
+                    )
+                  }
+                  style={{
+                    ...smallButtonStyle,
+                    border: previewRow.bonusBet === "Y" ? "2px solid #f97316" : smallButtonStyle.border,
+                    background: previewRow.bonusBet === "Y" ? "#ffedd5" : smallButtonStyle.backgroundColor,
+                    color: previewRow.bonusBet === "Y" ? "#9a3412" : undefined,
+                    fontWeight: previewRow.bonusBet === "Y" ? 950 : undefined,
                   }}
                 >
-                  Shortcuts: Tab starts Event / moves through fields | Enter Confirm |
-                  M Normalize | Ctrl/Alt+M from a field | Ctrl+B Bet Type | P Player Name |
-                  Shift+Enter Next | Ctrl+S Save | W/X/V/C Result | R Reattach | Z Zoom | Esc/F2 exits field
-                </div>
+                  {previewRow.bonusBet === "Y" ? "BONUS On" : "Toggle Bonus"}
+                </button>
 
-                {reviewActionNotice && (
-                  <div
-                    style={{
-                      marginTop: 5,
-                      padding: "5px 8px",
-                      borderRadius: 7,
-                      background: reviewActionNotice.includes("Not confirmed")
-                        ? "#fef2f2"
-                        : "#f0fdf4",
-                      color: reviewActionNotice.includes("Not confirmed")
-                        ? "#991b1b"
-                        : "#166534",
-                      fontSize: 11,
-                      fontWeight: 850,
-                    }}
-                  >
-                    {reviewActionNotice}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => autoFillCalculatedFields(previewRow)}
+                  style={smallButtonStyle}
+                >
+                  Calc Odds
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => calculatePayoutFromStakeAndOdds(previewRow, { showNotice: true })}
+                  style={smallButtonStyle}
+                >
+                  Calc Payout
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onClearReviewedScreenshots?.()}
+                  style={smallButtonStyle}
+                  title="Free memory by deleting screenshot previews from rows already confirmed/reviewed."
+                >
+                  Delete Reviewed Screenshots
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeHoverPreview();
+                    deleteRow(previewRow.id);
+                  }}
+                  style={smallButtonStyle}
+                >
+                  Delete
+                </button>
               </div>
-            );
-          })()}
 
-          {hoverPreview.locked && previewRow && showDecisionInspectorByRowId[previewRow.id] && (
-            <div style={{ marginBottom: 8, padding: 10, border: "1px solid #93c5fd", borderRadius: 10, background: "#eff6ff", color: "#1e3a8a" }}>
-              <div style={{ fontWeight: 950, marginBottom: 6 }}>Why the app currently classifies this bet this way</div>
-              <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
-                {getDecisionReasonItems(previewRow).map((reason, index) => (
-                  <li key={`decision-reason-${previewRow.id}-${index}`}>{reason}</li>
-                ))}
-              </ul>
-              {getManualLockedFields(previewRow).length > 0 && (
-                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <strong>Manual locks:</strong> {getManualLockedFields(previewRow).join(", ")}
-                  <button type="button" onClick={() => unlockAllManualReviewFields(previewRow)} style={smallButtonStyle}>
-                    Unlock All Manual Fields
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+              <div
+                style={{
+                  marginTop: 7,
+                  paddingTop: 7,
+                  borderTop: "1px solid #bbf7d0",
+                }}
+              >
+                {renderPerformanceTracker()}
+                {renderPerformanceCategoryControls(previewRow)}
+              </div>
 
-          {hoverPreview.locked && previewRow && showAuditHistoryByRowId[previewRow.id] && (
-            <div style={{ marginBottom: 8, padding: 10, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", color: "#0f172a", maxHeight: 260, overflowY: "auto" }}>
-              <div style={{ fontWeight: 950, marginBottom: 6 }}>Row History</div>
-              {!getAuditTrail(previewRow).length ? (
-                <div style={{ color: "#64748b" }}>No audit entries have been recorded for this row yet.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 7 }}>
-                  {[...getAuditTrail(previewRow)].reverse().slice(0, 40).map((entry) => (
-                    <div key={entry.id || `${entry.at}-${entry.reason}`} style={{ padding: 8, border: "1px solid #e2e8f0", borderRadius: 8, background: "#ffffff" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <strong>{entry.reason || "Review edit"}</strong>
-                        <span style={{ color: "#64748b", fontSize: 11 }}>{entry.at ? new Date(entry.at).toLocaleString() : ""}</span>
-                      </div>
-                      {(entry.changes || []).map((change, index) => (
-                        <div key={`${entry.id || entry.at}-${change.field}-${index}`} style={{ marginTop: 3, fontSize: 12 }}>
-                          <strong>{change.field}</strong>: {change.before} → {change.after}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+              {reviewActionNotice && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: reviewActionNotice.includes("Not confirmed") ? "#991b1b" : "#166534",
+                    fontWeight: 800,
+                  }}
+                >
+                  {reviewActionNotice}
                 </div>
               )}
             </div>
@@ -14028,8 +11826,8 @@ if (nextDate) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(560px, 1.05fr) minmax(400px, 0.95fr)",
-              gap: 10,
+              gridTemplateColumns: "minmax(520px, 1fr) clamp(340px, 36vw, 620px)",
+              gap: 8,
               alignItems: "start",
               flex: "1 1 auto",
               minHeight: 0,
@@ -14039,7 +11837,7 @@ if (nextDate) {
             }}
           >
             <div
-              className={`full-review-form-columns ${previewRow?.reviewResolved === "Y" && String(previewRow?.reviewDataLocked || "Y").toUpperCase() !== "N" ? "review-data-locked" : ""}`}
+              className="full-review-form-columns"
               style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -14056,279 +11854,7 @@ if (nextDate) {
                 overscrollBehavior: "contain",
               }}
             >
-              {hoverPreview.locked && previewRow && workflowView === "hedge_review" && (() => {
-                const { candidates, activeCandidate, activeIndex } = getActiveHedgeReviewCandidate(previewRow);
-                const visibleCandidateCount = getHedgePartnerRows(previewRow).length;
-                const hiddenCandidateCount = candidates.filter((candidate) => isIgnoredHedgePair(previewRow, candidate)).length;
-                const candidateIsHidden = !!activeCandidate && isIgnoredHedgePair(previewRow, activeCandidate);
-                const candidateBook = activeCandidate ? (getDisplayedBookmaker(activeCandidate) || activeCandidate.bookmaker || "Partner") : "Partner";
-                const reviewedEnough = previewRow.reviewResolved === "Y";
-
-                const screenshotCardStyle = {
-                  padding: 10,
-                  border: "1px solid #d1d5db",
-                  borderRadius: 12,
-                  background: "#ffffff",
-                  display: "grid",
-                  gap: 8,
-                  alignContent: "start",
-                };
-
-                const screenshotFrameStyle = {
-                  width: "100%",
-                  minHeight: 220,
-                  maxHeight: 420,
-                  objectFit: "contain",
-                  borderRadius: 10,
-                  border: "1px solid #cbd5e1",
-                  background: "#f8fafc",
-                  cursor: "pointer",
-                };
-
-                return (
-                  <div
-                    style={{
-                      flex: "0 0 100%",
-                      maxWidth: "100%",
-                      padding: 12,
-                      border: "2px solid #a78bfa",
-                      borderRadius: 14,
-                      background: "#faf5ff",
-                      display: "grid",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 950, color: "#4c1d95", fontSize: 18 }}>Hedge Review Mode</div>
-                        <div style={{ marginTop: 4, fontSize: 13, color: "#6b21a8", fontWeight: 700 }}>
-                          Compare the two screenshots, then choose Match or Not This Match. Normal review fields remain below if you need cleanup.
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
-                        <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ede9fe", color: "#5b21b6", fontWeight: 900, fontSize: 12 }}>
-                          Candidate {candidates.length ? activeIndex + 1 : 0} of {candidates.length}
-                        </span>
-                        <span style={{ padding: "6px 10px", borderRadius: 999, background: reviewedEnough ? "#dcfce7" : "#fef3c7", color: reviewedEnough ? "#166534" : "#92400e", fontWeight: 900, fontSize: 12 }}>
-                          {reviewedEnough ? "Bet already reviewed" : "Bet still needs normal review"}
-                        </span>
-                        {hiddenCandidateCount > 0 && (
-                          <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffedd5", color: "#9a3412", fontWeight: 900, fontSize: 12 }}>
-                            Hidden pairs: {hiddenCandidateCount}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <button
-                        type="button"
-                        onClick={() => stepActiveHedgeReviewCandidate(previewRow, -1)}
-                        disabled={candidates.length <= 1}
-                        style={{
-                          ...smallButtonStyle,
-                          opacity: candidates.length <= 1 ? 0.55 : 1,
-                          border: "1px solid #c4b5fd",
-                          background: "#ffffff",
-                          color: "#5b21b6",
-                          fontWeight: 900,
-                        }}
-                      >
-                        Previous Candidate
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => stepActiveHedgeReviewCandidate(previewRow, 1)}
-                        disabled={candidates.length <= 1}
-                        style={{
-                          ...smallButtonStyle,
-                          opacity: candidates.length <= 1 ? 0.55 : 1,
-                          border: "1px solid #c4b5fd",
-                          background: "#ffffff",
-                          color: "#5b21b6",
-                          fontWeight: 900,
-                        }}
-                      >
-                        Next Candidate
-                      </button>
-
-                      {activeCandidate?.sourceImageUrl && (
-                        <button
-                          type="button"
-                          onClick={() => openHedgeDetailPopup(activeCandidate)}
-                          style={{ ...smallButtonStyle, fontWeight: 900 }}
-                        >
-                          Open Candidate Screenshot
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setShowHedgeCandidatesByRowId((prev) => ({ ...prev, [previewRow.id]: !prev[previewRow.id] }))}
-                        style={{ ...smallButtonStyle, fontWeight: 900 }}
-                      >
-                        {showHedgeCandidatesByRowId[previewRow.id] ? "Hide Candidate List" : "Show Candidate List"}
-                      </button>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                      <div style={screenshotCardStyle}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <strong style={{ color: "#14532d" }}>Current Bet â€¢ {getDisplayedBookmaker(previewRow) || previewRow.bookmaker || "Book"}</strong>
-                          <span style={{ fontSize: 12, color: "#475569", fontWeight: 800 }}>Review row</span>
-                        </div>
-
-                        {previewRow.sourceImageUrl ? (
-                          <img
-                            src={previewRow.sourceImageUrl}
-                            alt={previewRow.sourceFileName || "current bet screenshot"}
-                            onClick={() => openHedgeDetailPopup(previewRow)}
-                            style={screenshotFrameStyle}
-                            title="Open current screenshot"
-                          />
-                        ) : (
-                          <div style={{ ...screenshotFrameStyle, display: "grid", placeItems: "center", color: "#64748b", fontWeight: 800 }}>
-                            No screenshot attached
-                          </div>
-                        )}
-
-                        <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-                          <div><strong>{previewRow.selection || "-"}</strong></div>
-                          <div style={{ color: "#475569" }}>{previewRow.fixtureEvent || "-"}</div>
-                          <div style={{ color: "#475569" }}>League {previewRow.sportLeague || "-"} | Stake {previewRow.stake ? `$${previewRow.stake}` : "-"} | Odds {previewRow.oddsUS || "-"} | Payout {previewRow.payout ? `$${previewRow.payout}` : "-"}</div>
-                        </div>
-                      </div>
-
-                      <div style={screenshotCardStyle}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <strong style={{ color: candidateIsHidden ? "#9a3412" : "#14532d" }}>
-                            Candidate â€¢ {candidateBook}
-                          </strong>
-                          <span style={{ fontSize: 12, color: candidateIsHidden ? "#9a3412" : "#475569", fontWeight: 800 }}>
-                            {activeCandidate ? (candidateIsHidden ? "Hidden as Not This Match" : "Visible candidate") : "No candidate loaded"}
-                          </span>
-                        </div>
-
-                        {activeCandidate?.sourceImageUrl ? (
-                          <img
-                            src={activeCandidate.sourceImageUrl}
-                            alt={activeCandidate.sourceFileName || "hedge candidate screenshot"}
-                            onClick={() => openHedgeDetailPopup(activeCandidate)}
-                            style={screenshotFrameStyle}
-                            title="Open hedge candidate screenshot"
-                          />
-                        ) : (
-                          <div style={{ ...screenshotFrameStyle, display: "grid", placeItems: "center", color: "#64748b", fontWeight: 800 }}>
-                            {activeCandidate ? "No screenshot attached" : "No candidate available yet"}
-                          </div>
-                        )}
-
-                        <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-                          <div><strong>{activeCandidate?.selection || "-"}</strong></div>
-                          <div style={{ color: "#475569" }}>{activeCandidate?.fixtureEvent || "-"}</div>
-                          <div style={{ color: "#475569" }}>League {activeCandidate?.sportLeague || "-"} | Stake {activeCandidate?.stake ? `$${activeCandidate.stake}` : "-"} | Odds {activeCandidate?.oddsUS || "-"} | Payout {activeCandidate?.payout ? `$${activeCandidate.payout}` : "-"}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      {activeCandidate ? (
-                        candidateIsHidden ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => resetIgnoredHedgeMatches(previewRow, activeCandidate)}
-                              style={{
-                                ...smallButtonStyle,
-                                border: "1px solid #ea580c",
-                                background: "#ffedd5",
-                                color: "#9a3412",
-                                fontWeight: 900,
-                              }}
-                            >
-                              Undo Not This Match
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => resolveHedgeReviewDecision(previewRow, activeCandidate, "confirm")}
-                              style={{
-                                ...smallButtonStyle,
-                                border: "1px solid #166534",
-                                background: "#dcfce7",
-                                color: "#14532d",
-                                fontWeight: 950,
-                              }}
-                            >
-                              Match Pair
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => resolveHedgeReviewDecision(previewRow, activeCandidate, "confirm")}
-                              style={{
-                                ...smallButtonStyle,
-                                border: "1px solid #166534",
-                                background: "#16a34a",
-                                color: "#ffffff",
-                                fontWeight: 950,
-                              }}
-                            >
-                              Match Pair
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => resolveHedgeReviewDecision(previewRow, activeCandidate, "ignore")}
-                              style={{
-                                ...smallButtonStyle,
-                                border: "1px solid #9a3412",
-                                background: "#fff7ed",
-                                color: "#9a3412",
-                                fontWeight: 950,
-                              }}
-                            >
-                              Not This Match
-                            </button>
-                          </>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => resolveHedgeReviewDecision(previewRow, null, "clear")}
-                          style={{
-                            ...smallButtonStyle,
-                            border: "1px solid #9a3412",
-                            background: "#fff7ed",
-                            color: "#9a3412",
-                            fontWeight: 950,
-                          }}
-                        >
-                          Clear Hedge Review for This Row
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => openReviewPanelForRow(previewRow, false)}
-                        style={{ ...smallButtonStyle, fontWeight: 900 }}
-                      >
-                        Refresh This Row
-                      </button>
-
-                      <div style={{ marginLeft: "auto", fontSize: 12, color: "#6b7280", fontWeight: 700 }}>
-                        Visible candidates: {visibleCandidateCount} â€¢ Total stored candidates: {candidates.length}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {false && hoverPreview.locked && previewRow && isRowInHedgeReviewContext(previewRow) && (() => {
+              {hoverPreview.locked && previewRow && isRowInHedgeReviewContext(previewRow) && (() => {
                 const showCandidates = !!showHedgeCandidatesByRowId[previewRow.id];
                 const allCandidates = getAllHedgeCandidateRows(previewRow);
                 const visibleCandidates = getHedgePartnerRows(previewRow);
@@ -14351,7 +11877,7 @@ if (nextDate) {
                       <div style={{ fontWeight: 950, color: "#312e81" }}>
                         Hedge Candidates
                         <span style={{ marginLeft: 8, fontSize: 12, color: "#475569" }}>
-                          {visibleCandidates.length} visible | {hiddenCandidateCount} hidden | {allCandidates.length} stored
+                          {visibleCandidates.length} visible · {hiddenCandidateCount} hidden · {allCandidates.length} stored
                         </span>
                       </div>
 
@@ -14407,7 +11933,7 @@ if (nextDate) {
                     {!allCandidates.length && (
                       <div style={{ color: "#475569", fontSize: 12, fontWeight: 800 }}>
                         {previewRow.largeStakeHedgeReview === "Y"
-                          ? "This row is in Hedge Review because the stake is over $250. Run Hedge Scan after normalizing, or clear this row if it is not a hedge."
+                          ? "This row is in Hedge Review because the stake is over $200. Run Hedge Scan after normalizing, or clear this row if it is not a hedge."
                           : "No stored candidates are attached to this hedge flag. Run Hedge Scan after normalizing, or clear this row from Hedge Review if it is not a hedge."}
                       </div>
                     )}
@@ -14440,10 +11966,10 @@ if (nextDate) {
                                 </span>
                               </div>
 
-                              <div>{candidate.selection || "-"}</div>
-                              <div style={{ color: "#475569" }}>{candidate.fixtureEvent || "-"}</div>
+                              <div>{candidate.selection || "—"}</div>
+                              <div style={{ color: "#475569" }}>{candidate.fixtureEvent || "—"}</div>
                               <div style={{ color: "#475569" }}>
-                                League {candidate.sportLeague || "-"} | Stake {candidate.stake ? `$${candidate.stake}` : "-"} | Odds {candidate.oddsUS || "-"} | Payout {candidate.payout ? `$${candidate.payout}` : "-"}
+                                League {candidate.sportLeague || "—"} · Stake {candidate.stake ? `$${candidate.stake}` : "—"} · Odds {candidate.oddsUS || "—"} · Payout {candidate.payout ? `$${candidate.payout}` : "—"}
                               </div>
 
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
@@ -14544,7 +12070,7 @@ if (nextDate) {
                 );
               })()}
 
-              {false && hoverPreview.locked && previewRow && getIgnoredHedgeMatchItems(previewRow).map((item) => (
+              {hoverPreview.locked && previewRow && getIgnoredHedgeMatchItems(previewRow).map((item) => (
                 <button
                   key={`ignored-hedge-full-${previewRow.id}-${item.id}`}
                   type="button"
@@ -14571,7 +12097,7 @@ if (nextDate) {
                 </button>
               ))}
 
-              {false && hoverPreview.locked && previewRow && previewRow.likelyHedge === "Y" && (() => {
+              {hoverPreview.locked && previewRow && previewRow.likelyHedge === "Y" && (() => {
                 const isConfirmedHedge = String(previewRow.hedgeOverride || "").toUpperCase() === "Y";
                 const partnerRows = getHedgePartnerRows(previewRow);
 
@@ -14590,13 +12116,13 @@ if (nextDate) {
                       {isConfirmedHedge ? "Confirmed Hedge" : "Possible Hedge Match"}
                     </div>
                     <div style={{ fontSize: 12, color: "#6d28d9", fontWeight: 900 }}>
-                      Hedge-critical: League {previewRow.sportLeague || "-"} | Stake {previewRow.stake ? `$${previewRow.stake}` : "-"} | Odds {previewRow.oddsUS || "-"} | Payout {previewRow.payout ? `$${previewRow.payout}` : "-"}
+                      Hedge-critical: League {previewRow.sportLeague || "—"} · Stake {previewRow.stake ? `$${previewRow.stake}` : "—"} · Odds {previewRow.oddsUS || "—"} · Payout {previewRow.payout ? `$${previewRow.payout}` : "—"}
                     </div>
 
                     <div style={{ fontSize: 13, display: "grid", gap: 4 }}>
                       <div><strong>Quality:</strong> {previewRow.hedgeQuality || (isConfirmedHedge ? "Confirmed Hedge" : "Likely Hedge")}</div>
-                      <div><strong>Partner book:</strong> {previewRow.hedgePartnerBookmaker || "-"}</div>
-                      <div><strong>Profit range:</strong> {previewRow.hedgeProfitLow || "-"}{" -> "}{previewRow.hedgeProfitHigh || "-"}</div>
+                      <div><strong>Partner book:</strong> {previewRow.hedgePartnerBookmaker || "—"}</div>
+                      <div><strong>Profit range:</strong> {previewRow.hedgeProfitLow || "—"} → {previewRow.hedgeProfitHigh || "—"}</div>
                       {isConfirmedHedge && (
                         <div style={{ color: "#166534", fontWeight: 900 }}>
                           This row has been manually confirmed as a hedge.
@@ -14641,10 +12167,10 @@ if (nextDate) {
 
                           <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
                             <div><strong>{getDisplayedBookmaker(partner) || partner.bookmaker || "Partner"}</strong></div>
-                            <div>{partner.selection || "-"}</div>
-                            <div style={{ color: "#555" }}>{partner.fixtureEvent || "-"}</div>
+                            <div>{partner.selection || "—"}</div>
+                            <div style={{ color: "#555" }}>{partner.fixtureEvent || "—"}</div>
                             <div>
-                              Stake {partner.stake ? `$${partner.stake}` : "-"} | Odds {partner.oddsUS || "-"} | Payout {partner.payout ? `$${partner.payout}` : "-"}
+                              Stake {partner.stake ? `$${partner.stake}` : "—"} · Odds {partner.oddsUS || "—"} · Payout {partner.payout ? `$${partner.payout}` : "—"}
                             </div>
 
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
@@ -14739,7 +12265,7 @@ if (nextDate) {
                   >
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontWeight: 950, color: "#1e3a8a" }}>
-                        {"Start Here: Bet Type -> Build Selection"}
+                        Start Here: Bet Type → Build Selection
                         <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>
                           Pick Moneyline, Spread, or Total first so only the relevant fields appear.
                         </div>
@@ -14802,13 +12328,13 @@ if (nextDate) {
                             e.stopPropagation();
 
                             if (e.key === "Enter" && previewRow) {
-                              handleManualReviewFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value, "Edited Event");
+                              handleRowFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value);
                               e.currentTarget.blur();
                             }
                           }}
                           onBlur={(e) =>
                             previewRow &&
-                            handleManualReviewFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value, "Edited Event")
+                            handleRowFieldChange(previewRow.id, "fixtureEvent", e.currentTarget.value)
                           }
                           placeholder="CHI Bulls @ Los Angeles Clippers"
                           style={{ width: "100%", padding: "7px 9px", border: "1px solid #93c5fd", borderRadius: 6, marginTop: 4 }}
@@ -14823,7 +12349,7 @@ if (nextDate) {
                           ref={popupLeagueRef}
                           data-row-id={previewRow?.id || ""}
                           tabIndex={20}
-                          defaultValue={previewRow?.sportLeague || ""}
+                          defaultValue=""
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             e.stopPropagation();
@@ -14866,7 +12392,7 @@ if (nextDate) {
                           value={previewRow?.bookmaker || ""}
                           onChange={(e) =>
                             previewRow &&
-                            handleManualReviewFieldChange(previewRow.id, "bookmaker", e.target.value, "Edited Bookmaker")
+                            handleRowFieldChange(previewRow.id, "bookmaker", e.target.value)
                           }
                           style={{ width: "100%", padding: "7px 9px", border: "1px solid #93c5fd", borderRadius: 6, marginTop: 4, background: "#fff" }}
                         >
@@ -14947,7 +12473,7 @@ if (nextDate) {
                         const nextLegNumber = parlayLegs.length + 1;
                         const draftMarket = normalizeMainLineMarket(draft.market || "moneyline") || draft.market || "moneyline";
                         const draftLegType = draft.legType || "main_line";
-                        const skipLegEntry = previewRow.parlayLegsSkipped !== "N";
+                        const skipLegEntry = previewRow.parlayLegsSkipped === "Y";
 
                         return (
                           <div
@@ -14999,7 +12525,7 @@ if (nextDate) {
                                     fontWeight: 900,
                                   }}
                                 >
-                                  {skipLegEntry ? "Add Legs Info" : "Use Summary Only"}
+                                  {skipLegEntry ? "Enter Individual Legs" : "Use Summary Only"}
                                 </button>
                               </div>
                             </div>
@@ -15017,7 +12543,7 @@ if (nextDate) {
                                 }}
                               >
                                 Summary-only mode: Selection and Event are both {getParlaySummaryLabel(previewRow)}.
-                                Individual legs can be added later by clicking Add Legs Info.
+                                Individual legs can be added later by clicking Enter Individual Legs.
                               </div>
                             )}
 
@@ -15191,7 +12717,6 @@ if (nextDate) {
                                     <strong>Player / Subject:</strong>
                                     <input
                                       value={draft.subject || ""}
-                                      onKeyDown={(e) => e.stopPropagation()}
                                       onChange={(e) => setParlayLegDraftField(previewRow.id, "subject", e.target.value)}
                                       onBlur={(e) => setParlayLegDraftField(previewRow.id, "subject", cleanParticipantTextForMatching(e.currentTarget.value))}
                                       placeholder="Connor McDavid"
@@ -15223,7 +12748,6 @@ if (nextDate) {
                                       <option value="goals" />
                                       <option value="saves" />
                                       <option value="strikeouts" />
-                                      <option value="outs" />
                                       <option value="home runs" />
                                       <option value="hits" />
                                       <option value="games" />
@@ -15264,7 +12788,7 @@ if (nextDate) {
                                   style={{ width: "100%", padding: "7px 9px", border: "1px solid #93c5fd", borderRadius: 6, marginTop: 4 }}
                                 />
                                 <div style={{ fontSize: 12, color: "#475569", fontWeight: 800, marginTop: 4 }}>
-                                  Preview: {buildParlayLegSelection(previewRow, draft) || "-"}
+                                  Preview: {buildParlayLegSelection(previewRow, draft) || "—"}
                                 </div>
                               </div>
 
@@ -15309,15 +12833,10 @@ if (nextDate) {
                           onBlur={(e) => {
                             if (!previewRow) return;
                             const raw = cleanParticipantTextForMatching(e.currentTarget.value);
-                            // Manual participant text is authoritative. Keep the normalized
-                            // value exactly as entered instead of letting fuzzy aliases turn
-                            // names such as Iowa State into a nickname like Athletics.
-                            const normalized = raw;
+                            const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
 
                             e.currentTarget.value = raw;
                             handleRowFieldChange(previewRow.id, "participantA", raw);
-                            handleRowFieldChange(previewRow.id, "participantAManual", "Y");
-                            markReviewFieldsManual(previewRow.id, ["participantA", "participantANormalized"], "Edited Participant A");
                             handleRowFieldChange(previewRow.id, "participantANormalized", normalized);
                           }}
                           placeholder="USA, Jazz, Andre Fili..."
@@ -15329,7 +12848,7 @@ if (nextDate) {
                           ))}
                         </datalist>
                         <div style={{ fontSize: 12, marginTop: 3, color: "#1d4ed8" }}>
-                          Normalized: {getParticipantANormalized(previewRow) || "-"}
+                          Normalized: {getParticipantANormalized(previewRow) || "—"}
                         </div>
                       </div>
 
@@ -15346,13 +12865,10 @@ if (nextDate) {
                           onBlur={(e) => {
                             if (!previewRow) return;
                             const raw = cleanParticipantTextForMatching(e.currentTarget.value);
-                            // Manual participant text is authoritative.
-                            const normalized = raw;
+                            const normalized = normalizeParticipantName(raw, getPreviewLeagueValue(previewRow));
 
                             e.currentTarget.value = raw;
                             handleRowFieldChange(previewRow.id, "participantB", raw);
-                            handleRowFieldChange(previewRow.id, "participantBManual", "Y");
-                            markReviewFieldsManual(previewRow.id, ["participantB", "participantBNormalized"], "Edited Participant B");
                             handleRowFieldChange(previewRow.id, "participantBNormalized", normalized);
                           }}
                           placeholder="Mexico, Kings, Jose Delgado..."
@@ -15364,7 +12880,7 @@ if (nextDate) {
                           ))}
                         </datalist>
                         <div style={{ fontSize: 12, marginTop: 3, color: "#1d4ed8" }}>
-                          Normalized: {getParticipantBNormalized(previewRow) || "-"}
+                          Normalized: {getParticipantBNormalized(previewRow) || "—"}
                         </div>
                       </div>
 
@@ -15428,8 +12944,7 @@ if (nextDate) {
                                 );
 
                                 e.currentTarget.value = normalizedSide;
-                                markReviewFieldsManual(previewRow.id, ["mainLineSide"], "Edited Main-Line Side");
-                              handleRowFieldChange(previewRow.id, "mainLineSide", normalizedSide);
+                                handleRowFieldChange(previewRow.id, "mainLineSide", normalizedSide);
 
                                 if (mainLineMarket !== "total" && normalizedSide) {
                                   const validation = validateMainLineSideForProceed(previewRow, mainLineMarket, normalizedSide);
@@ -15441,23 +12956,6 @@ if (nextDate) {
                               placeholder={mainLineMarket === "total" ? "Over or Under" : "Andreozzi / Guinard, Mexico, Celtics..."}
                               style={{ width: "100%", padding: "7px 9px", border: "1px solid #93c5fd", borderRadius: 6, marginTop: 4 }}
                             />
-                            {mainLineMarket === "moneyline" && isSoccerLeagueForReview(getPreviewLeagueValue(previewRow)) && (
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => previewRow && setMainLineSideForCurrentRow(previewRow, "Draw")}
-                                  style={{
-                                    ...smallButtonStyle,
-                                    border: isDrawSideValue(cleanMainLineSide) ? "2px solid #1d4ed8" : "1px solid #bfdbfe",
-                                    background: isDrawSideValue(cleanMainLineSide) ? "#dbeafe" : "#ffffff",
-                                    color: "#1e3a8a",
-                                    fontWeight: 900,
-                                  }}
-                                >
-                                  Draw
-                                </button>
-                              </div>
-                            )}
                             {mainLineMarket === "total" && (
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                                 <button
@@ -15494,25 +12992,8 @@ if (nextDate) {
                                 : "This is the side you bet. For moneyline, this becomes the selection."}
                             </div>
                             {mainLineMarket !== "total" && (
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  marginTop: 3,
-                                  color:
-                                    isDrawSideValue(cleanMainLineSide) ||
-                                    findParticipantMatchForSide(cleanMainLineSide, previewRow)?.display
-                                      ? "#166534"
-                                      : "#9a3412",
-                                  fontWeight: 800,
-                                }}
-                              >
-                                Matched side:{" "}
-                                {isDrawSideValue(cleanMainLineSide)
-                                  ? "Draw"
-                                  : findParticipantMatchForSide(cleanMainLineSide, previewRow)?.display ||
-                                    (isSoccerLeagueForReview(getPreviewLeagueValue(previewRow)) && mainLineMarket === "moneyline"
-                                      ? "- must match Participant A, Participant B, or Draw"
-                                      : "- must match Participant A or B")}
+                              <div style={{ fontSize: 12, marginTop: 3, color: findParticipantMatchForSide(cleanMainLineSide, previewRow)?.display ? "#166534" : "#9a3412", fontWeight: 800 }}>
+                                Matched side: {findParticipantMatchForSide(cleanMainLineSide, previewRow)?.display || "— must match Participant A or B"}
                               </div>
                             )}
                           </div>
@@ -15563,35 +13044,6 @@ if (nextDate) {
                                   ""
                               )}
                               onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => {
-                                // Keep normal text entry isolated from review shortcuts. On some
-                                // Surface/browser combinations the full-page shortcut capture can
-                                // swallow Space before the uncontrolled input inserts it, so handle
-                                // Space explicitly here and place it at the cursor.
-                                e.stopPropagation();
-
-                                if (e.key === " " || e.code === "Space") {
-                                  e.preventDefault();
-                                  const input = e.currentTarget;
-                                  const start = Number.isInteger(input.selectionStart)
-                                    ? input.selectionStart
-                                    : input.value.length;
-                                  const end = Number.isInteger(input.selectionEnd)
-                                    ? input.selectionEnd
-                                    : start;
-
-                                  if (typeof input.setRangeText === "function") {
-                                    input.setRangeText(" ", start, end, "end");
-                                  } else {
-                                    input.value = `${input.value.slice(0, start)} ${input.value.slice(end)}`;
-                                    input.setSelectionRange?.(start + 1, start + 1);
-                                  }
-
-                                  if (previewRow?.id) {
-                                    manuallyEditedPlayerSubjectRowIdsRef.current.add(previewRow.id);
-                                  }
-                                }
-                              }}
                               onChange={() => {
                                 if (previewRow?.id) {
                                   manuallyEditedPlayerSubjectRowIdsRef.current.add(previewRow.id);
@@ -15679,24 +13131,8 @@ if (nextDate) {
                               onClick={(e) => e.stopPropagation()}
                               onBlur={(e) => {
                                 if (!previewRow) return;
-                                markReviewFieldsManual(previewRow.id, ["propMarket"], "Edited Player Prop Market");
-                                const rawPropMarket = String(e.currentTarget.value || "").trim();
-                                const normalizedPropMarket = normalizeRecognizedPlayerPropMarket(rawPropMarket);
-                                const storedPropMarket = normalizedPropMarket || rawPropMarket;
-                                e.currentTarget.value = storedPropMarket;
-
-                                if (!normalizedPropMarket) {
-                                  applyRowFieldUpdates(previewRow.id, {
-                                    reviewBetKind: "player_prop",
-                                    propMarket: storedPropMarket,
-                                    betType: "player prop",
-                                    canonicalMarketContext: "player prop",
-                                  });
-                                  setReviewActionNotice(
-                                    `Prop Market "${storedPropMarket || "(blank)"}" is not recognized. Because you entered it manually, it will be kept; Confirm + Next may ask you to type YES to acknowledge the warning.`
-                                  );
-                                  return;
-                                }
+                                const normalizedPropMarket = normalizePropMarketValue(e.currentTarget.value);
+                                e.currentTarget.value = normalizedPropMarket;
 
                                 const nextSelection = buildVisibleStructuredPlayerPropSelection(
                                   {
@@ -15722,24 +13158,8 @@ if (nextDate) {
                               }}
                               placeholder="points, rebounds, PRA..."
                               autoComplete="off"
-                              style={{
-                                width: "100%",
-                                padding: "7px 9px",
-                                border: isRecognizedPropMarketValue(previewRow?.propMarket || suggestions.propMarket || "")
-                                  ? "1px solid #93c5fd"
-                                  : "2px solid #dc2626",
-                                background: isRecognizedPropMarketValue(previewRow?.propMarket || suggestions.propMarket || "")
-                                  ? "#ffffff"
-                                  : "#fef2f2",
-                                borderRadius: 6,
-                                marginTop: 4,
-                              }}
+                              style={{ width: "100%", padding: "7px 9px", border: "1px solid #93c5fd", borderRadius: 6, marginTop: 4 }}
                             />
-                            {!isRecognizedPropMarketValue(previewRow?.propMarket || suggestions.propMarket || "") && (
-                              <div style={{ fontSize: 11, marginTop: 3, color: "#b91c1c", fontWeight: 900 }}>
-                                Choose a recognized prop market before Confirm + Next.
-                              </div>
-                            )}
                             <datalist id={`prop-market-options-${previewRow?.id || "none"}`}>
                               <option value="points" />
                               <option value="assists" />
@@ -15759,7 +13179,6 @@ if (nextDate) {
                               <option value="shots on goal" />
                               <option value="saves" />
                               <option value="strikeouts" />
-                              <option value="outs" />
                               <option value="total bases" />
                               <option value="home runs" />
                               <option value="rbis" />
@@ -15796,11 +13215,6 @@ if (nextDate) {
                                   previewRow.id,
                                   "propSide",
                                   side
-                                );
-                                handleRowFieldChange(
-                                  previewRow.id,
-                                  "propSideManual",
-                                  "Y"
                                 );
 
                                 const selection =
@@ -15847,11 +13261,10 @@ if (nextDate) {
                                 if (!previewRow) return;
 
                                 const line = e.currentTarget.value.trim();
-                                handleManualReviewFieldChange(previewRow.id, "propLine", line, "Edited Player Prop Line");
                                 handleRowFieldChange(
                                   previewRow.id,
-                                  "propLineManual",
-                                  "Y"
+                                  "propLine",
+                                  line
                                 );
 
                                 const selection =
@@ -15911,32 +13324,16 @@ if (nextDate) {
 
                               e.currentTarget.value = gamePropMarket;
 
-                              const currentVariableRow = getCurrentMyVariableRow(previewRow);
-                              const keepManualMyVariable =
-                                String(currentVariableRow.myVariableManual || "").toUpperCase() === "Y";
-
                               applyRowFieldUpdates(previewRow.id, {
                                 reviewBetKind: "other",
                                 betType: "game prop",
                                 canonicalMarketContext: gamePropMarket,
                                 reviewMarketType: gamePropMarket,
                                 propMarket: "",
-                                propSide: "",
-                                propLine: "",
-                                mainLineSide: "",
-                                mainLineLine: "",
                                 canonicalSubject: "",
                                 canonicalPlayer: "",
                                 playerLastName: "",
                                 playerSubjectManual: "N",
-                                ...(keepManualMyVariable
-                                  ? {}
-                                  : {
-                                      myVariable: "fun",
-                                      myVariableReviewed: "Y",
-                                      myVariableManual: "N",
-                                      myVariableAutoSource: "game_prop",
-                                    }),
                               });
 
                               if (popupBetTypeRef.current) popupBetTypeRef.current.value = "game prop";
@@ -16112,36 +13509,14 @@ if (nextDate) {
                 overflowY: previewZoomed ? "auto" : "hidden",
                 overflowX: "hidden",
                 border: "1px solid #e5e7eb",
-                borderRadius: 10,
+                borderRadius: 8,
                 background: "#111827",
                 display: "flex",
                 alignItems: previewZoomed ? "flex-start" : "center",
                 justifyContent: "center",
                 overscrollBehavior: "contain",
-                position: "relative",
               }}
             >
-              {!previewZoomed && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 8,
-                    left: 10,
-                    zIndex: 2,
-                    padding: "3px 7px",
-                    borderRadius: 999,
-                    background: "rgba(15,23,42,0.82)",
-                    color: "#e2e8f0",
-                    fontSize: 10,
-                    fontWeight: 900,
-                    letterSpacing: "0.05em",
-                    textTransform: "uppercase",
-                    pointerEvents: "none",
-                  }}
-                >
-                  Screenshot Preview | click to zoom
-                </div>
-              )}
               {hoverPreview.src ? (
                 <img
                   src={hoverPreview.src}
@@ -16171,8 +13546,8 @@ if (nextDate) {
                   }}
                   style={{
                     width: previewZoomed ? "100%" : "auto",
-                    maxWidth: previewZoomed ? "100%" : "82%",
-                    maxHeight: previewZoomed ? "none" : "76%",
+                    maxWidth: "100%",
+                    maxHeight: previewZoomed ? "none" : "100%",
                     height: previewZoomed ? "auto" : "auto",
                     objectFit: "contain",
                     display: "block",
@@ -16264,7 +13639,7 @@ if (nextDate) {
             <tr>
               {reviewColumns.map((col, idx) => {
                 const isSorted = sortConfig.key === col.key;
-                const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ^" : " v") : "";
+                const sortArrow = isSorted ? (sortConfig.direction === "asc" ? " ▲" : " ▼") : "";
                  return (
                   <th
                     key={col.key}
@@ -16439,7 +13814,7 @@ if (nextDate) {
                     ? "6px solid #7c3aed"
                     : "none",
 
-                  // Glow pulse effect
+                  // 🔥 Glow pulse effect
                   boxShadow:
                     pulseRowId === row.id
                       ? "0 0 0 6px rgba(2,132,199,0.45)"
