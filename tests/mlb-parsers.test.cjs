@@ -59,6 +59,60 @@ test('supplied collapsed Pinnacle props yield no invented prop rows', async () =
 
 const pinEvent = `Baseball\nMLB\nSan Francisco Giants @ New York Mets\nSaturday, September 5, 2026 at 15:10\nSan Francisco Giants\nNew York Mets\nPLAYER PROPS\n`;
 
+test('supplied expanded Pinnacle page: all 38 prop pairs and six game rows', async () => {
+  const parse = await parser('Pinnacle');
+  const rows = parse(read('tests/fixtures/pinnacle-mlb-expanded.txt'));
+  assert.equal(rows.length, 82);
+  assert.ok(rows.every(row => row.sport === 'MLB' && row.league === 'MLB'));
+  assert.ok(rows.every(row => row.eventLabelRaw === 'San Francisco Giants @ New York Mets'));
+  const counts = {};
+  const pairs = new Map();
+  for (const row of rows) {
+    counts[row.marketType] = (counts[row.marketType] || 0) + 1;
+    if (!/^(player_|pitcher_)/.test(row.marketType)) continue;
+    const player = row.selectionNormalized.replace(/ (Over|Under)$/, '');
+    const key = `${player}|${row.marketType}|${row.lineValue}`;
+    if (!pairs.has(key)) pairs.set(key, []);
+    pairs.get(key).push(row.selectionNormalized.slice(player.length + 1));
+  }
+  assert.deepEqual(counts, {
+    moneyline_2way: 2, spread: 2, total: 2,
+    player_total_bases: 34, player_home_runs: 26,
+    pitcher_earned_runs_allowed: 4, pitcher_hits_allowed: 4,
+    pitcher_outs_recorded: 4, pitcher_strikeouts: 4,
+  });
+  assert.equal(pairs.size, 38);
+  for (const sides of pairs.values()) assert.deepEqual(sides.sort(), ['Over', 'Under']);
+
+  // Actual captured prices, including text suffixes such as "Bases" and "Runs".
+  for (const [market, selection, line, odds] of [
+    ['player_total_bases', 'Juan Soto Over', 1.5, 117],
+    ['player_total_bases', 'Juan Soto Under', 1.5, -156],
+    ['player_home_runs', 'Juan Soto Over', 0.5, 290],
+    ['player_home_runs', 'Juan Soto Under', 0.5, -436],
+    ['pitcher_strikeouts', 'Zac Thornton Over', 4.5, -135],
+    ['pitcher_strikeouts', 'Zac Thornton Under', 4.5, 102],
+    ['pitcher_earned_runs_allowed', 'Anthony Molina Over', 2.5, -101],
+    ['pitcher_outs_recorded', 'Anthony Molina Under', 14.5, -118],
+  ]) {
+    const row = rows.find(row => row.marketType === market && row.selectionNormalized === selection);
+    assert.ok(row, `${market}: ${selection}`);
+    assert.equal(row.lineValue, line);
+    assert.equal(row.oddsAmerican, odds);
+  }
+
+  // Expanded team totals, innings and exact scores must not leak into Game rows.
+  assert.deepEqual(rows.filter(row => !/^(player_|pitcher_)/.test(row.marketType))
+    .map(row => [row.marketType, row.selectionNormalized, row.lineValue, row.oddsAmerican]), [
+    ['moneyline_2way', 'San Francisco Giants', null, 148],
+    ['moneyline_2way', 'New York Mets', null, -162],
+    ['spread', 'San Francisco Giants', 1.5, -146],
+    ['spread', 'New York Mets', -1.5, 132],
+    ['total', 'Over', 8, -108],
+    ['total', 'Under', 8, -104],
+  ]);
+});
+
 // Real supplied header names, with explicitly synthetic expanded prices. These
 // validate parser behavior, NOT live extraction or the actual market odds.
 for (const [label, market] of [

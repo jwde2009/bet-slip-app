@@ -6,7 +6,8 @@ Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-
 
 - `thescore-mlb-legacy.txt` is the supplied Giants/Mets structured capture. It produces 145 literal rows. **This is not a verified betting dataset**: duplicated main-line prices and suspected shifted ladder labels were already present in the input. Tests preserve those literal values, rather than guessing corrections. Four team-total rows are still unsupported and omitted.
 - `pinnacle-mlb-collapsed.txt` is the market-content excerpt from the same game's supplied Pinnacle capture. Its prop headings contain no prices; the correct result is six main-line rows and zero player-prop rows.
-- Expanded Pinnacle test prices and DOM mocks are explicitly synthetic. They demonstrate parser/extractor behavior, not current odds or a successful live browser run.
+- `pinnacle-mlb-expanded.txt` is the full follow-up capture supplied on September 5, 2026. It produces 82 rows: six full-game main-line rows and 76 player-prop rows (38 Over/Under pairs). The pairs cover 17 total-bases markets, 13 home-run markets, and two each for pitcher strikeouts, outs, hits allowed and earned runs. The test checks actual captured prices and that expanded inning/team-total/exact-score markets do not contaminate full-game rows. This capture contains no batter hits or RBI markets.
+- The isolated expanded-header test prices and DOM mocks remain explicitly synthetic. The new full-page fixture uses supplied prices. Replaying that fixture verifies parsing of the supplied text, not automatic live browser navigation or current prices.
 
 ## Changes covered
 
@@ -21,6 +22,6 @@ Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-
 
 1. Reload the updated EV Parlay Extractor extension and refresh the sportsbook page. New game captures include `THESCORE_CAPTURE_VERSION: 20260905_MLB_1`.
 2. Recapture theScore MLB main lines and props. Compare moneyline prices and the first/last ladder thresholds to screenshots. Do not reuse the old fixture as corrected data.
-3. On Pinnacle, open the actual `Zac Thornton Total Strikeouts` and `Juan Soto Total Bases` drawers (or equivalent props in a new pregame game), so both O/U prices are visible, then capture again. Merely selecting Player Props may leave drawers collapsed.
+3. The requested expanded Pinnacle sample has been supplied and passes. No additional Pinnacle capture is needed for this parser check. Automatic drawer expansion remains unimplemented; importing a captured text file does not validate that navigation.
 
 Full Next.js build, live extension navigation, Pinnacle automatic drawer expansion, MLB team totals, FanDuel's MLB workflow, and the remaining tennis/football roadmap are not validated or completed by this batch. Existing unrelated local changes are excluded.
