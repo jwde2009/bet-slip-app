@@ -146,8 +146,9 @@ export default function ImportPanel({
 
       {/^bet\s*online$/i.test(String(sportsbook || "").trim()) && (
         <p style={mutedStyle}>
-          BetOnline defaults to a sharp source. Its odds parser is not available yet;
-          captures stay in the input box so you can copy them for setup.
+          BetOnline defaults to a sharp source. MLB strikeouts, outs recorded,
+          hits+runs+RBIs and home-run Yes/No props can be parsed when both prices
+          are included. Main lines are not supported yet. Imports pause for review.
         </p>
       )}
 

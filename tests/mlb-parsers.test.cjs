@@ -26,7 +26,9 @@ async function parser(book) {
     return load(path.extname(file) ? file : `${file}.js`);
   });
   await entry.evaluate();
-  return (text, context = {}) => plain(entry.namespace[`parse${book}Text`](text, context));
+  const parse = (text, context = {}) => plain(entry.namespace[`parse${book}Text`](text, context));
+  if (book === 'BetOnline') parse.inspect = text => plain(entry.namespace.inspectBetOnlineText(text));
+  return parse;
 }
 
 const extension = read('ev-parlay-extension/background.js');
@@ -130,9 +132,86 @@ test('BetOnline captures cannot fall through to another book\'s odds parser', as
     assert.deepEqual(plain(route.namespace.parseOddsText(raw, { sportsbook })), []);
   }
   assert.deepEqual(plain(route.namespace.parseOddsText(`BETONLINE_INITIAL_CAPTURE\n${raw}`, { sportsbook: 'Auto' })), []);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, Array(4).fill('parseBetOnlineText'));
   route.namespace.parseOddsText(raw, { sportsbook: 'Pinnacle' });
-  assert.deepEqual(calls, ['parsePinnacleText']);
+  assert.deepEqual(calls, [...Array(4).fill('parseBetOnlineText'), 'parsePinnacleText']);
+});
+
+const bolRaw = read('tests/fixtures/betonline-mlb-no-prices.md');
+const bolPrefix = bolRaw.slice(0, bolRaw.indexOf('**Total Outs Recorded Martin Perez'));
+
+test('supplied BetOnline capture identifies 20 supported props, but yields zero priced rows', async () => {
+  const parse = await parser('BetOnline');
+  const result = parse.inspect(bolRaw);
+  assert.equal(result.eventLabelRaw, 'Atlanta Braves @ Philadelphia Phillies');
+  assert.equal(result.recognizedPropMarkets, 20);
+  assert.equal(result.pricedPropMarkets, 0);
+  assert.equal(result.incompletePropMarkets, 20);
+  assert.deepEqual(result.rows, []);
+});
+
+test('BetOnline observed prop labels parse with explicitly synthetic American prices', async () => {
+  const parse = await parser('BetOnline');
+  // Only prices are synthetic; the event, players, units and thresholds were supplied.
+  const input = bolRaw
+    .replace('Over 15 Outs', 'Over 15 Outs\n-115')
+    .replace('Under 15 Outs', 'Under 15 Outs\n-105')
+    .replace('Over 6.5 Strikeouts', 'Over 6.5 Strikeouts\n+120')
+    .replace('Under 6.5 Strikeouts', 'Under 6.5 Strikeouts\n-140')
+    .replace('Over 1.5 Hits+runs+rbis', 'Over 1.5 Hits+runs+rbis\n-125')
+    .replace('Under 1.5 Hits+runs+rbis', 'Under 1.5 Hits+runs+rbis\n+105')
+    .replace('**Matt Olson (ATL) to Hit a Home Run**\nYes\nNo', '**Matt Olson (ATL) to Hit a Home Run**\nYes\n+240\nNo\n-310');
+  const rows = parse(input);
+  assert.deepEqual(rows.map(row => [row.selectionNormalized, row.marketType, row.lineValue, row.oddsAmerican]), [
+    ['Martin Perez Over', 'pitcher_outs_recorded', 15, -115],
+    ['Martin Perez Under', 'pitcher_outs_recorded', 15, -105],
+    ['Zack Wheeler Over', 'pitcher_strikeouts', 6.5, 120],
+    ['Zack Wheeler Under', 'pitcher_strikeouts', 6.5, -140],
+    ['Drake Baldwin Over', 'player_hits_runs_rbis', 1.5, -125],
+    ['Drake Baldwin Under', 'player_hits_runs_rbis', 1.5, 105],
+    ['Matt Olson Over', 'player_home_runs', 0.5, 240],
+    ['Matt Olson Under', 'player_home_runs', 0.5, -310],
+  ]);
+  assert.ok(rows.every(row => row.sport === 'MLB' && row.sportsbook === 'BetOnline' && row.isSharpSource && !row.isTargetBook));
+  assert.match(rows[0].parseWarnings.join(), /push possible/);
+});
+
+test('BetOnline supports plain text and inline signed prices, including EVEN', async () => {
+  const parse = await parser('BetOnline');
+  const rows = parse(bolPrefix.replace(/\*|\[|\]\([^\n]+\)/g, '') + 'Zack Wheeler (PHI) Total Strikeouts\nOver 6.5 Strikeouts EVEN\nUnder 6.5 Strikeouts −120');
+  assert.deepEqual(rows.map(row => row.oddsAmerican), [100, -120]);
+});
+
+test('BetOnline rejects incomplete, ambiguous, mismatched or unitless prop pairs', async () => {
+  const parse = await parser('BetOnline');
+  for (const body of [
+    'Over 6.5 Strikeouts\nUnder 6.5 Strikeouts',
+    'Over 6.5 Strikeouts\n-110\nUnder 6.5 Strikeouts',
+    'Over 6.5 Strikeouts\n15\nUnder 6.5 Strikeouts\n-120',
+    'Over 6.5 Strikeouts\n1.91\nUnder 6.5 Strikeouts\n1.91',
+    'Over 6.5 Strikeouts\n-110\nOver 6.5 Strikeouts\n-120',
+    'Over 6.5 Strikeouts\n-110\nUnder 7.5 Strikeouts\n-120',
+    'Over 6.5 Outs\n-110\nUnder 6.5 Outs\n-120',
+    'Yes\n+120\nNo\n-140',
+    'Over 6.5\n-110\nUnder 6.5\n-120',
+    'Over 6.5 Strikeouts\n-110\nUnder 6.5 Strikeouts\n-120\nOver 7.5 Strikeouts\n+120',
+  ]) assert.deepEqual(parse(bolPrefix + '**Zack Wheeler (PHI) Total Strikeouts**\n' + body), [], body);
+});
+
+test('BetOnline cannot borrow odds across an unsupported neighboring market', async () => {
+  const parse = await parser('BetOnline');
+  const input = bolPrefix + '**Zack Wheeler (PHI) Total Strikeouts**\nOver 6.5 Strikeouts\nUnder 6.5 Strikeouts\n**Zack Wheeler (PHI) to Record a Win**\nYes\n-110\nNo\n-110';
+  assert.deepEqual(parse(input), []);
+});
+
+test('BetOnline requires a consistent MLB event and rejects players from other teams', async () => {
+  const parse = await parser('BetOnline');
+  const prop = '**Zack Wheeler (PHI) Total Strikeouts**\nOver 6.5 Strikeouts\n-110\nUnder 6.5 Strikeouts\n-110';
+  assert.equal(parse(bolPrefix + prop).length, 2);
+  for (const prefix of [bolPrefix.replace('\nbaseball\n', '\nbasketball\n'), bolPrefix.replace('**Atlanta Braves**', '**M. Perez**'), bolPrefix + bolPrefix]) {
+    assert.deepEqual(parse(prefix + prop), []);
+  }
+  assert.deepEqual(parse(bolPrefix + prop.replace('(PHI)', '(NYM)')), []);
 });
 
 // Real supplied header names, with explicitly synthetic expanded prices. These

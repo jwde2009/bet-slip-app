@@ -4,6 +4,7 @@ import { parseBetMGMText } from "./parsers/parseBetMGMText";
 import { parseCaesarsText } from "./parsers/parseCaesarsText";
 import { parsePinnacleText } from "./parsers/parsePinnacleText";
 import { parseTheScoreText } from "./parsers/parseTheScoreText";
+import { parseBetOnlineText } from "./parsers/parseBetOnlineText";
 
 function normalizeSportsbook(value) {
   const s = String(value || "")
@@ -36,12 +37,11 @@ export function parseOddsText(rawText, context = {}) {
     return [];
   }
 
-  // Capture support precedes the book-specific market parser. Do not allow
-  // BetOnline text to fall through to DraftKings based on generic page labels.
+  // BetOnline must never fall through to another book's generic page detection.
   if (
     sportsbook === "betonline" ||
     /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(normalizedRawText)
-  ) return [];
+  ) return parseBetOnlineText(normalizedRawText, context);
   
   if (sportsbook === "Pinnacle") {
     return parsePinnacleText(rawText);

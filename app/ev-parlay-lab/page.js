@@ -16,6 +16,7 @@ import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsText } from "./utils/parseOddsText";
+import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
@@ -1189,8 +1190,13 @@ export default function EVParlayLabPage() {
   }
 
   if (/^bet\s*online$/i.test(String(sportsbook || "").trim()) || /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(inputText)) {
-    alert("BetOnline odds parsing is not available yet. Your raw capture remains in the input box; copy it for parser setup.");
-    return;
+    const capture = inspectBetOnlineText(inputText);
+    if (!capture.rows.length) {
+      alert(capture.recognizedPropMarkets
+        ? `BetOnline: found ${capture.recognizedPropMarkets} MLB prop markets, but no complete pairs with valid prices. Your raw text is preserved. A screenshot showing the prices will help check the capture.`
+        : "BetOnline: no supported MLB prop layout found. Main lines are not supported yet. Your raw text is preserved.");
+      return;
+    }
   }
 
   const parsed = parseOddsText(inputText, {
@@ -2272,7 +2278,7 @@ const marketBundle = useMemo(() => {
       );
 
       window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
-        ? "BetOnline capture loaded. Its odds parser is not available yet."
+        ? "BetOnline capture loaded. Review the prop lines and prices before parsing."
         : shouldHoldForBetMgmWnbaLadders
         ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
         : "";
@@ -2396,7 +2402,7 @@ const marketBundle = useMemo(() => {
         );
 
         window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
-          ? "BetOnline capture loaded. Its odds parser is not available yet."
+          ? "BetOnline capture loaded. Review the prop lines and prices before parsing."
           : shouldHoldForBetMgmWnbaLadders
             ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
             : "";
