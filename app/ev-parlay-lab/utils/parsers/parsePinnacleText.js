@@ -963,7 +963,8 @@ function parsePinnaclePlayerProps(lines, startIndex, { event, sport, league }) {
     if (!parsed) continue;
  
     rows.push(...parsed.rows);
-    i = Math.max(i, parsed.endIndex);
+    // endIndex points at the NEXT header; the loop increments once more.
+    i = Math.max(i, parsed.endIndex - 1);
   }
  
   return dedupeRows(rows);
@@ -1450,7 +1451,11 @@ function findSectionEnd(lines, startIndex) {
 function findPlayerPropEnd(lines, startIndex) {
   for (let i = startIndex; i < lines.length; i += 1) {
     const line = normalizeLine(lines[i]);
-    if (isHardStopLine(line) || isSectionHeader(line) || looksLikeSupportedPlayerPropHeader(line)) return i;
+    if (
+      isHardStopLine(line) || isSectionHeader(line) || looksLikeSupportedPlayerPropHeader(line) ||
+      // A collapsed supported prop must not borrow an unsupported neighbor's odds.
+      /^.+\s+Total\s+[A-Za-z]/i.test(line) || /^.+\s+\([^)]*[A-Za-z][^)]*\)/.test(line)
+    ) return i;
   }
   return lines.length;
 }
@@ -1613,6 +1618,7 @@ function looksLikeSupportedPlayerPropHeader(value) {
   const text = normalizeLine(value);
  
   return (
+    !!parsePinnacleMlbPlayerPropHeader(text) ||
     /\bTotal Points$/i.test(text) ||
     /\bTotal Assists$/i.test(text) ||
     /\bTotal Rebounds$/i.test(text) ||
@@ -1645,6 +1651,9 @@ function looksLikeSupportedPlayerPropHeader(value) {
  
 function parsePlayerPropHeader(value) {
   const text = normalizeLine(value);
+
+  const mlb = parsePinnacleMlbPlayerPropHeader(text);
+  if (mlb) return mlb;
 
   const patterns = [
     // Parentheses style
@@ -1709,11 +1718,32 @@ function parsePlayerPropHeader(value) {
   return null;
 }
  
+function parsePinnacleMlbPlayerPropHeader(value) {
+  // Visible MLB drawer labels (not the older parentheses-style labels).
+  // A header identifies a market only; it never supplies an implied line/price.
+  const match = normalizeLine(value).match(
+    /^(.+?)\s+Total\s+(Strikeouts|Pitching Outs|Hits Allowed|Earned Runs(?: Allowed)?|Home Runs|Bases)(?:\s*\(must start\))?$/i
+  );
+  if (!match) return null;
+  const markets = {
+    strikeouts: "pitcher_strikeouts",
+    "pitching outs": "pitcher_outs_recorded",
+    "hits allowed": "pitcher_hits_allowed",
+    "earned runs": "pitcher_earned_runs_allowed",
+    "earned runs allowed": "pitcher_earned_runs_allowed",
+    "home runs": "player_home_runs",
+    bases: "player_total_bases",
+  };
+  return { player: match[1].trim(), marketType: markets[match[2].toLowerCase()] };
+}
+
 function parsePlayerOverUnderLabel(value, side) {
   const text = normalizeLine(value);
  
-  const match = text.match(/(?:Over|Under|O|U)\s+(\d+(?:\.\d+)?)/i);
-  return match ? Number(match[1]) : null;
+  const match = text.match(/^(Over|Under|O|U)\s+(\d+(?:\.\d+)?)(?:\s.*)?$/i);
+  if (!match) return null;
+  if (side && match[1][0].toLowerCase() !== String(side)[0].toLowerCase()) return null;
+  return Number(match[2]);
 }
  
 function makeRow({ event, selection, marketType, lineValue, decimalOdds, sport, league }) {

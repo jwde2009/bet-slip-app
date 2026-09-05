@@ -1,0 +1,176 @@
+THESCORE_INITIAL_CAPTURE
+THESCORE_STRUCTURED_EXPORT
+Sport: MLB
+Event: San Francisco Giants @ New York Mets
+
+Market: Spread
+San Francisco Giants | +1.5 | -155
+New York Mets | -1.5 | +130
+
+Market: Total
+Over | 7.5 | -125
+Under | 7.5 | +105
+
+Market: Moneyline
+San Francisco Giants | -155
+New York Mets | +130
+
+Market: Pitcher Strikeouts
+Z. Thornton | 4+ | -1200
+Z. Thornton | 5+ | -325
+Z. Thornton | 6+ | -120
+Z. Thornton | 7+ | +180
+Z. Thornton | 8+ | +380
+Z. Thornton | 9+ | +1000
+Z. Thornton | 10+ | +1600
+A. Molina | 4+ | -300
+A. Molina | 5+ | -105
+A. Molina | 6+ | +225
+A. Molina | 7+ | +450
+A. Molina | 8+ | +1100
+A. Molina | 9+ | +2000
+
+Market: Home Runs
+J. Soto | 2+ | +240
+F. Lindor | 2+ | +350
+R. Devers | 2+ | +400
+B. Eldridge | 2+ | +400
+F. Alvarez | 2+ | +475
+A. Knizner | 2+ | +550
+M. Semien | 2+ | +550
+J. Young | 2+ | +550
+B. Baty | 2+ | +600
+C. Benge | 2+ | +600
+J. Cox | 2+ | +600
+S. Whitcomb | 2+ | +600
+B. Bichette | 2+ | +700
+O. Basabe | 2+ | +900
+A. Ewing | 2+ | +900
+J. Hoo Lee | 2+ | +1000
+C. Koss | 2+ | +1000
+Tu. Hill | 2+ | +1100
+
+Market: Hits
+B. Bichette | 2+ | -300
+B. Bichette | 3+ | +200
+F. Lindor | 2+ | -250
+F. Lindor | 3+ | +220
+C. Benge | 2+ | -240
+C. Benge | 3+ | +240
+J. Soto | 2+ | -240
+J. Soto | 3+ | +230
+J. Hoo Lee | 2+ | -220
+J. Hoo Lee | 3+ | +240
+R. Devers | 2+ | -190
+R. Devers | 3+ | +280
+B. Eldridge | 2+ | -190
+B. Eldridge | 3+ | +280
+J. Cox | 2+ | -180
+J. Cox | 3+ | +300
+A. Ewing | 2+ | -180
+A. Ewing | 3+ | +320
+J. Young | 2+ | -180
+J. Young | 3+ | +300
+Tu. Hill | 2+ | -165
+Tu. Hill | 3+ | +340
+M. Semien | 2+ | -165
+M. Semien | 3+ | +340
+A. Knizner | 2+ | -150
+A. Knizner | 3+ | +340
+F. Alvarez | 2+ | -140
+F. Alvarez | 3+ | +400
+O. Basabe | 2+ | -140
+O. Basabe | 3+ | +380
+B. Baty | 2+ | -130
+B. Baty | 3+ | +450
+C. Koss | 2+ | -130
+C. Koss | 3+ | +450
+S. Whitcomb | 2+ | -130
+S. Whitcomb | 3+ | +400
+
+Market: Total Bases
+B. Bichette | 2+ | -300
+B. Bichette | 3+ | +110
+F. Lindor | 2+ | -260
+F. Lindor | 3+ | EVEN
+C. Benge | 2+ | -240
+C. Benge | 3+ | +130
+J. Soto | 2+ | -240
+J. Soto | 3+ | EVEN
+J. Hoo Lee | 2+ | -220
+J. Hoo Lee | 3+ | +150
+R. Devers | 2+ | -190
+R. Devers | 3+ | +130
+B. Eldridge | 2+ | -190
+B. Eldridge | 3+ | +130
+J. Cox | 2+ | -180
+J. Cox | 3+ | +150
+A. Ewing | 2+ | -180
+A. Ewing | 3+ | +180
+J. Young | 2+ | -180
+J. Young | 3+ | +150
+Tu. Hill | 2+ | -165
+Tu. Hill | 3+ | +200
+M. Semien | 2+ | -165
+M. Semien | 3+ | +170
+A. Knizner | 2+ | -150
+A. Knizner | 3+ | +180
+F. Alvarez | 2+ | -140
+F. Alvarez | 3+ | +180
+O. Basabe | 2+ | -140
+O. Basabe | 3+ | +220
+B. Baty | 2+ | -130
+B. Baty | 3+ | +230
+C. Koss | 2+ | -130
+C. Koss | 3+ | +230
+S. Whitcomb | 2+ | -130
+S. Whitcomb | 3+ | +200
+
+Market: RBIs
+C. Benge | 2+ | +160
+C. Benge | 3+ | +550
+J. Soto | 2+ | +160
+J. Soto | 3+ | +450
+B. Bichette | 2+ | +170
+B. Bichette | 3+ | +600
+F. Lindor | 2+ | +170
+F. Lindor | 3+ | +500
+R. Devers | 2+ | +180
+R. Devers | 3+ | +600
+B. Eldridge | 2+ | +180
+B. Eldridge | 3+ | +500
+J. Young | 2+ | +180
+J. Young | 3+ | +600
+F. Alvarez | 2+ | +200
+F. Alvarez | 3+ | +700
+M. Semien | 2+ | +200
+M. Semien | 3+ | +700
+J. Hoo Lee | 2+ | +230
+J. Hoo Lee | 3+ | +800
+S. Whitcomb | 2+ | +230
+S. Whitcomb | 3+ | +800
+A. Ewing | 2+ | +240
+A. Ewing | 3+ | +900
+A. Knizner | 2+ | +240
+A. Knizner | 3+ | +800
+O. Basabe | 2+ | +260
+O. Basabe | 3+ | +900
+B. Baty | 2+ | +260
+B. Baty | 3+ | +900
+J. Cox | 2+ | +260
+J. Cox | 3+ | +1000
+Tu. Hill | 2+ | +280
+Tu. Hill | 3+ | +1000
+C. Koss | 2+ | +280
+C. Koss | 3+ | +1000
+
+Market: Team Total Runs
+SF Giants | OVER | 3.5 | +100
+SF Giants | UNDER | 3.5 | -130
+
+Market: Team Total Runs
+NY Mets | OVER | 4.5 | +105
+NY Mets | UNDER | 4.5 | -135
+
+THESCORE_TARGETED_RUN
+THESCORE_TARGET_LABELS: Points, Rebounds, Assists, Threes, 3-Pointers Made, Combos, Pts + Reb + Ast, Double Double, Triple Double

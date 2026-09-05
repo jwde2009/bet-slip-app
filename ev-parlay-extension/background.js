@@ -707,6 +707,10 @@ chrome.action.onClicked.addListener(async (tab) => {
       }
     );
 
+  }
+
+  // Clear stale targeting even when this run has no missing-market targets.
+  if (isTheScoreTabUrl(tab.url)) {
     await safeExecuteScript({
       tabId: sourceTabId,
       func: seedTheScoreTargetWorkflowLabels,
@@ -6490,6 +6494,51 @@ async function buildFanDuelOneNextNbaTabRawText() {
     };
   }
 
+  function resolveTheScoreMlbTeam(value) {
+    // One MLB-only lookup for event extraction and display-name cleanup. Keep
+    // short names such as ATL/NY out of the basketball and hockey alias lists.
+    const aliases = [
+      ["Arizona Diamondbacks", "ARI", "Arizona", "Diamondbacks"],
+      ["Atlanta Braves", "ATL", "Atlanta", "Braves"],
+      ["Baltimore Orioles", "BAL", "Baltimore", "Orioles"],
+      ["Boston Red Sox", "BOS", "Boston", "Red Sox"],
+      ["Chicago Cubs", "CHC", "Chi Cubs", "Cubs"],
+      ["Chicago White Sox", "CWS", "CHW", "Chi White Sox", "White Sox"],
+      ["Cincinnati Reds", "CIN", "Cincinnati", "Reds"],
+      ["Cleveland Guardians", "CLE", "Cleveland", "Guardians"],
+      ["Colorado Rockies", "COL", "Colorado", "Rockies"],
+      ["Detroit Tigers", "DET", "Detroit", "Tigers"],
+      ["Houston Astros", "HOU", "Houston", "Astros"],
+      ["Kansas City Royals", "KC", "KCR", "Kansas City", "Royals"],
+      ["Los Angeles Angels", "LAA", "LA Angels", "Angels"],
+      ["Los Angeles Dodgers", "LAD", "LA Dodgers", "Dodgers"],
+      ["Miami Marlins", "MIA", "Miami", "Marlins"],
+      ["Milwaukee Brewers", "MIL", "Milwaukee", "Brewers"],
+      ["Minnesota Twins", "MIN", "Minnesota", "Twins"],
+      ["New York Mets", "NYM", "NY Mets", "Mets"],
+      ["New York Yankees", "NYY", "NY Yankees", "Yankees"],
+      ["Athletics", "ATH", "OAK", "Oakland Athletics", "Oak Athletics"],
+      ["Philadelphia Phillies", "PHI", "Philadelphia", "Phillies"],
+      ["Pittsburgh Pirates", "PIT", "Pittsburgh", "Pirates"],
+      ["San Diego Padres", "SD", "SDP", "San Diego", "Padres"],
+      ["San Francisco Giants", "SF", "SFG", "San Francisco", "Giants"],
+      ["Seattle Mariners", "SEA", "Seattle", "Mariners"],
+      ["St. Louis Cardinals", "STL", "St. Louis", "Cardinals"],
+      ["Tampa Bay Rays", "TB", "TBR", "Tampa Bay", "Rays"],
+      ["Texas Rangers", "TEX", "Texas", "Rangers"],
+      ["Toronto Blue Jays", "TOR", "Toronto", "Blue Jays"],
+      ["Washington Nationals", "WSH", "WAS", "Washington", "Nationals"],
+    ];
+    const normalize = (text) => clean(text).toLowerCase().replace(/\./g, "");
+    const wanted = normalize(value);
+    for (const [canonical, ...names] of aliases) {
+      const nickname = names[names.length - 1];
+      const candidates = [canonical, ...names, ...names.filter((name) => /^[A-Z]{2,3}$/.test(name)).map((code) => `${code} ${nickname}`)];
+      if (candidates.some((candidate) => normalize(candidate) === wanted)) return canonical;
+    }
+    return "";
+  }
+
   function eventText() {
     const knownTeamAliases = [
       ["New York Yankees", ["new york yankees", "ny yankees", "nyy", "yankees"]],
@@ -6580,6 +6629,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
     function resolveKnownTeam(value) {
       const cleaned = normalizeCandidate(value);
+      if (sportText() === "MLB") return resolveTheScoreMlbTeam(cleaned);
       const lower = cleaned.toLowerCase();
 
       const sorted = knownTeamAliases
@@ -6658,6 +6708,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
       if (/wnba/.test(path)) return "WNBA";
       if (/basketball|nba/.test(path)) return "NBA";
       if (/baseball|mlb/.test(path)) return "MLB";
+      if (/tennis|\batp\b|\bwta\b/.test(path)) return "TENNIS";
 
       if (
         text.includes("shots on goal") ||
@@ -6770,6 +6821,8 @@ async function buildFanDuelOneNextNbaTabRawText() {
       .trim();
 
     if (!cleaned) return "";
+
+    if (sportText() === "MLB") return resolveTheScoreMlbTeam(cleaned) || cleaned;
 
     const knownTeamAliases = [
       ["Arizona Diamondbacks", ["arizona diamondbacks", "ari diamondbacks", "diamondbacks"]],
@@ -6888,6 +6941,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
     const sport = sportText();
 
     out.push("THESCORE_STRUCTURED_EXPORT");
+    out.push("THESCORE_CAPTURE_VERSION: 20260905_MLB_1");
     out.push("Sport: " + sport);
     out.push("Event: " + event);
 
@@ -7015,7 +7069,10 @@ async function buildFanDuelOneNextNbaTabRawText() {
         ].includes(type);
       });
 
-      if (!away || !home || selectionButtons.length < 6) return false;
+      // A broad page may contain other totals/spreads. Only accept one complete,
+      // unambiguous table; never overwrite one game's prices with later buttons.
+      if (!away || !home || away === home || selectionButtons.length !== 6) return false;
+      if (new Set(selectionButtons.map((btn) => btn.getAttribute("data-type"))).size !== 6) return false;
 
       let awaySpread = null;
       let homeSpread = null;
@@ -7024,15 +7081,24 @@ async function buildFanDuelOneNextNbaTabRawText() {
       let awayMoney = null;
       let homeMoney = null;
 
+      let invalidSelection = false;
       selectionButtons.forEach((btn) => {
         const type = String(btn.getAttribute("data-type") || "");
         const spans = Array.from(btn.querySelectorAll("span"))
           .map((el) => clean(el.innerText))
           .filter(Boolean);
 
-        const line =
-          spans.find((s) => /^[OU]\s*\d+(\.\d+)?$/i.test(s) || /^[+-]\d+(\.\d+)?$/.test(s)) || "";
-        const odds = toOdds(spans.find((s) => /^[-+]\d+$|^EVEN$/i.test(s)) || "");
+        const oddsValues = [...new Set(spans.filter((s) =>
+          /^EVEN$/i.test(s) || (/^[+-]\d+$/.test(s) && Math.abs(Number(s)) >= 100)
+        ).map(toOdds))];
+        const line = spans.find((s) =>
+          /^[OU]\s*\d+(\.\d+)?$/i.test(s) ||
+          (/^[+-]\d+(\.\d+)?$/.test(s) && Math.abs(Number(s)) < 100)
+        ) || "";
+        if (oddsValues.length !== 1 || (!/MONEYLINE$/.test(type) && !line)) {
+          invalidSelection = true;
+        }
+        const odds = oddsValues[0] || "";
         const entry = { line, odds };
 
         if (type === "AWAY_SPREAD") awaySpread = entry;
@@ -7042,6 +7108,17 @@ async function buildFanDuelOneNextNbaTabRawText() {
         if (type === "AWAY_MONEYLINE") awayMoney = entry;
         if (type === "HOME_MONEYLINE") homeMoney = entry;
       });
+
+      if (
+        invalidSelection ||
+        !awaySpread || !homeSpread || !overTotal || !underTotal || !awayMoney || !homeMoney ||
+        !/^[+-]\d+(?:\.\d+)?$/.test(awaySpread.line) ||
+        !/^[+-]\d+(?:\.\d+)?$/.test(homeSpread.line) ||
+        Math.abs(Number(awaySpread.line) + Number(homeSpread.line)) > 0.0001 ||
+        !/^O\s*\d+(?:\.\d+)?$/i.test(overTotal.line) ||
+        !/^U\s*\d+(?:\.\d+)?$/i.test(underTotal.line) ||
+        Number(overTotal.line.replace(/^O\s*/i, "")) !== Number(underTotal.line.replace(/^U\s*/i, ""))
+      ) return false;
 
       if (awaySpread && homeSpread) {
         out.push("");
@@ -7251,11 +7328,17 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
 
 
-    // TheScore main lines are one table: Spread / Total / Moneyline.
-    // Try the safer text-order parser first so Spread is not skipped after
-    // the broad DOM parser captures only Total/Moneyline.
-    if (!appendVisibleMainLinesFromScoreTextOrder()) {
+    // Prefer the market-typed buttons in the specific table over text order.
+    // The legacy MLB text fallback can reuse run-line odds as moneyline odds.
+    const mainDrawer = Array.from(document.querySelectorAll("details[data-testid]")).find(
+      (drawer) => /^Main Lines$/i.test(clean(drawer.querySelector("summary h2")?.innerText))
+    );
+    if (!appendVisibleMainLinesFromContainer(mainDrawer)) {
       appendVisibleMainLinesFromContainer(document.querySelector("main") || document.body);
+    }
+    if (!wroteMainLines && sport !== "MLB") appendVisibleMainLinesFromScoreTextOrder();
+    if (!wroteMainLines && sport === "MLB") {
+      out.push("THESCORE_MAIN_LINES_SKIPPED: no unambiguous market-typed MLB table");
     }
     document.querySelectorAll("details[data-testid]").forEach((drawer) => {
       const titleEl = drawer.querySelector("summary h2");
@@ -7312,9 +7395,8 @@ async function buildFanDuelOneNextNbaTabRawText() {
               if (type === "HOME_MONEYLINE") homeMoney = entry;
             });
 
-            if (!appendVisibleMainLinesFromScoreTextOrder()) {
-              appendVisibleMainLinesFromContainer(drawer);
-            }
+            appendVisibleMainLinesFromContainer(drawer);
+            if (!wroteMainLines && sport !== "MLB") appendVisibleMainLinesFromScoreTextOrder();
 
             return;
           }
@@ -7331,9 +7413,13 @@ async function buildFanDuelOneNextNbaTabRawText() {
         out.push("");
         out.push("Market: " + drawerMarket);
 
-        const headers = Array.from(ladderTable.querySelectorAll("thead th"))
-          .map((th) => clean(th.innerText))
-          .filter(Boolean);
+        // Keep blank corner/header cells. Removing them shifts 1+ odds to 2+
+        // and silently drops the last threshold. Reject ambiguous layouts.
+        const headerCells = Array.from(ladderTable.querySelectorAll("thead th"));
+        const headers = headerCells.map((th) => clean(th.innerText));
+        const simpleHeaders = headerCells.every((th) =>
+          Number(th.colSpan || 1) === 1 && Number(th.rowSpan || 1) === 1
+        );
 
         const rows = drawer.querySelectorAll("tbody tr");
 
@@ -7341,15 +7427,26 @@ async function buildFanDuelOneNextNbaTabRawText() {
           const player = clean(row.querySelector("th")?.innerText);
           if (!player) return;
 
-          Array.from(row.querySelectorAll("td")).forEach((td, idx) => {
+          const oddsCells = Array.from(row.querySelectorAll("td"));
+          const offset = headers.length - oddsCells.length;
+          if (
+            !simpleHeaders || ![0, 1].includes(offset) ||
+            (offset === 1 && /^\d+(?:\.\d+)?\+$/.test(headers[0])) ||
+            oddsCells.some((td) => Number(td.colSpan || 1) !== 1)
+          ) {
+            out.push(`THESCORE_LADDER_SKIPPED: ${drawerMarket} | ${player} | ambiguous columns`);
+            return;
+          }
+
+          oddsCells.forEach((td, idx) => {
             const odds = Array.from(td.querySelectorAll("span"))
               .map((s) => clean(s.innerText))
               .find((v) => /^[-+]\d+$|^EVEN$/i.test(v));
 
             if (!odds || odds === "--") return;
 
-            const threshold = headers[idx + 1];
-            if (!threshold) return;
+            const threshold = headers[idx + offset];
+            if (!/^\d+(?:\.\d+)?\+$/.test(threshold || "")) return;
 
             out.push(`${player} | ${threshold} | ${odds.toUpperCase()}`);
           });
@@ -7569,6 +7666,22 @@ async function buildFanDuelOneNextNbaTabRawText() {
       .replace(/\s*\/\s*/g, "/")
       .replace(/^player\s+/i, "")
       .trim();
+  }
+
+  function filterTheScoreTargetLabelsForSport(labels, sport) {
+    const basketball = /^(points|player points|rebounds|player rebounds|assists|player assists|threes|three pointers|3-pointers made|combos|player combos|pts \+ reb \+ ast|pts \+ reb|pts \+ ast|reb \+ ast|double double|triple double)$/i;
+    const bySport = {
+      NBA: basketball,
+      WNBA: basketball,
+      NHL: /^(goals|goal scorer|goalscorer|shots on goal|sog|points\/assists|assists|player assists|goalie\/defense|saves|goalie saves|player saves|hits|blocked shots|power play points)$/i,
+      MLB: /^(hits|total bases|home runs|rbis?|runs|runs scored|pitcher strikeouts|strikeouts|hits allowed|earned runs|outs recorded|walks allowed|pitcher props|batter props|player props)$/i,
+      TENNIS: /^(game props|match props|sets|set props|total games|game spread|match winner)$/i,
+    };
+    const pattern = bySport[String(sport || "").toUpperCase()];
+    if (!pattern) return [];
+    return labels.filter((label) =>
+      /^(popular|main lines|game lines)$/i.test(label) || pattern.test(label)
+    );
   }
 
   function isTheScoreMarketTabText(value) {
@@ -7829,7 +7942,9 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
         sessionStorage.removeItem("EV_TS_TARGET_WORKFLOW_LABELS");
 
-        return labels;
+        // The coverage snapshot spans sports. Never let missing WNBA markets
+        // send an MLB/tennis capture into a basketball-only early return.
+        return filterTheScoreTargetLabelsForSport(labels, sportText());
       } catch (err) {
         return [];
       }
