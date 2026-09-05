@@ -150,6 +150,24 @@ test('supplied BetOnline capture identifies 20 supported props, but yields zero 
   assert.deepEqual(result.rows, []);
 });
 
+test('BetOnline supplied screenshot prices produce the four exact strikeout rows', async () => {
+  const parse = await parser('BetOnline');
+  // The four prices are manually transcribed from the supplied screenshot.
+  // Event context comes from the earlier page capture; this is not a DOM export.
+  const result = parse.inspect(bolPrefix + read('tests/fixtures/betonline-mlb-screenshot-strikeouts.txt'));
+  assert.equal(result.eventLabelRaw, 'Atlanta Braves @ Philadelphia Phillies');
+  assert.equal(result.recognizedPropMarkets, 2);
+  assert.equal(result.pricedPropMarkets, 2);
+  assert.equal(result.incompletePropMarkets, 0);
+  assert.deepEqual(result.rows.map(row => [row.selectionNormalized, row.lineValue, row.oddsAmerican]), [
+    ['Martin Perez Over', 3.5, -110],
+    ['Martin Perez Under', 3.5, -130],
+    ['Zack Wheeler Over', 6.5, -120],
+    ['Zack Wheeler Under', 6.5, -120],
+  ]);
+  assert.ok(result.rows.every(row => row.marketType === 'pitcher_strikeouts' && row.isSharpSource));
+});
+
 test('BetOnline observed prop labels parse with explicitly synthetic American prices', async () => {
   const parse = await parser('BetOnline');
   // Only prices are synthetic; the event, players, units and thresholds were supplied.
