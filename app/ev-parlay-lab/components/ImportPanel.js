@@ -148,7 +148,8 @@ export default function ImportPanel({
         <p style={mutedStyle}>
           BetOnline defaults to a sharp source. MLB strikeouts, outs recorded,
           hits+runs+RBIs and home-run Yes/No props can be parsed when both prices
-          are included. Main lines are not supported yet. Imports pause for review.
+          are included. Extension imports follow the auto-parse toggle above.
+          Props without complete prices are skipped. Main lines are not supported yet.
         </p>
       )}
 

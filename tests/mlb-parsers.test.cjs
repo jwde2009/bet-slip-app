@@ -140,6 +140,65 @@ test('BetOnline captures cannot fall through to another book\'s odds parser', as
 const bolRaw = read('tests/fixtures/betonline-mlb-no-prices.md');
 const bolPrefix = bolRaw.slice(0, bolRaw.indexOf('**Total Outs Recorded Martin Perez'));
 
+// Execute the actual import-handler bodies with browser/state stubs. This checks
+// both transport paths without duplicating the auto-parse decision in a test helper.
+for (const transport of ['queue', 'url']) {
+  test(`BetOnline ${transport} imports honor auto-parse and preserve the BetMGM ladder hold`, () => {
+    const page = read('app/ev-parlay-lab/page.js');
+    const queueStart = page.indexOf('function processQueuedImports()');
+    const queueEnd = page.indexOf('\n    processQueuedImports();', queueStart);
+    const urlStart = page.indexOf('    const params = new URLSearchParams(window.location.search);', queueEnd);
+    const urlEnd = page.indexOf('\n  }, []);', urlStart);
+    assert.ok(queueStart >= 0 && queueEnd > queueStart && urlStart > queueEnd && urlEnd > urlStart);
+    const ladderStart = page.indexOf('function isBetMgmWnbaLadderImport(');
+    const ladderEnd = page.indexOf('function readSavedPlacedParlays()', ladderStart);
+    const ladderCheck = vm.runInNewContext(`${page.slice(ladderStart, ladderEnd)}\nisBetMgmWnbaLadderImport`);
+    const script = transport === 'queue'
+      ? `${page.slice(queueStart, queueEnd)}\nprocessQueuedImports();`
+      : `(function () { ${page.slice(urlStart, urlEnd)} })();`;
+
+    for (const [source, text, enabled, expected] of [
+      ['BetOnline', `BETONLINE_INITIAL_CAPTURE\n${bolRaw}`, true, true],
+      ['BetOnline', bolRaw, false, false],
+      ['Bet Online', bolRaw, true, true],
+      ['Pinnacle', pinEvent, true, true],
+      ['BetMGM', 'WNBA\nPlayer props', true, false],
+      ['BetMGM', 'MLB\nMoneyline', true, true],
+    ]) {
+      const state = {};
+      const params = new URLSearchParams({ source, import: text, autoparse: '1' });
+      const window = { location: { search: `?${params}`, pathname: '/ev-parlay-lab' }, history: { replaceState() {} } };
+      const bindings = {
+        window, URLSearchParams, autoParseQueuedImports: enabled,
+        isBetMgmWnbaLadderImport: ladderCheck,
+        readImportQueue: () => [{ source, text }],
+        writeImportQueue: value => { state.queue = value; },
+        refreshPendingImports() {}, setPendingImports() {},
+        readSavedPlacedParlays: () => [], setSavedPlacedParlays() {},
+        setPendingUrlImport: value => { state.pendingText = value; },
+        setRawText: value => { state.rawText = typeof value === 'function' ? value('') : value; },
+        setSportsbook: value => { state.sportsbook = value; },
+        resolveImportBatchRole: () => 'fair_odds', setBatchRole() {},
+      };
+      vm.runInNewContext(script, bindings);
+      assert.equal(window.__evParlayAutoParsePending, expected, `${source}, toggle ${enabled}`);
+      assert.equal(state.rawText, text);
+      assert.equal(state.pendingText, text);
+      assert.equal(state.sportsbook, source);
+      assert.equal(Boolean(window.__evParlayAutoParsePauseReason), source === 'BetMGM' && /WNBA/.test(text));
+      if (transport === 'queue') assert.equal(state.queue.length, 0);
+      if (transport === 'url') {
+        // A URL that did not request auto-parsing still loads text for manual use.
+        window.location.search = `?${new URLSearchParams({ source, import: text })}`;
+        window.__evParlayAutoParsePending = false;
+        vm.runInNewContext(script, bindings);
+        assert.equal(window.__evParlayAutoParsePending, false);
+        assert.equal(state.rawText, text);
+      }
+    }
+  });
+}
+
 test('supplied BetOnline capture identifies 20 supported props, but yields zero priced rows', async () => {
   const parse = await parser('BetOnline');
   const result = parse.inspect(bolRaw);

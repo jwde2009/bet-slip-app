@@ -2267,19 +2267,15 @@ const marketBundle = useMemo(() => {
       writeImportQueue([]);
       setPendingImports([]);
       setSavedPlacedParlays(readSavedPlacedParlays());
-      // Do not auto-parse queued extension imports.
-      // BetMGM WNBA ladder imports need a manual threshold review before parsing.
+      // Follow the auto-parse toggle. BetMGM WNBA ladders still need threshold review.
       const sourceName = String(newest?.source || "");
       const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
-      const shouldHoldForBetOnline = /^bet\s*online$/i.test(sourceName.trim());
 
       window.__evParlayAutoParsePending = Boolean(
-        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders && !shouldHoldForBetOnline
+        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
       );
 
-      window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
-        ? "BetOnline capture loaded. Review the prop lines and prices before parsing."
-        : shouldHoldForBetMgmWnbaLadders
+      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
         ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
         : "";
         }
@@ -2395,15 +2391,12 @@ const marketBundle = useMemo(() => {
       if (autoParse === "1") {
         const sourceName = String(source || "");
         const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, decoded);
-        const shouldHoldForBetOnline = /^bet\s*online$/i.test(sourceName.trim());
 
         window.__evParlayAutoParsePending = Boolean(
-          autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders && !shouldHoldForBetOnline
+          autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
         );
 
-        window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
-          ? "BetOnline capture loaded. Review the prop lines and prices before parsing."
-          : shouldHoldForBetMgmWnbaLadders
+        window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
             ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
             : "";
       }
