@@ -9,6 +9,7 @@ const SPORTSBOOK_OPTIONS = [
   "BetMGM",
   "Caesars",
   "Pinnacle",
+  "BetOnline",
   "TheScore",
   "Manual",
 ];
@@ -143,6 +144,15 @@ export default function ImportPanel({
         Paste extracted odds text here and choose the source book. Extension imports can be loaded from the pending-import tools at the bottom of this box.
       </p>
 
+      {/^bet\s*online$/i.test(String(sportsbook || "").trim()) && (
+        <p style={mutedStyle}>
+          BetOnline defaults to a sharp source. MLB strikeouts, outs recorded,
+          hits+runs+RBIs and home-run Yes/No props can be parsed when both prices
+          are included. Extension imports follow the auto-parse toggle above.
+          Props without complete prices are skipped. Main lines are not supported yet.
+        </p>
+      )}
+
       <div style={controlsRowStyle}>
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>Sportsbook</span>
@@ -152,7 +162,7 @@ export default function ImportPanel({
               const nextBook = e.target.value;
               setSportsbook(nextBook);
 
-              if (nextBook === "Pinnacle") {
+              if (nextBook === "Pinnacle" || nextBook === "BetOnline") {
                 setBatchRole("fair_odds");
               } else if (nextBook !== "Auto") {
                 setBatchRole("target");

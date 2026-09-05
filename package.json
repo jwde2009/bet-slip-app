@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:parsers": "node --experimental-vm-modules --test tests/mlb-parsers.test.cjs"
   },
   "dependencies": {
     "next": "16.2.2",

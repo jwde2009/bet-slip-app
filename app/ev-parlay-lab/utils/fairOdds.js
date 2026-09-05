@@ -47,7 +47,8 @@ export function calculateFairOddsForMarkets(markets, options = {}) {
             const book = String(quote.sportsbook || "").trim().toLowerCase();
             if (book === "pinnacle") return 1;
             if (book === "fanduel") return 2;
-            return 3;
+            if (/^bet\s*online$/.test(book)) return 3;
+            return 4;
           };
 
           const priorityDiff = priority(a) - priority(b);
