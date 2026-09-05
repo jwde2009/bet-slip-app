@@ -6349,6 +6349,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
   function detectBookSource() {
     const host = String(window.location.hostname || "").toLowerCase();
 
+    if (host === "betonline.ag" || host.endsWith(".betonline.ag")) return "BetOnline";
     if (host.includes("pinnacle")) return "Pinnacle";
     if (host.includes("fanduel")) return "FanDuel";
     if (host.includes("betmgm")) return "BetMGM";
@@ -6485,6 +6486,13 @@ async function buildFanDuelOneNextNbaTabRawText() {
         text: rawPageText(),
       };
     }
+  }
+
+  if (detectedSource === "BetOnline") {
+    return {
+      source: detectedSource,
+      text: `BETONLINE_INITIAL_CAPTURE\n${rawPageText()}`,
+    };
   }
 
   if (detectedSource === "Pinnacle") {

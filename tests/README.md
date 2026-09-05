@@ -17,11 +17,14 @@ Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-
 - Clear stale theScore targets; filter requested targets by the current page's sport before taking the targeted-only branch.
 - Recognize tennis in the page URL before scanning mixed-sport sidebar text. This is **not** complete tennis market support.
 - Recognize Pinnacle's visible MLB prop headers; respect O/U sides and neighboring header boundaries.
+- Register BetOnline as a default sharp source alongside Pinnacle (FanDuel retains its existing sharp-mode toggle). Recognize `betonline.ag` and its subdomains for a raw visible-page capture. Hold automatic parsing and prevent BetOnline input from falling through to the DraftKings parser. The sportsbook-specific BetOnline market parser and drawer navigation are **not implemented**; a real expanded game capture is needed first.
+- URL imports now use their own source/text when deciding whether to pause, fixing references to variables that only exist in the queued-import handler.
 
 ## Live validation still required
 
 1. Reload the updated EV Parlay Extractor extension and refresh the sportsbook page. New game captures include `THESCORE_CAPTURE_VERSION: 20260905_MLB_1`.
 2. Recapture theScore MLB main lines and props. Compare moneyline prices and the first/last ladder thresholds to screenshots. Do not reuse the old fixture as corrected data.
 3. The requested expanded Pinnacle sample has been supplied and passes. No additional Pinnacle capture is needed for this parser check. Automatic drawer expansion remains unimplemented; importing a captured text file does not validate that navigation.
+4. For BetOnline parser setup, supply one expanded MLB event page including its main lines and a player-prop market with the displayed labels, lines and prices. On the current installed extension, copying the page text directly is sufficient; updated extension captures are an alternative after installation. The homepage URL alone does not establish a market layout.
 
 Full Next.js build, live extension navigation, Pinnacle automatic drawer expansion, MLB team totals, FanDuel's MLB workflow, and the remaining tennis/football roadmap are not validated or completed by this batch. Existing unrelated local changes are excluded.

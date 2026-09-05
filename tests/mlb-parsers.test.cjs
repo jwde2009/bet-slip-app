@@ -113,6 +113,28 @@ test('supplied expanded Pinnacle page: all 38 prop pairs and six game rows', asy
   ]);
 });
 
+test('BetOnline captures cannot fall through to another book\'s odds parser', async () => {
+  const context = vm.createContext({ console: { log() {} } });
+  const route = new vm.SourceTextModule(read('app/ev-parlay-lab/utils/parseOddsText.js'), { context });
+  const calls = [];
+  await route.link(specifier => {
+    const exportName = path.basename(specifier);
+    return new vm.SyntheticModule([exportName], function () {
+      this.setExport(exportName, () => { calls.push(exportName); return []; });
+    }, { context });
+  });
+  await route.evaluate();
+  // "More Bets" triggers the legacy DraftKings auto-detection for unknown books.
+  const raw = 'MLB\nSan Francisco Giants @ New York Mets\nMore Bets';
+  for (const sportsbook of ['BetOnline', 'Bet Online', ' betonline ']) {
+    assert.deepEqual(plain(route.namespace.parseOddsText(raw, { sportsbook })), []);
+  }
+  assert.deepEqual(plain(route.namespace.parseOddsText(`BETONLINE_INITIAL_CAPTURE\n${raw}`, { sportsbook: 'Auto' })), []);
+  assert.deepEqual(calls, []);
+  route.namespace.parseOddsText(raw, { sportsbook: 'Pinnacle' });
+  assert.deepEqual(calls, ['parsePinnacleText']);
+});
+
 // Real supplied header names, with explicitly synthetic expanded prices. These
 // validate parser behavior, NOT live extraction or the actual market odds.
 for (const [label, market] of [

@@ -12,6 +12,7 @@ function normalizeSportsbook(value) {
 
   if (["draftkings", "draft kings", "dk"].includes(s)) return "draftkings";
   if (["pinnacle", "pinny"].includes(s)) return "pinnacle";
+  if (/^bet\s*online$/.test(s)) return "betonline";
   if (["fanduel", "fan duel", "fd"].includes(s)) return "fanduel";
   if (["betmgm", "bet mgm", "mgm"].includes(s)) return "betmgm";
   if (["caesars", "caesar's", "czr"].includes(s)) return "caesars";
@@ -34,6 +35,13 @@ export function parseOddsText(rawText, context = {}) {
     console.log("NO RAW TEXT PROVIDED");
     return [];
   }
+
+  // Capture support precedes the book-specific market parser. Do not allow
+  // BetOnline text to fall through to DraftKings based on generic page labels.
+  if (
+    sportsbook === "betonline" ||
+    /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(normalizedRawText)
+  ) return [];
   
   if (sportsbook === "Pinnacle") {
     return parsePinnacleText(rawText);

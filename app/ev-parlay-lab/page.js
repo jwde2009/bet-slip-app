@@ -843,7 +843,8 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
           const book = String(quote.sportsbook || "").trim().toLowerCase();
           if (book === "pinnacle") return 1;
           if (book === "fanduel") return 2;
-          return 3;
+          if (/^bet\s*online$/.test(book)) return 3;
+          return 4;
         };
 
         const priorityDiff = priority(a) - priority(b);
@@ -1111,7 +1112,7 @@ export default function EVParlayLabPage() {
   function resolveImportBatchRole(sourceName) {
     const normalizedSource = String(sourceName || "").trim().toLowerCase();
 
-    if (normalizedSource === "pinnacle") return "fair_odds";
+    if (normalizedSource === "pinnacle" || /^bet\s*online$/.test(normalizedSource)) return "fair_odds";
 
     if (normalizedSource === "fanduel") {
       return fanDuelSharpMode ? "fair_odds" : "target";
@@ -1187,6 +1188,11 @@ export default function EVParlayLabPage() {
     return;
   }
 
+  if (/^bet\s*online$/i.test(String(sportsbook || "").trim()) || /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(inputText)) {
+    alert("BetOnline odds parsing is not available yet. Your raw capture remains in the input box; copy it for parser setup.");
+    return;
+  }
+
   const parsed = parseOddsText(inputText, {
     sportsbook,
     sourceType: "pasted_text",
@@ -1241,7 +1247,7 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     return (parsedRows || []).map((row) => {
       const resolvedRole =
         batchRole ||
-        (String(sportsbook || "").trim().toLowerCase() === "pinnacle"
+        (/^(pinnacle|bet\s*online)$/i.test(String(sportsbook || "").trim())
           ? "fair_odds"
           : "target");
 
@@ -2259,12 +2265,15 @@ const marketBundle = useMemo(() => {
       // BetMGM WNBA ladder imports need a manual threshold review before parsing.
       const sourceName = String(newest?.source || "");
       const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
+      const shouldHoldForBetOnline = /^bet\s*online$/i.test(sourceName.trim());
 
       window.__evParlayAutoParsePending = Boolean(
-        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
+        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders && !shouldHoldForBetOnline
       );
 
-      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
+      window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
+        ? "BetOnline capture loaded. Its odds parser is not available yet."
+        : shouldHoldForBetMgmWnbaLadders
         ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
         : "";
         }
@@ -2285,7 +2294,7 @@ const marketBundle = useMemo(() => {
       setBatchRole(fanDuelSharpMode ? "fair_odds" : "target");
     }
 
-    if (normalizedSportsbook === "pinnacle") {
+    if (normalizedSportsbook === "pinnacle" || /^bet\s*online$/.test(normalizedSportsbook)) {
       setBatchRole("fair_odds");
     }
   }, [sportsbook, fanDuelSharpMode]);
@@ -2378,16 +2387,20 @@ const marketBundle = useMemo(() => {
       }
 
       if (autoParse === "1") {
-        const sourceName = String(newest?.source || "");
-      const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
+        const sourceName = String(source || "");
+        const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, decoded);
+        const shouldHoldForBetOnline = /^bet\s*online$/i.test(sourceName.trim());
 
-      window.__evParlayAutoParsePending = Boolean(
-        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
-      );
+        window.__evParlayAutoParsePending = Boolean(
+          autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders && !shouldHoldForBetOnline
+        );
 
-      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
-        ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
-        : "";      }
+        window.__evParlayAutoParsePauseReason = shouldHoldForBetOnline
+          ? "BetOnline capture loaded. Its odds parser is not available yet."
+          : shouldHoldForBetMgmWnbaLadders
+            ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
+            : "";
+      }
     }
 
     params.delete("import");
