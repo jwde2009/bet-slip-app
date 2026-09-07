@@ -2,7 +2,7 @@ import {
   decimalToAmerican,
   impliedProbabilityFromDecimal,
 } from "./odds";
-import { normalizeMarketType } from "./marketNormalization";
+import { normalizeMarketType, getSelectionLineValue } from "./marketNormalization";
 
 export const DEVIG_METHOD_LABELS = {
   power: "Power",
@@ -68,7 +68,7 @@ export function calculateFairOddsForMarkets(markets, options = {}) {
           marketDisplayName: market.displayName || "",
           subjectKey: market.subjectKey || "",
           subjectName: extractFairOddsSubjectName(market),
-          lineValue: market.lineValue ?? null,
+          lineValue: getSelectionLineValue(market, selection),
           decimal: bestSharpQuote.oddsDecimal,
           sportsbook: bestSharpQuote.sportsbook,
           allSharpQuotes: sharpQuotes.map((quote) => ({
@@ -122,7 +122,7 @@ export function calculateFairOddsForMarkets(markets, options = {}) {
         marketLabel: formatFairOddsMarketLabel(market.marketType),
         subjectKey: market.subjectKey || "",
         subjectName: selection.subjectName || extractFairOddsSubjectName(market),
-        lineValue: market.lineValue ?? null,
+        lineValue: selection.lineValue,
         selectionId: selection.selectionId,
         selectionLabel: selection.selectionLabel,
         rawSelectionLabel: selection.rawSelectionLabel || selection.selectionLabel,
@@ -147,11 +147,10 @@ export function calculateFairOddsForMarkets(markets, options = {}) {
 function buildFairOddsFullSelectionLabel(market = {}, selection = {}) {
   const subject = extractFairOddsSubjectName(market);
   const side = normalizeFairOddsSide(selection.label);
+  const selectionLine = getSelectionLineValue(market, selection);
   const line =
-    market.lineValue !== null &&
-    market.lineValue !== undefined &&
-    market.lineValue !== ""
-      ? String(market.lineValue)
+    selectionLine !== null && selectionLine !== undefined && selectionLine !== ""
+      ? String(selectionLine)
       : "";
   const marketLabel = formatFairOddsMarketLabel(market.marketType);
 
@@ -185,7 +184,7 @@ function buildFairOddsFullMarketLabel(market = {}) {
       : "";
   const marketLabel = formatFairOddsMarketLabel(market.marketType);
 
-  return [eventName, subject, line, marketLabel].filter(Boolean).join(" | ");
+  return [eventName, subject, market.spreadLineTeam ? `${market.spreadLineTeam} ${line}` : line, marketLabel].filter(Boolean).join(" | ");
 }
 
 function normalizeFairOddsSide(selectionLabel = "") {

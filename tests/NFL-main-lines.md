@@ -1,0 +1,35 @@
+# NFL main lines: Pinnacle and BetMGM
+
+This adds pregame full-game moneyline, spread, and total rows. Pinnacle is the sharp source; BetMGM is the target. Player props, team totals, quarter/half markets, regulation-only markets, futures, live score handling, and automatic game-to-game navigation are outside this batch.
+
+## Capture and parse
+
+- Open an individual NFL game on Pinnacle. The parser recognizes its `Money Line – Game`, `Handicap – Game`, and `Total – Game` sections with labeled teams. Both `@` and `vs` event headings are accepted. Pinnacle's league-list layout is not newly supported by this batch.
+- On BetMGM, select **Game lines / Full game** before capture. Both the game-detail row layout and the league-list column layout are supported, including `Patriots 0-0 Seahawks 0-0` team labels, combined column headers, and inline prices. Do not infer the selected period from a copied list of dropdown options; ambiguous period runs are rejected. The extension captures currently rendered text without changing period controls or expanding player props.
+- Football URL/title detection provides `NFL_CAPTURE_LEAGUE` metadata. BetMGM football captures exit before the generic prop workflow, use a single pass, and bypass the WNBA ladder pause even if the sidebar contains WNBA/Player props. Both import transports still honor the app's auto-parse toggle.
+- Exact NFL lookup covers all 32 clubs, nicknames and common abbreviations. City-only labels are intentionally not enough to identify an NFL team. NFL routing runs before generic sport detection, so Giants/Cardinals/Jets/Panthers in an NFL event are not reclassified as MLB/NHL.
+- American and decimal odds, EVEN, and pick-em/zero spreads are supported. Each market requires two priced sides, equal total thresholds or opposite spread lines. Locked or missing prices cannot shift subsequent columns. Unknown headings stop the current price block; neighboring events cannot supply missing fields.
+- NFL spreads share an away-team-based signed market key while each selection and quote retains its own line. This lets Pinnacle's two sides de-vig together, keeps opposite alternate handicaps separate, and preserves the actual signs in fair-odds labels, single-edge results, and parlay legs.
+- NFL is available in the coverage league selector. Three complete main-line pairs satisfy the current NFL coverage profile; missing pairs still show incomplete coverage.
+
+## Evidence and tests
+
+Run `node --experimental-vm-modules --test tests/mlb-parsers.test.cjs tests/nfl-main-lines.test.cjs`, or `npm.cmd run test:parsers` in Windows PowerShell. No additional test packages are needed.
+
+The following public BetMGM pages were read on September 7, 2026:
+
+- [Patriots at Seahawks game detail](https://www.betmgm.com/en/sports/events/new-england-patriots-seattle-seahawks-6:43103): `fixtures/betmgm-nfl-detail-public.txt` transcribes the relevant navigation/market excerpt with blank lines, image links and unrelated sidebar games omitted. The actual decimal prices are checked: spread 1.88/1.95, total 1.93/1.90 at 44.5, and moneyline 2.60/1.52.
+- [Football league list](https://www.betmgm.com/en/sports/football-11/betting): `fixtures/betmgm-nfl-list-public.txt` transcribes the first two NFL cards and relevant section labels. Actual prices, team records and ordering are preserved. Other games, promotions and account/footer content are omitted.
+
+These are public page-text excerpts, not captures from the user's regional extension. Their prices are dated test data. They must not be presented as current betting quotes. American replacements, alternate spreads and profitable target prices used in other tests are explicitly synthetic.
+
+Pinnacle NFL tests use synthetic values in the section format already observed in the user's earlier Pinnacle captures. Public search found the NFL page, but the live browser connection timed out before a current NFL table could be inspected. No access-control workaround or unobserved API was used.
+
+All 49 regression tests pass. They check both parsers, period and event boundaries, incomplete/mismatched fields, NFL aliases, cross-book matching, fair odds, both spread signs through parlay generation, coverage and single-pass capture. Existing MLB tests also check football captures do not trigger the WNBA import pause. A full Next.js build and an NFL extension run in the user's Chrome still need validation.
+
+## Surface update and first check
+
+1. Stop the dev server with Ctrl+C. In `C:\Users\jwde2\Documents\bet-slip-app`, run `git switch codex/mlb-capture-first-pass`, `git pull --ff-only`, and `npm.cmd run dev`. Preserve any conflicting local edits instead of discarding them.
+2. Reload EV Parlay Extractor at `chrome://extensions`; its version should show **1.1.0**. Refresh EV Parlay Lab and the sportsbook pages.
+3. Open one NFL game's full-game markets on **Pinnacle first**, then the same game on **BetMGM**, and run the extension once on each. Expect six rows per book when all three market pairs are available, NFL labels, Pinnacle sharp and BetMGM target.
+4. If rows are missing, copy the extension-generated text from the app's Import Odds text box. Whole-page Markdown omits the input and editable prices and is not sufficient to check field values.

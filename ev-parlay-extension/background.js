@@ -310,7 +310,7 @@ async function extractBetMgmMultiPassPayload(tabId) {
   await safeShowToast(
     tabId,
     "Extracting BetMGM…",
-    "Starting BetMGM player-props capture. Keep this tab open.",
+    "Starting BetMGM capture. Keep this tab open.",
     {
       loading: true,
       pulse: true,
@@ -343,6 +343,8 @@ async function extractBetMgmMultiPassPayload(tabId) {
     }
 
     captures.push(`BETMGM_AUTOPASS_${pass + 1}\n${text}`);
+
+    if (/BETMGM_FOOTBALL_MAIN_LINES_CAPTURE/i.test(text)) break;
 
     if (/BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/i.test(text)) {
       await safeShowToast(
@@ -725,7 +727,10 @@ chrome.action.onClicked.addListener(async (tab) => {
       targetLabels: fanDuelTargetLabels,
     });
   } else if (isBetMgmTabUrl(tab.url)) {
-    payload = await extractBetMgmMultiPassPayload(sourceTabId);
+    const footballPage = /(?:\/football(?:-\d+)?\/|\/nfl(?:-\d+)?(?:\/|$)|\/ncaaf(?:-\d+)?(?:\/|$))/i.test(String(tab.url || "")) || /\b(?:NFL|NCAAF)\b/i.test(String(tab.title || ""));
+    payload = footballPage
+      ? await extractSinglePayloadFromTab(sourceTabId)
+      : await extractBetMgmMultiPassPayload(sourceTabId);
   } else if (isDraftKingsTabUrl(tab.url)) {
     payload = await extractDraftKingsMultiPassPayload(sourceTabId, {
       targetLabels: draftKingsTargetLabels,
@@ -6361,7 +6366,24 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
   const detectedSource = detectBookSource();
 
+  function footballCaptureLeague() {
+    const path = String(window.location.pathname || "");
+    const title = String(document.title || "");
+    if (/\/(?:nfl)(?:-\d+)?(?:\/|$)/i.test(path)) return "NFL";
+    if (/\/(?:ncaa|ncaaf)(?:-\d+)?(?:\/|$)/i.test(path)) return "NCAAF";
+    if (/\bNFL\b/i.test(title) && !/\b(Madden|Esports|Simulated)\b/i.test(title)) return "NFL";
+    if (/\bNCAAF\b/i.test(title)) return "NCAAF";
+    return /\/football(?:-\d+)?(?:\/|$)/i.test(path) ? "MIXED" : "";
+  }
+
   if (detectedSource === "BetMGM") {
+    const footballLeague = footballCaptureLeague();
+    if (footballLeague) {
+      return {
+        source: detectedSource,
+        text: `BETMGM_FOOTBALL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: ${footballLeague}\n${rawPageText()}`,
+      };
+    }
     try {
       const betMgmText = await buildBetMgmPlayerPropsMultiPassText();
 
@@ -6498,7 +6520,9 @@ async function buildFanDuelOneNextNbaTabRawText() {
   if (detectedSource === "Pinnacle") {
     return {
       source: detectedSource,
-      text: rawPageText(),
+      text: footballCaptureLeague() === "NFL"
+        ? `PINNACLE_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${rawPageText()}`
+        : rawPageText(),
     };
   }
 

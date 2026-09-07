@@ -1,5 +1,7 @@
 # MLB capture/parser repair: first batch
 
+NFL main-line support for Pinnacle and BetMGM is documented in [NFL-main-lines.md](NFL-main-lines.md). `test:parsers` runs both the MLB and NFL suites.
+
 Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-parsers.test.cjs`). No additional packages are required. Node's VM-module experimental warning is expected.
 
 ## Fixtures and limits

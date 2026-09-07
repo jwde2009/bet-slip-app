@@ -163,6 +163,7 @@ for (const transport of ['queue', 'url']) {
       ['Bet Online', bolRaw, true, true],
       ['Pinnacle', pinEvent, true, true],
       ['BetMGM', 'WNBA\nPlayer props', true, false],
+      ['BetMGM', 'BETMGM_FOOTBALL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\nWNBA\nPlayer props\nGame lines', true, true],
       ['BetMGM', 'MLB\nMoneyline', true, true],
     ]) {
       const state = {};
@@ -185,7 +186,7 @@ for (const transport of ['queue', 'url']) {
       assert.equal(state.rawText, text);
       assert.equal(state.pendingText, text);
       assert.equal(state.sportsbook, source);
-      assert.equal(Boolean(window.__evParlayAutoParsePauseReason), source === 'BetMGM' && /WNBA/.test(text));
+      assert.equal(Boolean(window.__evParlayAutoParsePauseReason), source === 'BetMGM' && /WNBA/.test(text) && !text.includes('BETMGM_FOOTBALL_MAIN_LINES_CAPTURE'));
       if (transport === 'queue') assert.equal(state.queue.length, 0);
       if (transport === 'url') {
         // A URL that did not request auto-parsing still loads text for manual use.

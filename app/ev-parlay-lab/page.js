@@ -21,7 +21,7 @@ import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
 import { buildParlayCandidates } from "./utils/parlayEngine";
-import { normalizeMarketType } from "./utils/marketNormalization";
+import { normalizeMarketType, getSelectionLineValue } from "./utils/marketNormalization";
 
 const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
 const AUTO_PARSE_QUEUED_IMPORTS_KEY = "EV_PARLAY_LAB_AUTO_PARSE_QUEUED_IMPORTS";
@@ -87,6 +87,8 @@ function writeAutoParseQueuedImportsSetting(value) {
 function isBetMgmWnbaLadderImport(sourceName = "", text = "") {
   const source = String(sourceName || "").trim().toLowerCase();
   if (source !== "betmgm") return false;
+  // Football captures also contain WNBA and Player props in global navigation.
+  if (/^BETMGM_FOOTBALL_MAIN_LINES_CAPTURE\s*$/m.test(String(text || ""))) return false;
 
   const compact = String(text || "").replace(/\s+/g, " ");
 
@@ -871,7 +873,7 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
         sport: market.sport || "",
         marketType: market.marketType,
         subjectName: extractSubjectNameFromMarket(market),
-        lineValue: market.lineValue,
+        lineValue: getSelectionLineValue(market, selection),
         selectionLabel: selection.label,
         targetSportsbook: bestTargetQuote.sportsbook,
         targetOddsAmerican: bestTargetQuote.oddsAmerican,
