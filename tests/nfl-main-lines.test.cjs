@@ -36,6 +36,56 @@ const pin = pinPrefix + pinMarkets;
 const detail = read('tests/fixtures/betmgm-nfl-detail-public.txt');
 const slate = read('tests/fixtures/betmgm-nfl-list-public.txt');
 
+test('User Pinnacle NFL capture retains all six actual game prices and excludes expanded props and periods', async () => {
+  const rows = (await parser('Pinnacle'))(read('tests/fixtures/pinnacle-nfl-patriots-seahawks-user.txt'));
+  assert.equal(rows.length, 6);
+  assert.ok(rows.every(row => row.sport === 'NFL' && row.league === 'NFL' && row.period === 'full_game' && row.eventLabelRaw === 'New England Patriots @ Seattle Seahawks'));
+  assert.deepEqual(rows.map(row => [row.marketType, row.selectionNormalized, row.lineValue, row.oddsAmerican]), [
+    ['moneyline_2way', 'New England Patriots', null, 156], ['moneyline_2way', 'Seattle Seahawks', null, -178],
+    ['spread', 'New England Patriots', 3.5, -114], ['spread', 'Seattle Seahawks', -3.5, 101],
+    ['total', 'Over', 44.5, -103], ['total', 'Under', 44.5, -113],
+  ]);
+});
+
+// Synthetic input in the legacy generic landing parser's accepted token order.
+// This reproduces its unsafe sport guesses, not a captured NFL landing layout.
+const legacyNflLanding = 'Football\nNFL\nToday\n' + [
+  ['New England Patriots', 'Seattle Seahawks'],
+  ['New York Jets', 'Tennessee Titans'],
+  ['Arizona Cardinals', 'New York Giants'],
+].map(teams => teams.join('\n') + '\n+3.5\n-110\n-3.5\n-110\n+150\n-170\n44.5\n-110\n44.5\n-110').join('\n');
+
+test('Unmarked NFL landing captures cannot fall through to soccer, NHL or MLB guesses', async () => {
+  const parse = await parser('Pinnacle');
+  assert.deepEqual(parse(legacyNflLanding), []);
+  assert.deepEqual(parse(`NFL_CAPTURE_LEAGUE: NFL\n${legacyNflLanding}`), []);
+});
+
+test('A sidebar NFL label does not prevent a later MLB event from parsing', async () => {
+  const parse = await parser('Pinnacle');
+  const input = read('tests/fixtures/pinnacle-mlb-expanded.txt');
+  assert.deepEqual(parse(`Football\nNFL\n${input}`).map(({ id, ...row }) => row), parse(input).map(({ id, ...row }) => row));
+});
+
+test('Unsupported Pinnacle NFL input shows next steps without changing loaded rows or parse time', async () => {
+  const source = read('app/ev-parlay-lab/page.js');
+  const start = source.indexOf('   function handleParse()');
+  const end = source.indexOf('  function applyBatchRoleToRows(', start);
+  assert.ok(start >= 0 && end > start);
+  const { parseNflMainLines } = await moduleExports('app/ev-parlay-lab/utils/parsers/nflMainLines.js');
+  const messages = [];
+  const fail = () => { throw new Error('Unsupported input must stop before parsing, normalizing or changing session state'); };
+  const handle = vm.runInNewContext(`${source.slice(start, end)}\nhandleParse`, {
+    rawText: legacyNflLanding, sportsbook: 'Pinnacle', parseNflMainLines,
+    console: { log() {} }, alert: message => messages.push(message),
+    parseOddsText: fail, setRows: fail, setRawText: fail, setLastParsedAt: fail,
+  });
+  handle();
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /individual NFL game/);
+  assert.match(messages[0], /input and loaded rows are preserved/);
+});
+
 test('Pinnacle NFL detail yields exactly six full-game sharp rows despite mixed-sport navigation', async () => {
   const rows = (await parser('Pinnacle'))(pin);
   assert.equal(rows.length, 6);

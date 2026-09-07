@@ -168,7 +168,15 @@ function parseBetMgmNfl(lines, forced) {
 
 function parsePinnacleNfl(lines, forced) {
   const rows = [];
-  let handled = forced;
+  // Older extension exports have no NFL_CAPTURE_LEAGUE marker. A landing
+  // card still establishes NFL scope through its league and exact team pair.
+  // Until its columns are supported, return no rows instead of letting the
+  // generic parser turn "New England" into soccer or "Jets" into hockey.
+  let handled = forced || lines.some((line, index) => {
+    const away = resolveNflMainLineTeam(line);
+    const home = resolveNflMainLineTeam(lines[index + 1]);
+    return away && home && away !== home && leagueBefore(lines, index).league === "NFL";
+  });
   // A visible matchup is the boundary even if it contains an unknown team.
   // That prevents the preceding game's parser from absorbing another event.
   const games = lines.flatMap((line, index) => {

@@ -17,6 +17,7 @@ import SessionReadinessPanel from "./components/SessionReadinessPanel";
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsText } from "./utils/parseOddsText";
 import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
+import { parseNflMainLines } from "./utils/parsers/nflMainLines";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
@@ -1189,6 +1190,14 @@ export default function EVParlayLabPage() {
   if (!inputText.trim()) {
     alert("Input is empty.");
     return;
+  }
+
+  if (/^pinnacle$/i.test(String(sportsbook || "").trim())) {
+    const nflRows = parseNflMainLines(inputText, "Pinnacle");
+    if (nflRows !== null && !nflRows.length) {
+      alert("Pinnacle NFL: no complete full-game main lines found. Open an individual NFL game and run the extractor there; NFL landing-page tables are not supported yet. Your input and loaded rows are preserved.");
+      return;
+    }
   }
 
   if (/^bet\s*online$/i.test(String(sportsbook || "").trim()) || /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(inputText)) {
