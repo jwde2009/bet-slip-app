@@ -1,3 +1,10 @@
+export function getSelectionLineValue(market = {}, selection = {}) {
+  if (String(market.sport).toUpperCase() === "NFL" && normalizeMarketType(market.marketType) === "spread" && Number.isFinite(selection.lineValue)) {
+    return selection.lineValue;
+  }
+  return market.lineValue ?? null;
+}
+
 export function normalizeMarketType(value = "") {
   const text = String(value || "").trim().toLowerCase();
 

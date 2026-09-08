@@ -263,6 +263,9 @@ async function extractDraftKingsMultiPassPayload(tabId, options = {}) {
 
     captures.push(`DRAFTKINGS_AUTOPASS_${pass + 1}\n${text}`);
 
+    // NFL slates are already complete; never retry NBA prop steps here.
+    if (/^DRAFTKINGS_NFL_MAIN_LINES_CAPTURE$/m.test(text)) break;
+
     const scheduledMatch = text.match(/DRAFTKINGS_SCHEDULED_STEP:\s*(.+)/i);
 
     if (!scheduledMatch?.[1]) {
@@ -310,7 +313,7 @@ async function extractBetMgmMultiPassPayload(tabId) {
   await safeShowToast(
     tabId,
     "Extracting BetMGM…",
-    "Starting BetMGM player-props capture. Keep this tab open.",
+    "Starting BetMGM capture. Keep this tab open.",
     {
       loading: true,
       pulse: true,
@@ -343,6 +346,8 @@ async function extractBetMgmMultiPassPayload(tabId) {
     }
 
     captures.push(`BETMGM_AUTOPASS_${pass + 1}\n${text}`);
+
+    if (/BETMGM_FOOTBALL_MAIN_LINES_CAPTURE/i.test(text)) break;
 
     if (/BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/i.test(text)) {
       await safeShowToast(
@@ -533,6 +538,9 @@ async function extractFanDuelMultiPassPayload(tabId, options = {}) {
 
     captures.push(`FANDUEL_AUTOPASS_${pass + 1}\n${text}`);
 
+    // NFL slates are already complete; never retry NBA prop steps here.
+    if (/^FANDUEL_NFL_MAIN_LINES_CAPTURE$/m.test(text)) break;
+
     const hasScheduledNextStep = /FANDUEL_SCHEDULED_/i.test(text);
 
     if (targetLabels.length && /FANDUEL_TARGETS_COMPLETE/i.test(text)) {
@@ -707,6 +715,10 @@ chrome.action.onClicked.addListener(async (tab) => {
       }
     );
 
+  }
+
+  // Clear stale targeting even when this run has no missing-market targets.
+  if (isTheScoreTabUrl(tab.url)) {
     await safeExecuteScript({
       tabId: sourceTabId,
       func: seedTheScoreTargetWorkflowLabels,
@@ -721,7 +733,10 @@ chrome.action.onClicked.addListener(async (tab) => {
       targetLabels: fanDuelTargetLabels,
     });
   } else if (isBetMgmTabUrl(tab.url)) {
-    payload = await extractBetMgmMultiPassPayload(sourceTabId);
+    const footballPage = /(?:\/football(?:-\d+)?\/|\/nfl(?:-\d+)?(?:\/|$)|\/ncaaf(?:-\d+)?(?:\/|$))/i.test(String(tab.url || "")) || /\b(?:NFL|NCAAF)\b/i.test(String(tab.title || ""));
+    payload = footballPage
+      ? await extractSinglePayloadFromTab(sourceTabId)
+      : await extractBetMgmMultiPassPayload(sourceTabId);
   } else if (isDraftKingsTabUrl(tab.url)) {
     payload = await extractDraftKingsMultiPassPayload(sourceTabId, {
       targetLabels: draftKingsTargetLabels,
@@ -6345,6 +6360,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
   function detectBookSource() {
     const host = String(window.location.hostname || "").toLowerCase();
 
+    if (host === "betonline.ag" || host.endsWith(".betonline.ag")) return "BetOnline";
     if (host.includes("pinnacle")) return "Pinnacle";
     if (host.includes("fanduel")) return "FanDuel";
     if (host.includes("betmgm")) return "BetMGM";
@@ -6356,7 +6372,24 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
   const detectedSource = detectBookSource();
 
+  function footballCaptureLeague() {
+    const path = String(window.location.pathname || "");
+    const title = String(document.title || "");
+    if (/\/(?:nfl)(?:-\d+)?(?:\/|$)/i.test(path)) return "NFL";
+    if (/\/(?:ncaa|ncaaf)(?:-\d+)?(?:\/|$)/i.test(path)) return "NCAAF";
+    if (/\bNFL\b/i.test(title) && !/\b(Madden|Esports|Simulated)\b/i.test(title)) return "NFL";
+    if (/\bNCAAF\b/i.test(title)) return "NCAAF";
+    return /\/football(?:-\d+)?(?:\/|$)/i.test(path) ? "MIXED" : "";
+  }
+
   if (detectedSource === "BetMGM") {
+    const footballLeague = footballCaptureLeague();
+    if (footballLeague) {
+      return {
+        source: detectedSource,
+        text: `BETMGM_FOOTBALL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: ${footballLeague}\n${rawPageText()}`,
+      };
+    }
     try {
       const betMgmText = await buildBetMgmPlayerPropsMultiPassText();
 
@@ -6370,6 +6403,22 @@ async function buildFanDuelOneNextNbaTabRawText() {
         text: rawPageText(),
       };
     }
+  }
+
+  // Recognize the observed NFL listing before entering sport-specific prop
+  // navigation. URL/title alone is insufficient: game pages retain their own
+  // capture workflow, and unrelated sidebar NFL links are not league context.
+  const nflListingText = rawPageText();
+  const isFanDuelNflListing = detectedSource === "FanDuel" &&
+    /NFL Odds\s+NFL\s+SPREAD\s+MONEY\s+TOTAL/i.test(nflListingText);
+  const isDraftKingsNflListing = detectedSource === "DraftKings" &&
+    (/Sportsbook\s*\/\s*Football Odds\s*\/\s*NFL Odds/i.test(nflListingText) || footballCaptureLeague() === "NFL") &&
+    /GAME LINES[\s\S]*Spread\s+Total\s+Moneyline/i.test(nflListingText);
+  if (isFanDuelNflListing || isDraftKingsNflListing) {
+    return {
+      source: detectedSource,
+      text: `${isFanDuelNflListing ? "FANDUEL" : "DRAFTKINGS"}_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${nflListingText}`,
+    };
   }
 
   if (detectedSource === "FanDuel") {
@@ -6483,11 +6532,140 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
   }
 
+  if (detectedSource === "BetOnline") {
+    return {
+      source: detectedSource,
+      text: `BETONLINE_INITIAL_CAPTURE\n${rawPageText()}`,
+    };
+  }
+
   if (detectedSource === "Pinnacle") {
     return {
       source: detectedSource,
-      text: rawPageText(),
+      text: footballCaptureLeague() === "NFL"
+        ? `PINNACLE_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${rawPageText()}`
+        : rawPageText(),
     };
+  }
+
+  function resolveTheScoreNflTeam(value) {
+    const clubs = [
+      ["Arizona Cardinals", "ARI"], ["Atlanta Falcons", "ATL"],
+      ["Baltimore Ravens", "BAL"], ["Buffalo Bills", "BUF"],
+      ["Carolina Panthers", "CAR"], ["Chicago Bears", "CHI"],
+      ["Cincinnati Bengals", "CIN"], ["Cleveland Browns", "CLE"],
+      ["Dallas Cowboys", "DAL"], ["Denver Broncos", "DEN"],
+      ["Detroit Lions", "DET"], ["Green Bay Packers", "GB"],
+      ["Houston Texans", "HOU"], ["Indianapolis Colts", "IND"],
+      ["Jacksonville Jaguars", "JAX", "JAC"], ["Kansas City Chiefs", "KC"],
+      ["Las Vegas Raiders", "LV"], ["Los Angeles Chargers", "LAC", "LA"],
+      ["Los Angeles Rams", "LAR", "LA"], ["Miami Dolphins", "MIA"],
+      ["Minnesota Vikings", "MIN"], ["New England Patriots", "NE"],
+      ["New Orleans Saints", "NO"], ["New York Giants", "NYG", "NY"],
+      ["New York Jets", "NYJ", "NY"], ["Philadelphia Eagles", "PHI"],
+      ["Pittsburgh Steelers", "PIT"], ["San Francisco 49ers", "SF"],
+      ["Seattle Seahawks", "SEA"], ["Tampa Bay Buccaneers", "TB"],
+      ["Tennessee Titans", "TEN"], ["Washington Commanders", "WAS", "WSH"],
+    ];
+    const normalize = text => clean(text).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const wanted = normalize(clean(value).replace(/\s+\d+-\d+(?:-\d+)?(?:,\s*\d+(?:st|nd|rd|th)\s+(?:AFC|NFC)\s+(?:East|West|North|South))?$/i, ""));
+    for (const [name, ...codes] of clubs) {
+      const nickname = name.split(" ").at(-1);
+      // NY and LA need the nickname to distinguish their two NFL clubs.
+      const candidates = [name, nickname, ...codes.filter(code => !["NY", "LA"].includes(code)), ...codes.map(code => `${code} ${nickname}`)];
+      if (candidates.some(candidate => normalize(candidate) === wanted)) return name;
+    }
+    return "";
+  }
+
+  function buildTheScoreNflExport() {
+    const selected = Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"], [aria-current="page"]'));
+    if (selected.some(el => /^(?:(?:1st|2nd|3rd|4th|First|Second) (?:Half|Quarter)|Live|Regulation|Team Totals?)$/i.test(clean(el.innerText)))) return "";
+    const types = ["AWAY_SPREAD", "HOME_SPREAD", "OVER", "UNDER", "AWAY_MONEYLINE", "HOME_MONEYLINE"];
+    const cards = Array.from(document.querySelectorAll("article"));
+    const drawers = Array.from(document.querySelectorAll("details[data-testid]")).filter(drawer =>
+      /^(Main Lines|Game Lines)$/i.test(clean(drawer.querySelector("summary h2")?.innerText))
+    );
+    const containers = [...cards, ...drawers];
+    if (!containers.length) containers.push(document.querySelector("main") || document.body);
+    const blocks = [];
+    for (const container of containers) {
+      const teams = Array.from(container.querySelectorAll('button[data-testid="team-name"]')).map(el => resolveTheScoreNflTeam(el.innerText));
+      if (teams.length !== 2 || !teams[0] || !teams[1] || teams[0] === teams[1]) continue;
+      const start = clean(container.querySelector(".text-style-xs-medium")?.innerText || "");
+      if (isLiveStartText(start)) continue;
+      const buttons = Array.from(container.querySelectorAll("button[data-type]")).filter(btn => types.includes(btn.getAttribute("data-type")));
+      if (buttons.length !== 6 || new Set(buttons.map(btn => btn.getAttribute("data-type"))).size !== 6) continue;
+      const cells = {};
+      for (const btn of buttons) {
+        if (btn.disabled || btn.getAttribute("aria-disabled") === "true") continue;
+        const type = btn.getAttribute("data-type");
+        const values = [...new Set(Array.from(btn.querySelectorAll("span")).map(el => clean(el.innerText).replace(/−/g, "-")).filter(Boolean))];
+        const prices = values.filter(value => /^EVEN$/i.test(value) || (/^[+-]\d+$/.test(value) && Math.abs(Number(value)) >= 100));
+        const lines = values.filter(value => /MONEYLINE$/.test(type) ? false : /SPREAD$/.test(type)
+          ? /^(?:PK|PICK|0)$/i.test(value) || (/^[+-]\d+(?:\.\d+)?$/.test(value) && Math.abs(Number(value)) < 100)
+          : new RegExp(`^${type === "OVER" ? "O" : "U"}\\s*\\d+(?:\\.\\d+)?$`, "i").test(value));
+        if (prices.length !== 1 || (!/MONEYLINE$/.test(type) && lines.length !== 1)) continue;
+        cells[type] = { price: /^EVEN$/i.test(prices[0]) ? "+100" : prices[0], line: /^(PK|PICK)$/i.test(lines[0] || "") ? "0" : lines[0] };
+      }
+      const [away, home] = teams;
+      const out = ["THESCORE_STRUCTURED_EXPORT", "THESCORE_CAPTURE_VERSION: 20260908_NFL_1", "Sport: NFL", `Event: ${away} @ ${home}`];
+      if (start) out.push(`Start: ${start}`);
+      const a = cells.AWAY_SPREAD, h = cells.HOME_SPREAD, o = cells.OVER, u = cells.UNDER;
+      if (a && h && Math.abs(Number(a.line) + Number(h.line)) < 0.0001)
+        out.push("", "Market: Spread", `${away} | ${a.line} | ${a.price}`, `${home} | ${h.line} | ${h.price}`);
+      if (o && u && Number(o.line.slice(1).trim()) === Number(u.line.slice(1).trim()))
+        out.push("", "Market: Total", `Over | ${o.line.slice(1).trim()} | ${o.price}`, `Under | ${u.line.slice(1).trim()} | ${u.price}`);
+      if (cells.AWAY_MONEYLINE && cells.HOME_MONEYLINE)
+        out.push("", "Market: Moneyline", `${away} | ${cells.AWAY_MONEYLINE.price}`, `${home} | ${cells.HOME_MONEYLINE.price}`);
+      if (out.some(line => line.startsWith("Market:"))) blocks.push(out.join("\n"));
+    }
+    return [...new Set(blocks)].join("\n\n");
+  }
+
+  function resolveTheScoreMlbTeam(value) {
+    // One MLB-only lookup for event extraction and display-name cleanup. Keep
+    // short names such as ATL/NY out of the basketball and hockey alias lists.
+    const aliases = [
+      ["Arizona Diamondbacks", "ARI", "Arizona", "Diamondbacks"],
+      ["Atlanta Braves", "ATL", "Atlanta", "Braves"],
+      ["Baltimore Orioles", "BAL", "Baltimore", "Orioles"],
+      ["Boston Red Sox", "BOS", "Boston", "Red Sox"],
+      ["Chicago Cubs", "CHC", "Chi Cubs", "Cubs"],
+      ["Chicago White Sox", "CWS", "CHW", "Chi White Sox", "White Sox"],
+      ["Cincinnati Reds", "CIN", "Cincinnati", "Reds"],
+      ["Cleveland Guardians", "CLE", "Cleveland", "Guardians"],
+      ["Colorado Rockies", "COL", "Colorado", "Rockies"],
+      ["Detroit Tigers", "DET", "Detroit", "Tigers"],
+      ["Houston Astros", "HOU", "Houston", "Astros"],
+      ["Kansas City Royals", "KC", "KCR", "Kansas City", "Royals"],
+      ["Los Angeles Angels", "LAA", "LA Angels", "Angels"],
+      ["Los Angeles Dodgers", "LAD", "LA Dodgers", "Dodgers"],
+      ["Miami Marlins", "MIA", "Miami", "Marlins"],
+      ["Milwaukee Brewers", "MIL", "Milwaukee", "Brewers"],
+      ["Minnesota Twins", "MIN", "Minnesota", "Twins"],
+      ["New York Mets", "NYM", "NY Mets", "Mets"],
+      ["New York Yankees", "NYY", "NY Yankees", "Yankees"],
+      ["Athletics", "ATH", "OAK", "Oakland Athletics", "Oak Athletics"],
+      ["Philadelphia Phillies", "PHI", "Philadelphia", "Phillies"],
+      ["Pittsburgh Pirates", "PIT", "Pittsburgh", "Pirates"],
+      ["San Diego Padres", "SD", "SDP", "San Diego", "Padres"],
+      ["San Francisco Giants", "SF", "SFG", "San Francisco", "Giants"],
+      ["Seattle Mariners", "SEA", "Seattle", "Mariners"],
+      ["St. Louis Cardinals", "STL", "St. Louis", "Cardinals"],
+      ["Tampa Bay Rays", "TB", "TBR", "Tampa Bay", "Rays"],
+      ["Texas Rangers", "TEX", "Texas", "Rangers"],
+      ["Toronto Blue Jays", "TOR", "Toronto", "Blue Jays"],
+      ["Washington Nationals", "WSH", "WAS", "Washington", "Nationals"],
+    ];
+    const normalize = (text) => clean(text).toLowerCase().replace(/\./g, "");
+    const wanted = normalize(value);
+    for (const [canonical, ...names] of aliases) {
+      const nickname = names[names.length - 1];
+      const candidates = [canonical, ...names, ...names.filter((name) => /^[A-Z]{2,3}$/.test(name)).map((code) => `${code} ${nickname}`)];
+      if (candidates.some((candidate) => normalize(candidate) === wanted)) return canonical;
+    }
+    return "";
   }
 
   function eventText() {
@@ -6580,6 +6758,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
     function resolveKnownTeam(value) {
       const cleaned = normalizeCandidate(value);
+      if (sportText() === "MLB") return resolveTheScoreMlbTeam(cleaned);
       const lower = cleaned.toLowerCase();
 
       const sorted = knownTeamAliases
@@ -6654,10 +6833,14 @@ async function buildFanDuelOneNextNbaTabRawText() {
       const text = clean(document.body.innerText).toLowerCase();
       const path = String(window.location.pathname || "").toLowerCase();
 
+      if (footballCaptureLeague() === "NFL") return "NFL";
+      if (/\d+-\d+-\d+,\s*\d+(?:st|nd|rd|th)\s+(?:AFC|NFC)\s+(?:East|West|North|South)/i.test(text)) return "NFL";
+
       if (/hockey|nhl/.test(path)) return "NHL";
       if (/wnba/.test(path)) return "WNBA";
       if (/basketball|nba/.test(path)) return "NBA";
       if (/baseball|mlb/.test(path)) return "MLB";
+      if (/tennis|\batp\b|\bwta\b/.test(path)) return "TENNIS";
 
       if (
         text.includes("shots on goal") ||
@@ -6770,6 +6953,8 @@ async function buildFanDuelOneNextNbaTabRawText() {
       .trim();
 
     if (!cleaned) return "";
+
+    if (sportText() === "MLB") return resolveTheScoreMlbTeam(cleaned) || cleaned;
 
     const knownTeamAliases = [
       ["Arizona Diamondbacks", ["arizona diamondbacks", "ari diamondbacks", "diamondbacks"]],
@@ -6888,6 +7073,7 @@ async function buildFanDuelOneNextNbaTabRawText() {
     const sport = sportText();
 
     out.push("THESCORE_STRUCTURED_EXPORT");
+    out.push("THESCORE_CAPTURE_VERSION: 20260905_MLB_1");
     out.push("Sport: " + sport);
     out.push("Event: " + event);
 
@@ -7015,7 +7201,10 @@ async function buildFanDuelOneNextNbaTabRawText() {
         ].includes(type);
       });
 
-      if (!away || !home || selectionButtons.length < 6) return false;
+      // A broad page may contain other totals/spreads. Only accept one complete,
+      // unambiguous table; never overwrite one game's prices with later buttons.
+      if (!away || !home || away === home || selectionButtons.length !== 6) return false;
+      if (new Set(selectionButtons.map((btn) => btn.getAttribute("data-type"))).size !== 6) return false;
 
       let awaySpread = null;
       let homeSpread = null;
@@ -7024,15 +7213,24 @@ async function buildFanDuelOneNextNbaTabRawText() {
       let awayMoney = null;
       let homeMoney = null;
 
+      let invalidSelection = false;
       selectionButtons.forEach((btn) => {
         const type = String(btn.getAttribute("data-type") || "");
         const spans = Array.from(btn.querySelectorAll("span"))
           .map((el) => clean(el.innerText))
           .filter(Boolean);
 
-        const line =
-          spans.find((s) => /^[OU]\s*\d+(\.\d+)?$/i.test(s) || /^[+-]\d+(\.\d+)?$/.test(s)) || "";
-        const odds = toOdds(spans.find((s) => /^[-+]\d+$|^EVEN$/i.test(s)) || "");
+        const oddsValues = [...new Set(spans.filter((s) =>
+          /^EVEN$/i.test(s) || (/^[+-]\d+$/.test(s) && Math.abs(Number(s)) >= 100)
+        ).map(toOdds))];
+        const line = spans.find((s) =>
+          /^[OU]\s*\d+(\.\d+)?$/i.test(s) ||
+          (/^[+-]\d+(\.\d+)?$/.test(s) && Math.abs(Number(s)) < 100)
+        ) || "";
+        if (oddsValues.length !== 1 || (!/MONEYLINE$/.test(type) && !line)) {
+          invalidSelection = true;
+        }
+        const odds = oddsValues[0] || "";
         const entry = { line, odds };
 
         if (type === "AWAY_SPREAD") awaySpread = entry;
@@ -7042,6 +7240,17 @@ async function buildFanDuelOneNextNbaTabRawText() {
         if (type === "AWAY_MONEYLINE") awayMoney = entry;
         if (type === "HOME_MONEYLINE") homeMoney = entry;
       });
+
+      if (
+        invalidSelection ||
+        !awaySpread || !homeSpread || !overTotal || !underTotal || !awayMoney || !homeMoney ||
+        !/^[+-]\d+(?:\.\d+)?$/.test(awaySpread.line) ||
+        !/^[+-]\d+(?:\.\d+)?$/.test(homeSpread.line) ||
+        Math.abs(Number(awaySpread.line) + Number(homeSpread.line)) > 0.0001 ||
+        !/^O\s*\d+(?:\.\d+)?$/i.test(overTotal.line) ||
+        !/^U\s*\d+(?:\.\d+)?$/i.test(underTotal.line) ||
+        Number(overTotal.line.replace(/^O\s*/i, "")) !== Number(underTotal.line.replace(/^U\s*/i, ""))
+      ) return false;
 
       if (awaySpread && homeSpread) {
         out.push("");
@@ -7251,11 +7460,17 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
 
 
-    // TheScore main lines are one table: Spread / Total / Moneyline.
-    // Try the safer text-order parser first so Spread is not skipped after
-    // the broad DOM parser captures only Total/Moneyline.
-    if (!appendVisibleMainLinesFromScoreTextOrder()) {
+    // Prefer the market-typed buttons in the specific table over text order.
+    // The legacy MLB text fallback can reuse run-line odds as moneyline odds.
+    const mainDrawer = Array.from(document.querySelectorAll("details[data-testid]")).find(
+      (drawer) => /^Main Lines$/i.test(clean(drawer.querySelector("summary h2")?.innerText))
+    );
+    if (!appendVisibleMainLinesFromContainer(mainDrawer)) {
       appendVisibleMainLinesFromContainer(document.querySelector("main") || document.body);
+    }
+    if (!wroteMainLines && sport !== "MLB") appendVisibleMainLinesFromScoreTextOrder();
+    if (!wroteMainLines && sport === "MLB") {
+      out.push("THESCORE_MAIN_LINES_SKIPPED: no unambiguous market-typed MLB table");
     }
     document.querySelectorAll("details[data-testid]").forEach((drawer) => {
       const titleEl = drawer.querySelector("summary h2");
@@ -7312,9 +7527,8 @@ async function buildFanDuelOneNextNbaTabRawText() {
               if (type === "HOME_MONEYLINE") homeMoney = entry;
             });
 
-            if (!appendVisibleMainLinesFromScoreTextOrder()) {
-              appendVisibleMainLinesFromContainer(drawer);
-            }
+            appendVisibleMainLinesFromContainer(drawer);
+            if (!wroteMainLines && sport !== "MLB") appendVisibleMainLinesFromScoreTextOrder();
 
             return;
           }
@@ -7331,9 +7545,13 @@ async function buildFanDuelOneNextNbaTabRawText() {
         out.push("");
         out.push("Market: " + drawerMarket);
 
-        const headers = Array.from(ladderTable.querySelectorAll("thead th"))
-          .map((th) => clean(th.innerText))
-          .filter(Boolean);
+        // Keep blank corner/header cells. Removing them shifts 1+ odds to 2+
+        // and silently drops the last threshold. Reject ambiguous layouts.
+        const headerCells = Array.from(ladderTable.querySelectorAll("thead th"));
+        const headers = headerCells.map((th) => clean(th.innerText));
+        const simpleHeaders = headerCells.every((th) =>
+          Number(th.colSpan || 1) === 1 && Number(th.rowSpan || 1) === 1
+        );
 
         const rows = drawer.querySelectorAll("tbody tr");
 
@@ -7341,15 +7559,26 @@ async function buildFanDuelOneNextNbaTabRawText() {
           const player = clean(row.querySelector("th")?.innerText);
           if (!player) return;
 
-          Array.from(row.querySelectorAll("td")).forEach((td, idx) => {
+          const oddsCells = Array.from(row.querySelectorAll("td"));
+          const offset = headers.length - oddsCells.length;
+          if (
+            !simpleHeaders || ![0, 1].includes(offset) ||
+            (offset === 1 && /^\d+(?:\.\d+)?\+$/.test(headers[0])) ||
+            oddsCells.some((td) => Number(td.colSpan || 1) !== 1)
+          ) {
+            out.push(`THESCORE_LADDER_SKIPPED: ${drawerMarket} | ${player} | ambiguous columns`);
+            return;
+          }
+
+          oddsCells.forEach((td, idx) => {
             const odds = Array.from(td.querySelectorAll("span"))
               .map((s) => clean(s.innerText))
               .find((v) => /^[-+]\d+$|^EVEN$/i.test(v));
 
             if (!odds || odds === "--") return;
 
-            const threshold = headers[idx + 1];
-            if (!threshold) return;
+            const threshold = headers[idx + offset];
+            if (!/^\d+(?:\.\d+)?\+$/.test(threshold || "")) return;
 
             out.push(`${player} | ${threshold} | ${odds.toUpperCase()}`);
           });
@@ -7569,6 +7798,22 @@ async function buildFanDuelOneNextNbaTabRawText() {
       .replace(/\s*\/\s*/g, "/")
       .replace(/^player\s+/i, "")
       .trim();
+  }
+
+  function filterTheScoreTargetLabelsForSport(labels, sport) {
+    const basketball = /^(points|player points|rebounds|player rebounds|assists|player assists|threes|three pointers|3-pointers made|combos|player combos|pts \+ reb \+ ast|pts \+ reb|pts \+ ast|reb \+ ast|double double|triple double)$/i;
+    const bySport = {
+      NBA: basketball,
+      WNBA: basketball,
+      NHL: /^(goals|goal scorer|goalscorer|shots on goal|sog|points\/assists|assists|player assists|goalie\/defense|saves|goalie saves|player saves|hits|blocked shots|power play points)$/i,
+      MLB: /^(hits|total bases|home runs|rbis?|runs|runs scored|pitcher strikeouts|strikeouts|hits allowed|earned runs|outs recorded|walks allowed|pitcher props|batter props|player props)$/i,
+      TENNIS: /^(game props|match props|sets|set props|total games|game spread|match winner)$/i,
+    };
+    const pattern = bySport[String(sport || "").toUpperCase()];
+    if (!pattern) return [];
+    return labels.filter((label) =>
+      /^(popular|main lines|game lines)$/i.test(label) || pattern.test(label)
+    );
   }
 
   function isTheScoreMarketTabText(value) {
@@ -7829,7 +8074,9 @@ async function buildFanDuelOneNextNbaTabRawText() {
 
         sessionStorage.removeItem("EV_TS_TARGET_WORKFLOW_LABELS");
 
-        return labels;
+        // The coverage snapshot spans sports. Never let missing WNBA markets
+        // send an MLB/tennis capture into a basketball-only early return.
+        return filterTheScoreTargetLabelsForSport(labels, sportText());
       } catch (err) {
         return [];
       }
@@ -7958,6 +8205,13 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
 
     return mergeStructuredExports(exports);
+  }
+
+  if (detectedSource === "TheScore" && sportText() === "NFL") {
+    return {
+      source: "TheScore",
+      text: `THESCORE_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${buildTheScoreNflExport() || "THESCORE_MAIN_LINES_SKIPPED: select full-game lines and wait for visible priced teams"}`,
+    };
   }
 
   if (detectedSource === "TheScore") {

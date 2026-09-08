@@ -16,11 +16,13 @@ import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsText } from "./utils/parseOddsText";
+import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
+import { parseNflMainLines } from "./utils/parsers/nflMainLines";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
 import { buildParlayCandidates } from "./utils/parlayEngine";
-import { normalizeMarketType } from "./utils/marketNormalization";
+import { normalizeMarketType, getSelectionLineValue } from "./utils/marketNormalization";
 
 const IMPORT_QUEUE_KEY = "EV_IMPORT_QUEUE";
 const AUTO_PARSE_QUEUED_IMPORTS_KEY = "EV_PARLAY_LAB_AUTO_PARSE_QUEUED_IMPORTS";
@@ -86,6 +88,8 @@ function writeAutoParseQueuedImportsSetting(value) {
 function isBetMgmWnbaLadderImport(sourceName = "", text = "") {
   const source = String(sourceName || "").trim().toLowerCase();
   if (source !== "betmgm") return false;
+  // Football captures also contain WNBA and Player props in global navigation.
+  if (/^BETMGM_FOOTBALL_MAIN_LINES_CAPTURE\s*$/m.test(String(text || ""))) return false;
 
   const compact = String(text || "").replace(/\s+/g, " ");
 
@@ -843,7 +847,8 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
           const book = String(quote.sportsbook || "").trim().toLowerCase();
           if (book === "pinnacle") return 1;
           if (book === "fanduel") return 2;
-          return 3;
+          if (/^bet\s*online$/.test(book)) return 3;
+          return 4;
         };
 
         const priorityDiff = priority(a) - priority(b);
@@ -869,7 +874,7 @@ function buildTopSingleEdgeBets({ markets, fairOddsResults, filters }) {
         sport: market.sport || "",
         marketType: market.marketType,
         subjectName: extractSubjectNameFromMarket(market),
-        lineValue: market.lineValue,
+        lineValue: getSelectionLineValue(market, selection),
         selectionLabel: selection.label,
         targetSportsbook: bestTargetQuote.sportsbook,
         targetOddsAmerican: bestTargetQuote.oddsAmerican,
@@ -1111,7 +1116,7 @@ export default function EVParlayLabPage() {
   function resolveImportBatchRole(sourceName) {
     const normalizedSource = String(sourceName || "").trim().toLowerCase();
 
-    if (normalizedSource === "pinnacle") return "fair_odds";
+    if (normalizedSource === "pinnacle" || /^bet\s*online$/.test(normalizedSource)) return "fair_odds";
 
     if (normalizedSource === "fanduel") {
       return fanDuelSharpMode ? "fair_odds" : "target";
@@ -1187,6 +1192,32 @@ export default function EVParlayLabPage() {
     return;
   }
 
+  if (/^pinnacle$/i.test(String(sportsbook || "").trim())) {
+    const nflRows = parseNflMainLines(inputText, "Pinnacle");
+    if (nflRows !== null && !nflRows.length) {
+      alert("Pinnacle NFL: no complete full-game main lines found. Select All or Game on the NFL listing, or open an individual NFL game, then capture again once prices are visible. Your input and loaded rows are preserved.");
+      return;
+    }
+  }
+
+  if (/^thescore$/i.test(String(sportsbook || "").trim())) {
+    const nflRows = parseNflMainLines(inputText, "TheScore");
+    if (nflRows !== null && !nflRows.length) {
+      alert("theScore NFL: no usable full-game pairs found. Older captures replaced NFL teams with other leagues' names. Reload extension 1.1.1 or later, refresh the NFL page, select full-game lines, and capture again. Your input and loaded rows are preserved.");
+      return;
+    }
+  }
+
+  if (/^bet\s*online$/i.test(String(sportsbook || "").trim()) || /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(inputText)) {
+    const capture = inspectBetOnlineText(inputText);
+    if (!capture.rows.length) {
+      alert(capture.recognizedPropMarkets
+        ? `BetOnline: found ${capture.recognizedPropMarkets} MLB prop markets, but no complete pairs with valid prices. Your raw text is preserved. A screenshot showing the prices will help check the capture.`
+        : "BetOnline: no supported MLB prop layout found. Main lines are not supported yet. Your raw text is preserved.");
+      return;
+    }
+  }
+
   const parsed = parseOddsText(inputText, {
     sportsbook,
     sourceType: "pasted_text",
@@ -1241,7 +1272,7 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
     return (parsedRows || []).map((row) => {
       const resolvedRole =
         batchRole ||
-        (String(sportsbook || "").trim().toLowerCase() === "pinnacle"
+        (/^(pinnacle|bet\s*online)$/i.test(String(sportsbook || "").trim())
           ? "fair_odds"
           : "target");
 
@@ -2255,8 +2286,7 @@ const marketBundle = useMemo(() => {
       writeImportQueue([]);
       setPendingImports([]);
       setSavedPlacedParlays(readSavedPlacedParlays());
-      // Do not auto-parse queued extension imports.
-      // BetMGM WNBA ladder imports need a manual threshold review before parsing.
+      // Follow the auto-parse toggle. BetMGM WNBA ladders still need threshold review.
       const sourceName = String(newest?.source || "");
       const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
 
@@ -2285,7 +2315,7 @@ const marketBundle = useMemo(() => {
       setBatchRole(fanDuelSharpMode ? "fair_odds" : "target");
     }
 
-    if (normalizedSportsbook === "pinnacle") {
+    if (normalizedSportsbook === "pinnacle" || /^bet\s*online$/.test(normalizedSportsbook)) {
       setBatchRole("fair_odds");
     }
   }, [sportsbook, fanDuelSharpMode]);
@@ -2378,16 +2408,17 @@ const marketBundle = useMemo(() => {
       }
 
       if (autoParse === "1") {
-        const sourceName = String(newest?.source || "");
-      const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, incomingText);
+        const sourceName = String(source || "");
+        const shouldHoldForBetMgmWnbaLadders = isBetMgmWnbaLadderImport(sourceName, decoded);
 
-      window.__evParlayAutoParsePending = Boolean(
-        autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
-      );
+        window.__evParlayAutoParsePending = Boolean(
+          autoParseQueuedImports && !shouldHoldForBetMgmWnbaLadders
+        );
 
-      window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
-        ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
-        : "";      }
+        window.__evParlayAutoParsePauseReason = shouldHoldForBetMgmWnbaLadders
+            ? "BetMGM WNBA ladder import paused so thresholds can be confirmed before parsing."
+            : "";
+      }
     }
 
     params.delete("import");

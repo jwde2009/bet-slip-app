@@ -1,4 +1,5 @@
 import { multiplyDecimals } from "./odds";
+import { getSelectionLineValue } from "./marketNormalization";
 import { applyProfitBoostToAmerican, applyProfitBoostToDecimal } from "./boostMath";
 const DEFAULT_MAX_PARLAY_CANDIDATE_LEGS = 80;
 const DEFAULT_MAX_PARLAY_CANDIDATE_LEGS_3_PLUS = 40;
@@ -78,7 +79,7 @@ function marketSearchText(market = {}, selection = {}) {
       market.marketType,
       formatLegMarketLabel(market.marketType),
       market.subjectKey,
-      market.lineValue,
+      getSelectionLineValue(market, selection),
       selection.label,
     ]
       .filter((value) => value !== null && value !== undefined)
@@ -418,14 +419,14 @@ export function buildParlayCandidates({
         sport: market.sport || "",
         marketType: market.marketType,
         subjectName: extractSubjectNameFromMarket(market),
-        lineValue: market.lineValue,
+        lineValue: getSelectionLineValue(market, selection),
         selectionLabel: selection.label,
       };
 
       const legDisplayLabel = buildLegDisplayLabel({
         subjectName: savedLegProbe.subjectName,
         selectionLabel: selection.label,
-        lineValue: market.lineValue,
+        lineValue: getSelectionLineValue(market, selection),
         marketType: market.marketType,
       });
 
@@ -474,7 +475,7 @@ export function buildParlayCandidates({
         sport: market.sport || "",
         marketType: market.marketType,
         subjectName: savedLegProbe.subjectName,
-        lineValue: market.lineValue,
+        lineValue: getSelectionLineValue(market, selection),
         selectionId: selection.id,
         selectionLabel: selection.label,
 

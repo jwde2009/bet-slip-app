@@ -51,6 +51,8 @@ export function buildCanonicalMarkets(rows) {
         marketType: normalizedMarketType,
         subjectKey,
         lineValue: normalizedLineValue === "" ? null : Number(normalizedLineValue),
+        spreadLineTeam: String(row.sport).toUpperCase() === "NFL" && normalizedMarketType === "spread"
+          ? cleanTeam(row.awayTeam || splitEventLabel(row.eventLabelRaw, row.sport).away, row.sport) : "",
         selections: [],
       });
     }
@@ -64,6 +66,7 @@ export function buildCanonicalMarkets(rows) {
       selection = {
         id: `${marketKey}::${selectionLabel}`,
         label: selectionLabel,
+        lineValue: String(row.sport).toUpperCase() === "NFL" && normalizedMarketType === "spread" ? row.lineValue : undefined,
         quotes: [],
       };
       market.selections.push(selection);
@@ -203,6 +206,15 @@ function normalizeLineValueForMarket(row) {
     return "";
   }
 
+  if (marketType === "spread" && String(row.sport).toUpperCase() === "NFL") {
+    const event = splitEventLabel(row.eventLabelRaw, row.sport);
+    const home = cleanTeam(row.homeTeam || event.home, row.sport);
+    const selection = cleanTeam(row.selectionNormalized || row.selectionRaw, row.sport);
+    // A shared market uses the away team's signed line. Selection/quote lines
+    // retain their actual signs, and opposite alternate handicaps stay separate.
+    if (home && selection === home) return (-Number(row.lineValue)).toFixed(1);
+  }
+
   return Number(row.lineValue).toFixed(1);
 }
 
@@ -317,4 +329,3 @@ function cleanText(value = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
-

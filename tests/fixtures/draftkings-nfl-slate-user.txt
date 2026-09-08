@@ -1,0 +1,326 @@
+DRAFTKINGS_NFL_MAIN_LINES_CAPTURE
+NFL_CAPTURE_LEAGUE: NFL
+NFL
+GAME LINES
+TD SCORERS
+PASSING
+RECEIVING
+RUSHING
+ALT LINES
+HALVES
+DEFENSIVE
+SPECIAL TEAMS
+H2H PLAYER PROPS
+GAME LEADERS
+1ST DRIVE PROPS
+EACH QUARTER/HALF
+PLAYER SPECIALS
+WEEKLY SPECIALS
+WEEK 1
+ALL
+WEEK 1 GAMES
+WED SEP 9th
+
+Spread
+
+Total
+
+Moneyline
+
+NE Patriots
+AT
+SEA Seahawks
++3.5
+−118
+O
+44.5
+−108
++142
+-3.5
+−102
+U
+44.5
+−112
+−170
+Wed Sep 9th 7:20 PM
+More Bets
+THU SEP 10th
+
+Spread
+
+Total
+
+Moneyline
+
+SF 49ers
+AT
+LA Rams
++3.5
+−112
+O
+48.5
+−105
++154
+-3.5
+−108
+U
+48.5
+−115
+−185
+Thu Sep 10th 7:35 PM
+More Bets
+SUN SEP 13th
+
+Spread
+
+Total
+
+Moneyline
+
+NO Saints
+AT
+DET Lions
++7
+−115
+O
+49.5
+−118
++245
+-7
+−105
+U
+49.5
+−102
+−305
+Sun Sep 13th 12:00 PM
+More Bets
+CHI Bears
+AT
+CAR Panthers
+-3
+−102
+O
+47.5
+−112
+−148
++3
+−118
+U
+47.5
+−108
++124
+Sun Sep 13th 12:00 PM
+More Bets
+BUF Bills
+AT
+HOU Texans
+-1.5
+−102
+O
+44.5
+−110
+−115
++1.5
+−118
+U
+44.5
+−110
+−105
+Sun Sep 13th 12:00 PM
+More Bets
+NY Jets
+AT
+TEN Titans
++1.5
+−110
+O
+39.5
+−110
++105
+-1.5
+−110
+U
+39.5
+−110
+−125
+Sun Sep 13th 12:00 PM
+More Bets
+TB Buccaneers
+AT
+CIN Bengals
++3.5
+−105
+O
+50.5
+−108
++170
+-3.5
+−115
+U
+50.5
+−112
+−205
+Sun Sep 13th 12:00 PM
+More Bets
+CLE Browns
+AT
+JAX Jaguars
++8.5
+−112
+O
+40.5
+−110
++340
+-8.5
+−108
+U
+40.5
+−110
+−440
+Sun Sep 13th 12:00 PM
+More Bets
+BAL Ravens
+AT
+IND Colts
+-3.5
+−105
+O
+47.5
+−115
+−175
++3.5
+−115
+U
+47.5
+−105
++145
+Sun Sep 13th 12:00 PM
+More Bets
+ATL Falcons
+AT
+PIT Steelers
++3.5
+−118
+O
+42.5
+−105
++154
+-3.5
+−102
+U
+42.5
+−115
+−185
+Sun Sep 13th 12:00 PM
+More Bets
+ARI Cardinals
+AT
+LA Chargers
++10
+−115
+O
+47.5
+−108
++380
+-10
+−105
+U
+47.5
+−112
+−500
+Sun Sep 13th 3:25 PM
+More Bets
+MIA Dolphins
+AT
+LV Raiders
++3.5
+−115
+O
+41.5
+−102
++154
+-3.5
+−105
+U
+41.5
+−118
+−185
+Sun Sep 13th 3:25 PM
+More Bets
+GB Packers
+AT
+MIN Vikings
++1.5
+−112
+O
+46.5
+−108
++102
+-1.5
+−108
+U
+46.5
+−112
+−122
+Sun Sep 13th 3:25 PM
+More Bets
+WAS Commanders
+AT
+PHI Eagles
++5.5
+−112
+O
+44.5
+−105
++180
+-5.5
+−108
+U
+44.5
+−115
+−218
+Sun Sep 13th 3:25 PM
+More Bets
+DAL Cowboys
+AT
+NY Giants
+-3
+−108
+O
+48.5
+−105
+−162
++3
+−112
+U
+48.5
+−115
++136
+Sun Sep 13th 7:20 PM
+More Bets
+MON SEP 14th
+
+Spread
+
+Total
+
+Moneyline
+
+DEN Broncos
+AT
+KC Chiefs
++3
+−120
+O
+43.5
+−105
++124
+-3
++100
+U
+43.5
+−115
+−148
+Mon Sep 14th 7:15 PM
+More Bets
+NFL Betting News
