@@ -397,7 +397,11 @@ test('theScore filters basketball targets from an MLB or tennis capture', () => 
 });
 
 test('theScore tennis URL wins over WNBA sidebar text', () => {
+  const footballCaptureLeague = extensionSection('  function footballCaptureLeague()', '  if (detectedSource === \"BetMGM\")', {
+    document: { title: 'Tennis' }, window: { location: { pathname: '/sports/tennis/event-1' } },
+  });
   const detect = extensionSection('    function sportText()', '  function detectMarket(', {
+    footballCaptureLeague,
     document: { body: { innerText: 'WNBA\nIndiana Fever\nTennis' } },
     window: { location: { pathname: '/sports/tennis/event-1' } },
   });

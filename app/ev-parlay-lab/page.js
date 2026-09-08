@@ -1195,7 +1195,15 @@ export default function EVParlayLabPage() {
   if (/^pinnacle$/i.test(String(sportsbook || "").trim())) {
     const nflRows = parseNflMainLines(inputText, "Pinnacle");
     if (nflRows !== null && !nflRows.length) {
-      alert("Pinnacle NFL: no complete full-game main lines found. Open an individual NFL game and run the extractor there; NFL landing-page tables are not supported yet. Your input and loaded rows are preserved.");
+      alert("Pinnacle NFL: no complete full-game main lines found. Select All or Game on the NFL listing, or open an individual NFL game, then capture again once prices are visible. Your input and loaded rows are preserved.");
+      return;
+    }
+  }
+
+  if (/^thescore$/i.test(String(sportsbook || "").trim())) {
+    const nflRows = parseNflMainLines(inputText, "TheScore");
+    if (nflRows !== null && !nflRows.length) {
+      alert("theScore NFL: no usable full-game pairs found. Older captures replaced NFL teams with other leagues' names. Reload extension 1.1.1 or later, refresh the NFL page, select full-game lines, and capture again. Your input and loaded rows are preserved.");
       return;
     }
   }

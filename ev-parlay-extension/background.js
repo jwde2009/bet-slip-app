@@ -263,6 +263,9 @@ async function extractDraftKingsMultiPassPayload(tabId, options = {}) {
 
     captures.push(`DRAFTKINGS_AUTOPASS_${pass + 1}\n${text}`);
 
+    // NFL slates are already complete; never retry NBA prop steps here.
+    if (/^DRAFTKINGS_NFL_MAIN_LINES_CAPTURE$/m.test(text)) break;
+
     const scheduledMatch = text.match(/DRAFTKINGS_SCHEDULED_STEP:\s*(.+)/i);
 
     if (!scheduledMatch?.[1]) {
@@ -534,6 +537,9 @@ async function extractFanDuelMultiPassPayload(tabId, options = {}) {
     }
 
     captures.push(`FANDUEL_AUTOPASS_${pass + 1}\n${text}`);
+
+    // NFL slates are already complete; never retry NBA prop steps here.
+    if (/^FANDUEL_NFL_MAIN_LINES_CAPTURE$/m.test(text)) break;
 
     const hasScheduledNextStep = /FANDUEL_SCHEDULED_/i.test(text);
 
@@ -6399,6 +6405,22 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
   }
 
+  // Recognize the observed NFL listing before entering sport-specific prop
+  // navigation. URL/title alone is insufficient: game pages retain their own
+  // capture workflow, and unrelated sidebar NFL links are not league context.
+  const nflListingText = rawPageText();
+  const isFanDuelNflListing = detectedSource === "FanDuel" &&
+    /NFL Odds\s+NFL\s+SPREAD\s+MONEY\s+TOTAL/i.test(nflListingText);
+  const isDraftKingsNflListing = detectedSource === "DraftKings" &&
+    (/Sportsbook\s*\/\s*Football Odds\s*\/\s*NFL Odds/i.test(nflListingText) || footballCaptureLeague() === "NFL") &&
+    /GAME LINES[\s\S]*Spread\s+Total\s+Moneyline/i.test(nflListingText);
+  if (isFanDuelNflListing || isDraftKingsNflListing) {
+    return {
+      source: detectedSource,
+      text: `${isFanDuelNflListing ? "FANDUEL" : "DRAFTKINGS"}_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${nflListingText}`,
+    };
+  }
+
   if (detectedSource === "FanDuel") {
     try {
       const fanDuelRaw = rawPageText();
@@ -6524,6 +6546,81 @@ async function buildFanDuelOneNextNbaTabRawText() {
         ? `PINNACLE_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${rawPageText()}`
         : rawPageText(),
     };
+  }
+
+  function resolveTheScoreNflTeam(value) {
+    const clubs = [
+      ["Arizona Cardinals", "ARI"], ["Atlanta Falcons", "ATL"],
+      ["Baltimore Ravens", "BAL"], ["Buffalo Bills", "BUF"],
+      ["Carolina Panthers", "CAR"], ["Chicago Bears", "CHI"],
+      ["Cincinnati Bengals", "CIN"], ["Cleveland Browns", "CLE"],
+      ["Dallas Cowboys", "DAL"], ["Denver Broncos", "DEN"],
+      ["Detroit Lions", "DET"], ["Green Bay Packers", "GB"],
+      ["Houston Texans", "HOU"], ["Indianapolis Colts", "IND"],
+      ["Jacksonville Jaguars", "JAX", "JAC"], ["Kansas City Chiefs", "KC"],
+      ["Las Vegas Raiders", "LV"], ["Los Angeles Chargers", "LAC", "LA"],
+      ["Los Angeles Rams", "LAR", "LA"], ["Miami Dolphins", "MIA"],
+      ["Minnesota Vikings", "MIN"], ["New England Patriots", "NE"],
+      ["New Orleans Saints", "NO"], ["New York Giants", "NYG", "NY"],
+      ["New York Jets", "NYJ", "NY"], ["Philadelphia Eagles", "PHI"],
+      ["Pittsburgh Steelers", "PIT"], ["San Francisco 49ers", "SF"],
+      ["Seattle Seahawks", "SEA"], ["Tampa Bay Buccaneers", "TB"],
+      ["Tennessee Titans", "TEN"], ["Washington Commanders", "WAS", "WSH"],
+    ];
+    const normalize = text => clean(text).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const wanted = normalize(clean(value).replace(/\s+\d+-\d+(?:-\d+)?(?:,\s*\d+(?:st|nd|rd|th)\s+(?:AFC|NFC)\s+(?:East|West|North|South))?$/i, ""));
+    for (const [name, ...codes] of clubs) {
+      const nickname = name.split(" ").at(-1);
+      // NY and LA need the nickname to distinguish their two NFL clubs.
+      const candidates = [name, nickname, ...codes.filter(code => !["NY", "LA"].includes(code)), ...codes.map(code => `${code} ${nickname}`)];
+      if (candidates.some(candidate => normalize(candidate) === wanted)) return name;
+    }
+    return "";
+  }
+
+  function buildTheScoreNflExport() {
+    const selected = Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"], [aria-current="page"]'));
+    if (selected.some(el => /^(?:(?:1st|2nd|3rd|4th|First|Second) (?:Half|Quarter)|Live|Regulation|Team Totals?)$/i.test(clean(el.innerText)))) return "";
+    const types = ["AWAY_SPREAD", "HOME_SPREAD", "OVER", "UNDER", "AWAY_MONEYLINE", "HOME_MONEYLINE"];
+    const cards = Array.from(document.querySelectorAll("article"));
+    const drawers = Array.from(document.querySelectorAll("details[data-testid]")).filter(drawer =>
+      /^(Main Lines|Game Lines)$/i.test(clean(drawer.querySelector("summary h2")?.innerText))
+    );
+    const containers = [...cards, ...drawers];
+    if (!containers.length) containers.push(document.querySelector("main") || document.body);
+    const blocks = [];
+    for (const container of containers) {
+      const teams = Array.from(container.querySelectorAll('button[data-testid="team-name"]')).map(el => resolveTheScoreNflTeam(el.innerText));
+      if (teams.length !== 2 || !teams[0] || !teams[1] || teams[0] === teams[1]) continue;
+      const start = clean(container.querySelector(".text-style-xs-medium")?.innerText || "");
+      if (isLiveStartText(start)) continue;
+      const buttons = Array.from(container.querySelectorAll("button[data-type]")).filter(btn => types.includes(btn.getAttribute("data-type")));
+      if (buttons.length !== 6 || new Set(buttons.map(btn => btn.getAttribute("data-type"))).size !== 6) continue;
+      const cells = {};
+      for (const btn of buttons) {
+        if (btn.disabled || btn.getAttribute("aria-disabled") === "true") continue;
+        const type = btn.getAttribute("data-type");
+        const values = [...new Set(Array.from(btn.querySelectorAll("span")).map(el => clean(el.innerText).replace(/−/g, "-")).filter(Boolean))];
+        const prices = values.filter(value => /^EVEN$/i.test(value) || (/^[+-]\d+$/.test(value) && Math.abs(Number(value)) >= 100));
+        const lines = values.filter(value => /MONEYLINE$/.test(type) ? false : /SPREAD$/.test(type)
+          ? /^(?:PK|PICK|0)$/i.test(value) || (/^[+-]\d+(?:\.\d+)?$/.test(value) && Math.abs(Number(value)) < 100)
+          : new RegExp(`^${type === "OVER" ? "O" : "U"}\\s*\\d+(?:\\.\\d+)?$`, "i").test(value));
+        if (prices.length !== 1 || (!/MONEYLINE$/.test(type) && lines.length !== 1)) continue;
+        cells[type] = { price: /^EVEN$/i.test(prices[0]) ? "+100" : prices[0], line: /^(PK|PICK)$/i.test(lines[0] || "") ? "0" : lines[0] };
+      }
+      const [away, home] = teams;
+      const out = ["THESCORE_STRUCTURED_EXPORT", "THESCORE_CAPTURE_VERSION: 20260908_NFL_1", "Sport: NFL", `Event: ${away} @ ${home}`];
+      if (start) out.push(`Start: ${start}`);
+      const a = cells.AWAY_SPREAD, h = cells.HOME_SPREAD, o = cells.OVER, u = cells.UNDER;
+      if (a && h && Math.abs(Number(a.line) + Number(h.line)) < 0.0001)
+        out.push("", "Market: Spread", `${away} | ${a.line} | ${a.price}`, `${home} | ${h.line} | ${h.price}`);
+      if (o && u && Number(o.line.slice(1).trim()) === Number(u.line.slice(1).trim()))
+        out.push("", "Market: Total", `Over | ${o.line.slice(1).trim()} | ${o.price}`, `Under | ${u.line.slice(1).trim()} | ${u.price}`);
+      if (cells.AWAY_MONEYLINE && cells.HOME_MONEYLINE)
+        out.push("", "Market: Moneyline", `${away} | ${cells.AWAY_MONEYLINE.price}`, `${home} | ${cells.HOME_MONEYLINE.price}`);
+      if (out.some(line => line.startsWith("Market:"))) blocks.push(out.join("\n"));
+    }
+    return [...new Set(blocks)].join("\n\n");
   }
 
   function resolveTheScoreMlbTeam(value) {
@@ -6735,6 +6832,9 @@ async function buildFanDuelOneNextNbaTabRawText() {
     function sportText() {
       const text = clean(document.body.innerText).toLowerCase();
       const path = String(window.location.pathname || "").toLowerCase();
+
+      if (footballCaptureLeague() === "NFL") return "NFL";
+      if (/\d+-\d+-\d+,\s*\d+(?:st|nd|rd|th)\s+(?:AFC|NFC)\s+(?:East|West|North|South)/i.test(text)) return "NFL";
 
       if (/hockey|nhl/.test(path)) return "NHL";
       if (/wnba/.test(path)) return "WNBA";
@@ -8105,6 +8205,13 @@ async function buildFanDuelOneNextNbaTabRawText() {
     }
 
     return mergeStructuredExports(exports);
+  }
+
+  if (detectedSource === "TheScore" && sportText() === "NFL") {
+    return {
+      source: "TheScore",
+      text: `THESCORE_NFL_MAIN_LINES_CAPTURE\nNFL_CAPTURE_LEAGUE: NFL\n${buildTheScoreNflExport() || "THESCORE_MAIN_LINES_SKIPPED: select full-game lines and wait for visible priced teams"}`,
+    };
   }
 
   if (detectedSource === "TheScore") {
