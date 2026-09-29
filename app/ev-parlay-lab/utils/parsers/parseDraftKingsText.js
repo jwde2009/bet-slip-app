@@ -1,4 +1,5 @@
 import { parseNflMainLines } from "./nflMainLines";
+import { parseDraftKingsMlb } from "./draftKingsMlb";
 import { americanToDecimal } from "../odds";
 
 let nextId = 1;
@@ -9,6 +10,8 @@ function makeId() {
 
 export function parseDraftKingsText(rawText, context = {}) {
   if (!rawText || typeof rawText !== "string") return [];
+  const mlbRows = parseDraftKingsMlb(rawText, context);
+  if (mlbRows !== null) return mlbRows;
   const nflRows = parseNflMainLines(rawText, "DraftKings", context);
   if (nflRows !== null) return nflRows;
 

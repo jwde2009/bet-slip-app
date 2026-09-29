@@ -51,7 +51,7 @@ export function buildCanonicalMarkets(rows) {
         marketType: normalizedMarketType,
         subjectKey,
         lineValue: normalizedLineValue === "" ? null : Number(normalizedLineValue),
-        spreadLineTeam: String(row.sport).toUpperCase() === "NFL" && normalizedMarketType === "spread"
+        spreadLineTeam: /^(NFL|MLB)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread"
           ? cleanTeam(row.awayTeam || splitEventLabel(row.eventLabelRaw, row.sport).away, row.sport) : "",
         selections: [],
       });
@@ -66,7 +66,7 @@ export function buildCanonicalMarkets(rows) {
       selection = {
         id: `${marketKey}::${selectionLabel}`,
         label: selectionLabel,
-        lineValue: String(row.sport).toUpperCase() === "NFL" && normalizedMarketType === "spread" ? row.lineValue : undefined,
+        lineValue: /^(NFL|MLB)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread" ? row.lineValue : undefined,
         quotes: [],
       };
       market.selections.push(selection);
@@ -206,7 +206,7 @@ function normalizeLineValueForMarket(row) {
     return "";
   }
 
-  if (marketType === "spread" && String(row.sport).toUpperCase() === "NFL") {
+  if (marketType === "spread" && /^(NFL|MLB)$/.test(String(row.sport).toUpperCase())) {
     const event = splitEventLabel(row.eventLabelRaw, row.sport);
     const home = cleanTeam(row.homeTeam || event.home, row.sport);
     const selection = cleanTeam(row.selectionNormalized || row.selectionRaw, row.sport);

@@ -244,7 +244,7 @@ test('A sidebar NFL label does not prevent a later MLB event from parsing', asyn
 
 test('Unsupported Pinnacle NFL input shows next steps without changing loaded rows or parse time', async () => {
   const source = read('app/ev-parlay-lab/page.js');
-  const start = source.indexOf('   function handleParse()');
+  const start = source.indexOf('   async function handleParse()');
   const end = source.indexOf('  function applyBatchRoleToRows(', start);
   assert.ok(start >= 0 && end > start);
   const { parseNflMainLines } = await moduleExports('app/ev-parlay-lab/utils/parsers/nflMainLines.js');
@@ -253,9 +253,9 @@ test('Unsupported Pinnacle NFL input shows next steps without changing loaded ro
   const handle = vm.runInNewContext(`${source.slice(start, end)}\nhandleParse`, {
     rawText: legacyNflLanding, sportsbook: 'Pinnacle', parseNflMainLines,
     console: { log() {} }, alert: message => messages.push(message),
-    parseOddsText: fail, setRows: fail, setRawText: fail, setLastParsedAt: fail,
+    parseOddsInBackground: fail, setRows: fail, setRawText: fail, setLastParsedAt: fail,
   });
-  handle();
+  await handle();
   assert.equal(messages.length, 1);
   assert.match(messages[0], /individual NFL game/);
   assert.match(messages[0], /input and loaded rows are preserved/);

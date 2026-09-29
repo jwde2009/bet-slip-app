@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ImportPanel from "./components/ImportPanel";
 import ExtractionGuide from "./components/ExtractionGuide";
 import ParsedOddsTable from "./components/ParsedOddsTable";
@@ -15,7 +15,7 @@ import BoostWalletPanel from "./components/BoostWalletPanel";
 import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
-import { parseOddsText } from "./utils/parseOddsText";
+import { parseOddsInBackground } from "./utils/parseOddsInBackground";
 import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
 import { parseNflMainLines } from "./utils/parsers/nflMainLines";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
@@ -1111,6 +1111,22 @@ export default function EVParlayLabPage() {
   const [fanDuelSharpMode, setFanDuelSharpMode] = useState(false);
   const [autoParseQueuedImports, setAutoParseQueuedImports] = useState(true);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [parseNotice, setParseNotice] = useState("");
+  const parseJob = useRef(null);
+
+  function cancelActiveParse() {
+    const job = parseJob.current;
+    parseJob.current = null;
+    job?.cancel();
+    setIsParsing(false);
+    if (job) setParseNotice("Parsing canceled. Your input and loaded rows are retained.");
+  }
+
+  // Discard a result if its input, book, role or replace mode has changed.
+  useEffect(() => { cancelActiveParse(); }, [rawText, sportsbook, batchRole, importMode]);
+  useEffect(() => () => { parseJob.current?.cancel(); parseJob.current = null; }, []);
+
   // Auto-parse toggle is session-only and defaults ON every page load.
   // Do not persist OFF to localStorage, because that makes it too easy to forget auto-parse is disabled.
   function resolveImportBatchRole(sourceName) {
@@ -1163,6 +1179,7 @@ export default function EVParlayLabPage() {
   }
 
   function handleClearSavedSession() {
+    cancelActiveParse();
     if (typeof window !== "undefined") {
       localStorage.removeItem(SAVED_SESSION_KEY);
       localStorage.removeItem(IMPORT_QUEUE_KEY);
@@ -1179,13 +1196,8 @@ export default function EVParlayLabPage() {
     setFanDuelSharpMode(false);
   }
 
-   function handleParse() {
+   async function handleParse() {
   const inputText = typeof rawText === "string" ? rawText : "";
-
-  console.log("RAW TEXT AT PARSE", {
-    length: inputText.length,
-    preview: inputText.slice(0, 300),
-  });
 
   if (!inputText.trim()) {
     alert("Input is empty.");
@@ -1218,17 +1230,29 @@ export default function EVParlayLabPage() {
     }
   }
 
-  const parsed = parseOddsText(inputText, {
-    sportsbook,
-    sourceType: "pasted_text",
-  });
-
-  console.log("HANDLE PARSE PARSED", parsed);
-  console.log("HANDLE PARSE RESULT", {
-    sportsbook,
-    batchRole,
-    parsedCount: parsed.length,
-  });
+  cancelActiveParse();
+  setIsParsing(true);
+  setParseNotice("Parsing in the background. You can still copy or download the import.");
+  const job = parseOddsInBackground(inputText, { sportsbook, sourceType: "pasted_text" });
+  parseJob.current = job;
+  let parsed;
+  try {
+    parsed = await job.promise;
+    if (parseJob.current !== job) return;
+  } catch (error) {
+    if (parseJob.current === job) {
+      parseJob.current = null;
+      setIsParsing(false);
+      setParseNotice(`${error.message} Your input and loaded rows are retained.`);
+    }
+    return;
+  }
+  parseJob.current = null;
+  setIsParsing(false);
+  if (!parsed.length) {
+    setParseNotice("No supported priced rows found. Use Download TXT and attach the file so this layout can be checked. Your input and loaded rows are retained.");
+    return;
+  }
 
   const withBatchRole = applyBatchRoleToRows(parsed, {
     sportsbook,
@@ -1244,9 +1268,6 @@ export default function EVParlayLabPage() {
     parsedAt: row.parsedAt || parsedAtIso,
     id: makeParsedRowId(row, parsedAt, index),
   }));
-
-console.log("HANDLE PARSE NORMALIZED", normalized);
-
   setRows((prev) => {
     const baseRows = (prev || []).filter(
       (existingRow) => !shouldRemoveExistingRowForImportMode(existingRow, normalized, importMode)
@@ -1265,7 +1286,7 @@ console.log("HANDLE PARSE NORMALIZED", normalized);
   });
 
   setLastParsedAt(parsedAtIso);
-  alert(`Parsed rows: ${normalized.length}`);
+  setParseNotice(`Parsed rows: ${normalized.length}`);
 }
 
   function applyBatchRoleToRows(parsedRows, { sportsbook, batchRole }) {
@@ -1371,6 +1392,7 @@ function shouldRemoveExistingRowForImportMode(existingRow, incomingRows, mode) {
   }
 
   function handleClearParsedRows() {
+    cancelActiveParse();
     setRows([]);
     setManualMatches([]);
     setLastParsedAt(null);
@@ -2609,6 +2631,9 @@ const marketBundle = useMemo(() => {
           batchRole={batchRole}
           setBatchRole={setBatchRole}
           onParse={handleParse}
+          isParsing={isParsing}
+          parseNotice={parseNotice}
+          onCancelParse={cancelActiveParse}
           onClearInput={handleClearInput}
           onClearParsedRows={handleClearParsedRows}
           hasRows={rows.length > 0}

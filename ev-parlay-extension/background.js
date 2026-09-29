@@ -201,7 +201,7 @@ async function extractDraftKingsMultiPassPayload(tabId, options = {}) {
     ? options.targetLabels.map((label) => String(label || "").trim()).filter(Boolean)
     : [];
 
-  const maxPasses = targetLabels.length ? Math.max(5, targetLabels.length * 3) : 18;
+  let maxPasses = targetLabels.length ? Math.max(5, targetLabels.length * 3) : 18;
 
   if (targetLabels.length) {
     captures.push(`DRAFTKINGS_TARGETED_RUN\nDRAFTKINGS_TARGET_LABELS: ${targetLabels.join(", ")}`);
@@ -262,6 +262,8 @@ async function extractDraftKingsMultiPassPayload(tabId, options = {}) {
     }
 
     captures.push(`DRAFTKINGS_AUTOPASS_${pass + 1}\n${text}`);
+
+    if (/^MLB_CAPTURE_LEAGUE: MLB$/m.test(text)) maxPasses = 28;
 
     // NFL slates are already complete; never retry NBA prop steps here.
     if (/^DRAFTKINGS_NFL_MAIN_LINES_CAPTURE$/m.test(text)) break;
@@ -1165,7 +1167,7 @@ function seedDraftKingsTargetWorkflowLabels(targetLabels = []) {
     const path = String(window.location.pathname || "");
 
     for (const key of Object.keys(sessionStorage)) {
-      if (key.includes(path) && key.startsWith("EV_DK_WORKFLOW_PROGRESS::")) {
+      if (key.includes(path) && /^(?:EV_DK_WORKFLOW_PROGRESS|EV_DK_MLB_WORKFLOW_PROGRESS)::/.test(key)) {
         sessionStorage.removeItem(key);
       }
     }
@@ -2585,7 +2587,18 @@ function getDraftKingsComboSubheaderLabels() {
       }
     }
 
+function isDraftKingsMlbPage() {
+  return /\/baseball\/mlb\b|\/mlb\b|mlb-odds/i.test(String(window.location.pathname || "")) ||
+    /Sportsbook\s*\/\s*Baseball Odds\s*\/\s*MLB Odds/i.test(clean(document.body?.innerText || ""));
+}
+
 function getDraftKingsWorkflowLabels() {
+  // Resolve the sport before basketball target labels can override it.
+  if (isDraftKingsMlbPage()) {
+    return ["Game Lines", "Batter Props", "Batter", "Home Runs", "Hits", "Hits O/U", "Total Bases", "Total Bases O/U",
+      "RBIs", "RBIs O/U", "Runs", "Runs O/U", "Hits + Runs + RBIs", "Hits + Runs + RBIs O/U",
+      "Pitcher Props", "Pitcher", "Strikeouts", "Strikeouts O/U", "Outs", "Outs Recorded", "Earned Runs", "Hits Allowed", "Walks Allowed", "Hits", "Walks"];
+  }
   try {
     const targetedLabels = JSON.parse(sessionStorage.getItem("EV_DK_TARGET_WORKFLOW_LABELS") || "[]");
 
@@ -2746,6 +2759,7 @@ function getDraftKingsWorkflowLabels() {
 
     function getDraftKingsWorkflowProgressKey() {
       const path = String(window.location.pathname || "");
+      if (isDraftKingsMlbPage()) return `EV_DK_MLB_WORKFLOW_PROGRESS::${path}`;
       return `EV_DK_WORKFLOW_PROGRESS::${path}`;
     }
 
@@ -2753,7 +2767,14 @@ function getDraftKingsWorkflowLabels() {
       const labels = getDraftKingsWorkflowLabels();
       const key = getDraftKingsWorkflowProgressKey();
       const stored = Number(sessionStorage.getItem(key));
-      const nextIndex = Number.isFinite(stored) ? stored : 0;
+      let nextIndex = Number.isFinite(stored) ? stored : 0;
+
+      // MLB layouts expose different tabs. Skip absent labels immediately;
+      // recheck after each actual click so newly revealed prop tabs are visited.
+      if (isDraftKingsMlbPage()) {
+        while (nextIndex < labels.length && !getDraftKingsClickableByExactText(labels[nextIndex]) &&
+          !findClickableByExactVisibleText(labels[nextIndex], { maxWidth: 520, maxHeight: 140 })) nextIndex += 1;
+      }
 
       if (nextIndex >= labels.length) {
         sessionStorage.removeItem(key);
@@ -2831,7 +2852,7 @@ function getDraftKingsWorkflowLabels() {
 
       if (current && current.trim()) {
         captures.push(
-          `DRAFTKINGS_CURRENT_CAPTURE${clickDebug ? `\nDRAFTKINGS_LAST_CLICK_DEBUG: ${clickDebug}` : ""}\n${current}`
+          `DRAFTKINGS_CURRENT_CAPTURE${isDraftKingsMlbPage() ? "\nMLB_CAPTURE_LEAGUE: MLB" : ""}${clickDebug ? `\nDRAFTKINGS_LAST_CLICK_DEBUG: ${clickDebug}` : ""}\n${current}`
         );
       }
 

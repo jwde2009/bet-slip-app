@@ -1,5 +1,5 @@
 export function getSelectionLineValue(market = {}, selection = {}) {
-  if (String(market.sport).toUpperCase() === "NFL" && normalizeMarketType(market.marketType) === "spread" && Number.isFinite(selection.lineValue)) {
+  if (/^(NFL|MLB)$/.test(String(market.sport).toUpperCase()) && normalizeMarketType(market.marketType) === "spread" && Number.isFinite(selection.lineValue)) {
     return selection.lineValue;
   }
   return market.lineValue ?? null;
