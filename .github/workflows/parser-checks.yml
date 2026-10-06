@@ -1,0 +1,36 @@
+name: Parser checks
+on:
+  pull_request:
+  push:
+    branches: [main, codex/mlb-capture-first-pass]
+permissions:
+  contents: read
+jobs:
+  parsers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact public-repository commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+      - name: Regression tests and extension syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node --check ev-parlay-extension/background.js
+          node --check ev-parlay-extension/background-entry.js
+          node --check ev-parlay-extension/theScoreNflCapture.js
+          node --experimental-vm-modules --test tests/*.test.cjs
+          git diff --check
+      - name: Next.js production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build -- --webpack

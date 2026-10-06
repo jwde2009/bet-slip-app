@@ -1,0 +1,397 @@
+PINNACLE_NFL_MAIN_LINES_CAPTURE
+NFL_CAPTURE_LEAGUE: NFL
+Football
+NFL
+Atlanta Falcons @ New Orleans Saints
+Monday, October 5, 2026 at 19:15
+Atlanta Falcons
+New Orleans Saints
+All
+Game
+1st Half
+1st Quarter
+Player Props
+Game Props
+Money Line – Game
+Hide All
+Atlanta Falcons
+-102
+New Orleans Saints
+-108
+Handicap – Game
+Atlanta Falcons	New Orleans Saints
++1.5
+-116
+-1.5
++105
+See more
+Total – Game
+Over 47.5
+-106
+Under 47.5
+-106
+See more
+Team Total – Game
+Atlanta Falcons	New Orleans Saints
+Over
+Under
+21.5
+-146
+21.5
++124
+Over
+Under
+24.5
++115
+24.5
+-135
+Money Line – 1st Half
+Atlanta Falcons
+-105
+New Orleans Saints
+-107
+Handicap – 1st Half
+Atlanta Falcons	New Orleans Saints
++0.5
+-126
+-0.5
++112
+See more
+Total – 1st Half
+Over 24
++104
+Under 24
+-119
+See more
+Team Total – 1st Half
+Atlanta Falcons	New Orleans Saints
+Over
+Under
+9.5
+-192
+9.5
++164
+Over
+Under
+12.5
+-104
+12.5
+-110
+Money Line – 1st Quarter
+Atlanta Falcons
+-103
+New Orleans Saints
+-111
+Handicap – 1st Quarter
+Atlanta Falcons	New Orleans Saints
++0.5
+-160
+-0.5
++138
+See more
+Total – 1st Quarter
+Over 9.5
+-109
+Under 9.5
+-107
+See more
+Team Total – 1st Quarter
+Atlanta Falcons	New Orleans Saints
+Over
+Under
+0.5
+-236
+0.5
++193
+Over
+Under
+3.5
+-108
+3.5
+-108
+Alvin Kamara Total Receiving Yards
+Over 15.5 Receiving Yards
+-114
+Under 15.5 Receiving Yards
+-106
+Alvin Kamara Total Receptions
+Over 3.5 Receptions
++143
+Under 3.5 Receptions
+-174
+Alvin Kamara Total Rush Attempts
+Over 11.5 Rush Attempts
++113
+Under 11.5 Rush Attempts
+-138
+Alvin Kamara Total Rushing Yards
+Over 36.5 Rushing Yards
+-107
+Under 36.5 Rushing Yards
+-113
+Alvin Kamara Total Touchdowns
+Over 0.5 Touchdowns
++146
+Under 0.5 Touchdowns
+-179
+Austin Hooper Total Receiving Yards
+Over 6.5 Receiving Yards
+-107
+Under 6.5 Receiving Yards
+-114
+Austin Hooper Total Receptions
+Over 1.5 Receptions
++210
+Under 1.5 Receptions
+-263
+Austin Hooper Total Touchdowns
+Over 0.5 Touchdowns
++793
+Under 0.5 Touchdowns
+-1454
+Bijan Robinson Total Receiving Yards
+Over 36.5 Receiving Yards
+-110
+Under 36.5 Receiving Yards
+-110
+Bijan Robinson Total Receptions
+Over 4.5 Receptions
++110
+Under 4.5 Receptions
+-133
+Bijan Robinson Total Rush Attempts
+Over 18.5 Rush Attempts
+-121
+Under 18.5 Rush Attempts
+-100
+Bijan Robinson Total Rushing Yards
+Over 88.5 Rushing Yards
+-113
+Under 88.5 Rushing Yards
+-107
+Bijan Robinson Total Touchdowns
+Over 0.5 Touchdowns
+-191
+Under 0.5 Touchdowns
++156
+Brian Robinson Jr. Total Rushing Yards
+Over 29.5 Rushing Yards
+-110
+Under 29.5 Rushing Yards
+-110
+Brian Robinson Jr. Total Touchdowns
+Over 0.5 Touchdowns
++395
+Under 0.5 Touchdowns
+-548
+Chris Olave Total Receiving Yards
+Over 85.5 Receiving Yards
+-110
+Under 85.5 Receiving Yards
+-110
+Chris Olave Total Receptions
+Over 6.5 Receptions
+-135
+Under 6.5 Receptions
++111
+Chris Olave Total Touchdowns
+Over 0.5 Touchdowns
++124
+Under 0.5 Touchdowns
+-151
+Devaughn Vele Total Receiving Yards
+Over 44.5 Receiving Yards
+-112
+Under 44.5 Receiving Yards
+-108
+Devaughn Vele Total Receptions
+Over 3.5 Receptions
+-160
+Under 3.5 Receptions
++131
+Devaughn Vele Total Touchdowns
+Over 0.5 Touchdowns
++240
+Under 0.5 Touchdowns
+-306
+Drake London Total Receiving Yards
+Over 80.5 Receiving Yards
+-113
+Under 80.5 Receiving Yards
+-107
+Drake London Total Receptions
+Over 6.5 Receptions
++121
+Under 6.5 Receptions
+-147
+Drake London Total Touchdowns
+Over 0.5 Touchdowns
++130
+Under 0.5 Touchdowns
+-158
+Jahan Dotson Total Receiving Yards
+Over 19.5 Receiving Yards
+-106
+Under 19.5 Receiving Yards
+-114
+Jahan Dotson Total Receptions
+Over 1.5 Receptions
+-125
+Under 1.5 Receptions
++103
+Jahan Dotson Total Touchdowns
+Over 0.5 Touchdowns
++462
+Under 0.5 Touchdowns
+-667
+Juwan Johnson Total Receiving Yards
+Over 47.5 Receiving Yards
+-111
+Under 47.5 Receiving Yards
+-109
+Juwan Johnson Total Receptions
+Over 4.5 Receptions
++115
+Under 4.5 Receptions
+-139
+Juwan Johnson Total Touchdowns
+Over 0.5 Touchdowns
++205
+Under 0.5 Touchdowns
+-257
+Kendre Miller Total Rush Attempts
+Over 7.5 Rush Attempts
+-102
+Under 7.5 Rush Attempts
+-119
+Kendre Miller Total Rushing Yards
+Over 25.5 Rushing Yards
+-115
+Under 25.5 Rushing Yards
+-105
+Kendre Miller Total Touchdowns
+Over 0.5 Touchdowns
++277
+Under 0.5 Touchdowns
+-359
+Kyle Pitts Total Receiving Yards
+Over 30.5 Receiving Yards
+-115
+Under 30.5 Receiving Yards
+-105
+Kyle Pitts Total Receptions
+Over 2.5 Receptions
+-156
+Under 2.5 Receptions
++128
+Kyle Pitts Total Touchdowns
+Over 0.5 Touchdowns
++324
+Under 0.5 Touchdowns
+-432
+Michael Penix Total Interceptions
+Over 0.5 Interceptions
+-103
+Under 0.5 Interceptions
+-118
+Michael Penix Total Pass Attempts
+Over 30.5 Pass Attempts
+-117
+Under 30.5 Pass Attempts
+-103
+Michael Penix Total Pass Completions
+Over 19.5 Pass Completions
+-122
+Under 19.5 Pass Completions
++101
+Michael Penix Total Passing Yards
+Over 225.5 Passing Yards
+-110
+Under 225.5 Passing Yards
+-110
+Michael Penix Total Rushing Yards
+Over 4.5 Rushing Yards
+-106
+Under 4.5 Rushing Yards
+-114
+Michael Penix Total Touchdown Passes
+Over 1.5 Touchdown Passes
++109
+Under 1.5 Touchdown Passes
+-132
+Michael Penix Total Touchdowns
+Over 0.5 Touchdowns
++775
+Under 0.5 Touchdowns
+-1399
+Olamide Zaccheaus Total Receiving Yards
+Over 8.5 Receiving Yards
+-110
+Under 8.5 Receiving Yards
+-110
+Olamide Zaccheaus Total Receptions
+Over 1.5 Receptions
++146
+Under 1.5 Receptions
+-179
+Olamide Zaccheaus Total Touchdowns
+Over 0.5 Touchdowns
++796
+Under 0.5 Touchdowns
+-1463
+Tyler Shough Total Interceptions
+Over 0.5 Interceptions
+-105
+Under 0.5 Interceptions
+-115
+Tyler Shough Total Pass Attempts
+Over 36.5 Pass Attempts
+-115
+Under 36.5 Pass Attempts
+-105
+Tyler Shough Total Pass Completions
+Over 23.5 Pass Completions
+-115
+Under 23.5 Pass Completions
+-105
+Tyler Shough Total Passing Yards
+Over 259.5 Passing Yards
+-115
+Under 259.5 Passing Yards
+-105
+Tyler Shough Total Rush Attempts
+Over 4.5 Rush Attempts
++110
+Under 4.5 Rush Attempts
+-133
+Tyler Shough Total Rushing Yards
+Over 16.5 Rushing Yards
+-110
+Under 16.5 Rushing Yards
+-110
+Tyler Shough Total Touchdown Passes
+Over 1.5 Touchdown Passes
+-127
+Under 1.5 Touchdown Passes
++105
+Tyler Shough Total Touchdowns
+Over 0.5 Touchdowns
++297
+Under 0.5 Touchdowns
+-390
+Zachariah Branch Total Receiving Yards
+Over 4.5 Receiving Yards
+-113
+Under 4.5 Receiving Yards
+-107
+Zachariah Branch Total Receptions
+Over 0.5 Receptions
+-148
+Under 0.5 Receptions
++122
+Zachariah Branch Total Touchdowns
+Over 0.5 Touchdowns
++1099
+Under 0.5 Touchdowns
+-2695
+BACK TO TOP

@@ -5,6 +5,7 @@ import { parseCaesarsText } from "./parsers/parseCaesarsText";
 import { parsePinnacleText } from "./parsers/parsePinnacleText";
 import { parseTheScoreText } from "./parsers/parseTheScoreText";
 import { parseBetOnlineText } from "./parsers/parseBetOnlineText";
+import { parseNflPlayerProps } from "./parsers/nflPlayerProps";
 
 function normalizeSportsbook(value) {
   const s = String(value || "")
@@ -42,10 +43,6 @@ export function parseOddsText(rawText, context = {}) {
     sportsbook === "betonline" ||
     /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(normalizedRawText)
   ) return parseBetOnlineText(normalizedRawText, context);
-  
-  if (sportsbook === "Pinnacle") {
-    return parsePinnacleText(rawText);
-  }
 
   if (sportsbook === "draftkings") {
     const rows = parseDraftKingsText(normalizedRawText, context);
@@ -72,13 +69,13 @@ export function parseOddsText(rawText, context = {}) {
   }
 
   if (sportsbook === "pinnacle") {
-    const rows = parsePinnacleText(normalizedRawText, context);
+    const rows = [...parsePinnacleText(normalizedRawText, context), ...parseNflPlayerProps(normalizedRawText, "Pinnacle")];
     console.log("PINNACLE PARSER ROW COUNT", rows.length);
     return rows;
   }
 
   if (sportsbook === "thescore") {
-    const rows = parseTheScoreText(normalizedRawText, context);
+    const rows = [...parseTheScoreText(normalizedRawText, context), ...parseNflPlayerProps(normalizedRawText, "TheScore")];
     console.log("THESCORE PARSER ROW COUNT", rows.length);
     return rows;
   }
