@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ImportTextInput from "./ImportTextInput";
 
 const SPORTSBOOK_OPTIONS = [
   "Auto",
@@ -9,6 +10,7 @@ const SPORTSBOOK_OPTIONS = [
   "BetMGM",
   "Caesars",
   "Pinnacle",
+  "BetOnline",
   "TheScore",
   "Manual",
 ];
@@ -21,6 +23,9 @@ export default function ImportPanel({
   batchRole,
   setBatchRole,
   onParse,
+  isParsing = false,
+  parseNotice = "",
+  onCancelParse,
   onClearInput,
   onClearParsedRows,
   hasRows,
@@ -143,6 +148,15 @@ export default function ImportPanel({
         Paste extracted odds text here and choose the source book. Extension imports can be loaded from the pending-import tools at the bottom of this box.
       </p>
 
+      {/^bet\s*online$/i.test(String(sportsbook || "").trim()) && (
+        <p style={mutedStyle}>
+          BetOnline defaults to a sharp source. MLB strikeouts, outs recorded,
+          hits+runs+RBIs and home-run Yes/No props can be parsed when both prices
+          are included. Extension imports follow the auto-parse toggle above.
+          Props without complete prices are skipped. Main lines are not supported yet.
+        </p>
+      )}
+
       <div style={controlsRowStyle}>
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>Sportsbook</span>
@@ -152,7 +166,7 @@ export default function ImportPanel({
               const nextBook = e.target.value;
               setSportsbook(nextBook);
 
-              if (nextBook === "Pinnacle") {
+              if (nextBook === "Pinnacle" || nextBook === "BetOnline") {
                 setBatchRole("fair_odds");
               } else if (nextBook !== "Auto") {
                 setBatchRole("target");
@@ -289,22 +303,15 @@ export default function ImportPanel({
         </div>
       </div>
 
-      <textarea
-        value={rawText || ""}
-        onChange={(e) => setRawText(e.target.value)}
-        style={textareaStyle}
-        placeholder="Paste odds text here..."
-        spellCheck={false}
-      />
-
-      <div style={{ marginTop: 8, fontSize: 12, color: "#166534", fontWeight: 700 }}>
-        Input chars: {(rawText || "").length}
-      </div>
+      <ImportTextInput rawText={rawText} setRawText={setRawText} sportsbook={sportsbook} />
+      {parseNotice && <p role="status">{parseNotice}</p>}
 
       <div style={actionRowStyle}>
-        <button type="button" onClick={onParse} style={primaryButtonStyle}>
-          Parse Input
+        <button type="button" onClick={onParse} disabled={isParsing} style={primaryButtonStyle}>
+          {isParsing ? "Parsing…" : "Parse Input"}
         </button>
+
+        {isParsing && <button type="button" onClick={onCancelParse} style={secondaryButtonStyle}>Cancel parsing</button>}
 
         <button type="button" onClick={onClearInput} style={secondaryButtonStyle}>
           Clear Input
@@ -466,19 +473,6 @@ const inputStyle = {
   background: "#fff",
   color: "#14532d",
   fontWeight: 700,
-};
-
-const textareaStyle = {
-  width: "100%",
-  minHeight: 220,
-  padding: 12,
-  borderRadius: 8,
-  border: "1px solid #86efac",
-  fontFamily: "monospace",
-  fontSize: 14,
-  resize: "vertical",
-  background: "#fff",
-  color: "#111",
 };
 
 const actionRowStyle = {

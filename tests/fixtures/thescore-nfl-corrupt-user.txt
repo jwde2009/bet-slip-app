@@ -1,0 +1,578 @@
+THESCORE_INITIAL_CAPTURE
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: NE Patriots 0-0-0, 1st AFC East @ Seattle Storm
+Start: Sep 9, 2026 · 7:20 PM
+
+Market: Spread
+NE Patriots 0-0-0, 1st AFC East | +3.5 | -120
+Seattle Storm | -3.5 | +100
+
+Market: Total
+Over | 43.5 | -120
+Under | 43.5 | +100
+
+Market: Moneyline
+NE Patriots 0-0-0, 1st AFC East | +150
+Seattle Storm | -175
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: SF 49ers 0-0-0, 1st NFC West @ Los Angeles Sparks
+Start: Sep 10, 2026 · 7:35 PM
+
+Market: Spread
+SF 49ers 0-0-0, 1st NFC West | +3.5 | -110
+Los Angeles Sparks | -3.5 | -110
+
+Market: Total
+Over | 48.5 | +100
+Under | 48.5 | -120
+
+Market: Moneyline
+SF 49ers 0-0-0, 1st NFC West | +160
+Los Angeles Sparks | -190
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: TB Buccaneers 0-0-0, 1st NFC South @ CIN Bengals 0-0-0, 1st AFC North
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+TB Buccaneers 0-0-0, 1st NFC South | +3.5 | -110
+CIN Bengals 0-0-0, 1st AFC North | -3.5 | -110
+
+Market: Total
+Over | 50.5 | -105
+Under | 50.5 | -115
+
+Market: Moneyline
+TB Buccaneers 0-0-0, 1st NFC South | +170
+CIN Bengals 0-0-0, 1st AFC North | -200
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: BAL Ravens 0-0-0, 1st AFC North @ Indiana Fever
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+BAL Ravens 0-0-0, 1st AFC North | -3.5 | +100
+Indiana Fever | +3.5 | -120
+
+Market: Total
+Over | 47.5 | -115
+Under | 47.5 | -105
+
+Market: Moneyline
+BAL Ravens 0-0-0, 1st AFC North | -175
+Indiana Fever | +150
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: CLE Browns 0-0-0, 1st AFC North @ JAX Jaguars 0-0-0, 1st AFC South
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+CLE Browns 0-0-0, 1st AFC North | +8.5 | -115
+JAX Jaguars 0-0-0, 1st AFC South | -8.5 | -105
+
+Market: Total
+Over | 40.5 | -110
+Under | 40.5 | -110
+
+Market: Moneyline
+CLE Browns 0-0-0, 1st AFC North | +340
+JAX Jaguars 0-0-0, 1st AFC South | -450
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: NO Saints 0-0-0, 1st NFC South @ DET Lions 0-0-0, 1st NFC North
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+NO Saints 0-0-0, 1st NFC South | +7.0 | -110
+DET Lions 0-0-0, 1st NFC North | -7.0 | -110
+
+Market: Total
+Over | 49.5 | -115
+Under | 49.5 | -105
+
+Market: Moneyline
+NO Saints 0-0-0, 1st NFC South | +260
+DET Lions 0-0-0, 1st NFC North | -320
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: New York Liberty @ TEN Titans 0-0-0, 1st AFC South
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+New York Liberty | +1.5 | -110
+TEN Titans 0-0-0, 1st AFC South | -1.5 | -110
+
+Market: Total
+Over | 39.5 | -105
+Under | 39.5 | -115
+
+Market: Moneyline
+New York Liberty | +105
+TEN Titans 0-0-0, 1st AFC South | -125
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Atlanta Dream @ PIT Steelers 0-0-0, 1st AFC North
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+Atlanta Dream | +3.5 | -115
+PIT Steelers 0-0-0, 1st AFC North | -3.5 | -105
+
+Market: Total
+Over | 42.5 | -110
+Under | 42.5 | -110
+
+Market: Moneyline
+Atlanta Dream | +150
+PIT Steelers 0-0-0, 1st AFC North | -175
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: BUF Bills 0-0-0, 1st AFC East @ HOU Texans 0-0-0, 1st AFC South
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+BUF Bills 0-0-0, 1st AFC East | -1.5 | -105
+HOU Texans 0-0-0, 1st AFC South | +1.5 | -115
+
+Market: Total
+Over | 44.5 | -105
+Under | 44.5 | -115
+
+Market: Moneyline
+BUF Bills 0-0-0, 1st AFC East | -120
+HOU Texans 0-0-0, 1st AFC South | +100
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Chicago Sky @ CAR Panthers 0-0-0, 1st NFC South
+Start: Sep 13, 2026 · 12:00 PM
+
+Market: Spread
+Chicago Sky | -3.0 | -105
+CAR Panthers 0-0-0, 1st NFC South | +3.0 | -115
+
+Market: Total
+Over | 47.5 | +100
+Under | 47.5 | -120
+
+Market: Moneyline
+Chicago Sky | -170
+CAR Panthers 0-0-0, 1st NFC South | +145
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Washington Mystics @ PHI Eagles 0-0-0, 1st NFC East
+Start: Sep 13, 2026 · 3:25 PM
+
+Market: Spread
+Washington Mystics | +5.5 | -115
+PHI Eagles 0-0-0, 1st NFC East | -5.5 | -105
+
+Market: Total
+Over | 44.5 | -105
+Under | 44.5 | -115
+
+Market: Moneyline
+Washington Mystics | +195
+PHI Eagles 0-0-0, 1st NFC East | -230
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: ARI Cardinals 0-0-0, 1st NFC West @ Los Angeles Sparks
+Start: Sep 13, 2026 · 3:25 PM
+
+Market: Spread
+ARI Cardinals 0-0-0, 1st NFC West | +10.0 | -110
+Los Angeles Sparks | -10.0 | -110
+
+Market: Total
+Over | 47.5 | +100
+Under | 47.5 | -120
+
+Market: Moneyline
+ARI Cardinals 0-0-0, 1st NFC West | +380
+Los Angeles Sparks | -550
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: MIA Dolphins 0-0-0, 1st AFC East @ Las Vegas Aces
+Start: Sep 13, 2026 · 3:25 PM
+
+Market: Spread
+MIA Dolphins 0-0-0, 1st AFC East | +3.5 | -115
+Las Vegas Aces | -3.5 | -105
+
+Market: Total
+Over | 40.5 | -105
+Under | 40.5 | -115
+
+Market: Moneyline
+MIA Dolphins 0-0-0, 1st AFC East | +145
+Las Vegas Aces | -170
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: GB Packers 0-0-0, 1st NFC North @ Minnesota Lynx
+Start: Sep 13, 2026 · 3:25 PM
+
+Market: Spread
+GB Packers 0-0-0, 1st NFC North | +1.5 | -115
+Minnesota Lynx | -1.5 | -105
+
+Market: Total
+Over | 46.5 | +100
+Under | 46.5 | -120
+
+Market: Moneyline
+GB Packers 0-0-0, 1st NFC North | +100
+Minnesota Lynx | -120
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Dallas Wings @ New York Liberty
+Start: Sep 13, 2026 · 7:20 PM
+
+Market: Spread
+Dallas Wings | -2.5 | -120
+New York Liberty | +2.5 | +100
+
+Market: Total
+Over | 48.5 | +100
+Under | 48.5 | -120
+
+Market: Moneyline
+Dallas Wings | -150
+New York Liberty | +130
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: DEN Broncos 0-0-0, 1st AFC West @ KC Chiefs 0-0-0, 1st AFC West
+Start: Sep 14, 2026 · 7:15 PM
+
+Market: Spread
+DEN Broncos 0-0-0, 1st AFC West | +2.5 | -105
+KC Chiefs 0-0-0, 1st AFC West | -2.5 | -115
+
+Market: Total
+Over | 43.5 | -110
+Under | 43.5 | -110
+
+Market: Moneyline
+DEN Broncos 0-0-0, 1st AFC West | +120
+KC Chiefs 0-0-0, 1st AFC West | -140
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: DET Lions 0-0-0, 1st NFC North @ BUF Bills 0-0-0, 1st AFC East
+Start: Sep 17, 2026 · 7:15 PM
+
+Market: Spread
+DET Lions 0-0-0, 1st NFC North | +3.0 | -105
+BUF Bills 0-0-0, 1st AFC East | -3.0 | -115
+
+Market: Total
+Over | 52.5 | -110
+Under | 52.5 | -110
+
+Market: Moneyline
+DET Lions 0-0-0, 1st NFC North | +135
+BUF Bills 0-0-0, 1st AFC East | -155
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: BAL Ravens 0-0-0, 1st AFC North @ Dallas Wings
+Start: Sep 27, 2026 · 3:25 PM
+
+Market: Spread
+BAL Ravens 0-0-0, 1st AFC North | -2.5 | -115
+Dallas Wings | +2.5 | -105
+
+Market: Total
+Over | 50.5 | -115
+Under | 50.5 | -105
+
+Market: Moneyline
+BAL Ravens 0-0-0, 1st AFC North | -135
+Dallas Wings | +115
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Indiana Fever @ Washington Mystics
+Start: Oct 4, 2026 · 8:30 AM
+
+Market: Spread
+Indiana Fever | -110 | -110
+Washington Mystics | -110 | -110
+
+Market: Total
+Over | 49.5 | -120
+Under | 49.5 | +100
+
+Market: Moneyline
+Indiana Fever | -110
+Washington Mystics | -110
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: PHI Eagles 0-0-0, 1st NFC East @ JAX Jaguars 0-0-0, 1st AFC South
+Start: Oct 11, 2026 · 8:30 AM
+
+Market: Spread
+PHI Eagles 0-0-0, 1st NFC East | -1.5 | -110
+JAX Jaguars 0-0-0, 1st AFC South | +1.5 | -110
+
+Market: Total
+Over | 44.5 | -110
+Under | 44.5 | -110
+
+Market: Moneyline
+PHI Eagles 0-0-0, 1st NFC East | -125
+JAX Jaguars 0-0-0, 1st AFC South | +105
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: HOU Texans 0-0-0, 1st AFC South @ JAX Jaguars 0-0-0, 1st AFC South
+Start: Oct 18, 2026 · 8:30 AM
+
+Market: Spread
+HOU Texans 0-0-0, 1st AFC South | -1.5 | -105
+JAX Jaguars 0-0-0, 1st AFC South | +1.5 | -115
+
+Market: Total
+Over | 41.5 | -105
+Under | 41.5 | -115
+
+Market: Moneyline
+HOU Texans 0-0-0, 1st AFC South | -120
+JAX Jaguars 0-0-0, 1st AFC South | +100
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: PIT Steelers 0-0-0, 1st AFC North @ NO Saints 0-0-0, 1st NFC South
+Start: Oct 25, 2026 · 8:30 AM
+
+Market: Spread
+PIT Steelers 0-0-0, 1st AFC North | -1.5 | -110
+NO Saints 0-0-0, 1st NFC South | +1.5 | -110
+
+Market: Total
+Over | 41.5 | -110
+Under | 41.5 | -110
+
+Market: Moneyline
+PIT Steelers 0-0-0, 1st AFC North | -135
+NO Saints 0-0-0, 1st NFC South | +115
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: CIN Bengals 0-0-0, 1st AFC North @ Atlanta Dream
+Start: Nov 8, 2026 · 8:30 AM
+
+Market: Spread
+CIN Bengals 0-0-0, 1st AFC North | -4.5 | -105
+Atlanta Dream | +4.5 | -115
+
+Market: Total
+Over | 49.5 | -105
+Under | 49.5 | -115
+
+Market: Moneyline
+CIN Bengals 0-0-0, 1st AFC North | -210
+Atlanta Dream | +175
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: NE Patriots 0-0-0, 1st AFC East @ DET Lions 0-0-0, 1st NFC North
+Start: Nov 15, 2026 · 8:30 AM
+
+Market: Spread
+NE Patriots 0-0-0, 1st AFC East | -0.5 | -110
+DET Lions 0-0-0, 1st NFC North | +0.5 | -110
+
+Market: Total
+Over | 49.5 | -105
+Under | 49.5 | -115
+
+Market: Moneyline
+NE Patriots 0-0-0, 1st AFC East | -110
+DET Lions 0-0-0, 1st NFC North | -110
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Minnesota Lynx @ SF 49ers 0-0-0, 1st NFC West
+Start: Nov 22, 2026 · 7:20 PM
+
+Market: Spread
+Minnesota Lynx | +4.5 | -115
+SF 49ers 0-0-0, 1st NFC West | -4.5 | -105
+
+Market: Total
+Over | 47.5 | +100
+Under | 47.5 | -120
+
+Market: Moneyline
+Minnesota Lynx | +170
+SF 49ers 0-0-0, 1st NFC West | -200
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: GB Packers 0-0-0, 1st NFC North @ Los Angeles Sparks
+Start: Nov 25, 2026 · 7:00 PM
+
+Market: Spread
+GB Packers 0-0-0, 1st NFC North | +5.0 | -110
+Los Angeles Sparks | -5.0 | -110
+
+Market: Total
+Over | 48.5 | -105
+Under | 48.5 | -115
+
+Market: Moneyline
+GB Packers 0-0-0, 1st NFC North | +190
+Los Angeles Sparks | -225
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Chicago Sky @ DET Lions 0-0-0, 1st NFC North
+Start: Nov 26, 2026 · 12:00 PM
+
+Market: Spread
+Chicago Sky | +2.5 | -105
+DET Lions 0-0-0, 1st NFC North | -2.5 | -115
+
+Market: Total
+Over | 53.5 | -110
+Under | 53.5 | -110
+
+Market: Moneyline
+Chicago Sky | +115
+DET Lions 0-0-0, 1st NFC North | -135
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: PHI Eagles 0-0-0, 1st NFC East @ Dallas Wings
+Start: Nov 26, 2026 · 3:30 PM
+
+Market: Spread
+PHI Eagles 0-0-0, 1st NFC East | +2.0 | -110
+Dallas Wings | -2.0 | -110
+
+Market: Total
+Over | 49.5 | -115
+Under | 49.5 | -105
+
+Market: Moneyline
+PHI Eagles 0-0-0, 1st NFC East | +105
+Dallas Wings | -125
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: KC Chiefs 0-0-0, 1st AFC West @ BUF Bills 0-0-0, 1st AFC East
+Start: Nov 26, 2026 · 7:15 PM
+
+Market: Spread
+KC Chiefs 0-0-0, 1st AFC West | +3.0 | -110
+BUF Bills 0-0-0, 1st AFC East | -3.0 | -110
+
+Market: Total
+Over | 50.5 | -105
+Under | 50.5 | -115
+
+Market: Moneyline
+KC Chiefs 0-0-0, 1st AFC West | +130
+BUF Bills 0-0-0, 1st AFC East | -150
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: DEN Broncos 0-0-0, 1st AFC West @ PIT Steelers 0-0-0, 1st AFC North
+Start: Nov 27, 2026 · 2:00 PM
+
+Market: Spread
+DEN Broncos 0-0-0, 1st AFC West | -1.5 | -110
+PIT Steelers 0-0-0, 1st AFC North | +1.5 | -110
+
+Market: Total
+Over | 39.5 | -120
+Under | 39.5 | +100
+
+Market: Moneyline
+DEN Broncos 0-0-0, 1st AFC West | -115
+PIT Steelers 0-0-0, 1st AFC North | -105
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: HOU Texans 0-0-0, 1st AFC South @ PHI Eagles 0-0-0, 1st NFC East
+Start: Dec 24, 2026 · 7:15 PM
+
+Market: Spread
+HOU Texans 0-0-0, 1st AFC South | +2.5 | -105
+PHI Eagles 0-0-0, 1st NFC East | -2.5 | -115
+
+Market: Total
+Over | 37.5 | -115
+Under | 37.5 | -105
+
+Market: Moneyline
+HOU Texans 0-0-0, 1st AFC South | +110
+PHI Eagles 0-0-0, 1st NFC East | -130
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: GB Packers 0-0-0, 1st NFC North @ Chicago Sky
+Start: Dec 25, 2026 · 12:00 PM
+
+Market: Spread
+GB Packers 0-0-0, 1st NFC North | +1.5 | -115
+Chicago Sky | -1.5 | -105
+
+Market: Total
+Over | 47.5 | -115
+Under | 47.5 | -105
+
+Market: Moneyline
+GB Packers 0-0-0, 1st NFC North | +100
+Chicago Sky | -120
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: BUF Bills 0-0-0, 1st AFC East @ DEN Broncos 0-0-0, 1st AFC West
+Start: Dec 25, 2026 · 3:30 PM
+
+Market: Spread
+BUF Bills 0-0-0, 1st AFC East | -2.5 | -115
+DEN Broncos 0-0-0, 1st AFC West | +2.5 | -105
+
+Market: Total
+Over | 46.5 | -115
+Under | 46.5 | -105
+
+Market: Moneyline
+BUF Bills 0-0-0, 1st AFC East | -130
+DEN Broncos 0-0-0, 1st AFC West | +110
+
+THESCORE_STRUCTURED_EXPORT
+Sport: NHL
+Event: Los Angeles Sparks @ Seattle Storm
+Start: Dec 25, 2026 · 7:15 PM
+
+Market: Spread
+Los Angeles Sparks | -110 | -110
+Seattle Storm | -110 | -110
+
+Market: Total
+Over | 46.5 | -115
+Under | 46.5 | -105
+
+Market: Moneyline
+Los Angeles Sparks | -110
+Seattle Storm | -110

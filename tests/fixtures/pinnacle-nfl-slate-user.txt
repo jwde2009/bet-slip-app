@@ -1,0 +1,397 @@
+PINNACLE_NFL_MAIN_LINES_CAPTURE
+NFL_CAPTURE_LEAGUE: NFL
+Forgot email or password?
+LOG IN
+JOIN
+SPORTS BETTING
+Log In or Join to access the Live Centre.
+LIVE CENTRE
+CASINO
+LIVE CASINO
+VIRTUAL SPORTS
+BETTING RESOURCES
+Quick Bet
+I
+O
+American Odds
+EN
+20:23:16 (GMT -05:00)
+Help
+Football
+NFL
+NFL Odds
+ALLWED, SEP 09, 2026THU, SEP 10, 2026SUN, SEP 13, 2026MON, SEP 14, 2026
+MORE
+ALLGAME1ST HALF1ST QUARTERTEAM TOTALSFUTURESREGULAR SEASON WINSSEASON LONG PLAYER PROPSTEAM TO MAKE PLAYOFFS
+WED, SEP 09, 2026
+HANDICAP
+MONEY LINE
+OVER
+UNDER
+New England Patriots
+Seattle Seahawks
+19:20
++3.5
+-116
+-3.5
++103
++155
+-176
+44.5
+-108
+44.5
+-108
++67
+THU, SEP 10, 2026
+HANDICAP
+MONEY LINE
+OVER
+UNDER
+San Francisco 49ers
+Los Angeles Rams
+19:35
++3.5
+-108
+-3.5
+-104
++171
+-197
+48
+-111
+48
+-105
++70
+SUN, SEP 13, 2026
+HANDICAP
+MONEY LINE
+OVER
+UNDER
+Atlanta Falcons
+Pittsburgh Steelers
+12:00
++3.5
+-114
+-3.5
++101
++158
+-181
+42.5
+-105
+42.5
+-111
++38
+Baltimore Ravens
+Indianapolis Colts
+12:00
+-3.5
++103
++3.5
+-116
+-177
++155
+47.5
+-113
+47.5
+-104
++38
+Cleveland Browns
+Jacksonville Jaguars
+12:00
++9.5
+-114
+-9.5
++101
++316
+-391
+40.5
+-112
+40.5
+-104
++41
+New Orleans Saints
+Detroit Lions
+12:00
++7.0
+-108
+-7.0
+-105
++267
+-321
+50.5
++102
+50.5
+-120
++37
+New York Jets
+Tennessee Titans
+12:00
++1.0
+-103
+-1.0
+-109
++106
+-119
+39
+-111
+39
+-105
++37
+Tampa Bay Buccaneers
+Cincinnati Bengals
+12:00
++4.0
+-106
+-4.0
+-106
++180
+-208
+51
++101
+51
+-117
++36
+Buffalo Bills
+Houston Texans
+12:00
+-1.0
+-107
++1.0
+-105
+-114
++102
+44
+-118
+44
++101
++50
+Chicago Bears
+Carolina Panthers
+12:00
+-2.5
+-124
++2.5
++110
+-160
++141
+47.5
++101
+47.5
+-118
++39
+Green Bay Packers
+Minnesota Vikings
+15:25
++1.0
++102
+-1.0
+-115
++111
+-124
+46
+-112
+46
+-104
++43
+Arizona Cardinals
+Los Angeles Chargers
+15:25
++10.5
+-119
+-10.5
++106
++395
+-509
+47
+-114
+47
+-102
++29
+Miami Dolphins
+Las Vegas Raiders
+15:25
++3.5
+-114
+-3.5
++101
++157
+-180
+40.5
+-110
+40.5
+-106
++23
+Washington Commanders
+Philadelphia Eagles
+15:25
++4.5
+-104
+-4.5
+-108
++196
+-228
+44.5
+-102
+44.5
+-114
++39
+Dallas Cowboys
+New York Giants
+19:20
+-2.5
+-126
++2.5
++112
+-161
++142
+47.5
+-121
+47.5
++104
++42
+MON, SEP 14, 2026
+HANDICAP
+MONEY LINE
+OVER
+UNDER
+Denver Broncos
+Kansas City Chiefs
+19:15
++3.0
+-117
+-3.0
++104
++131
+-149
+43
+-115
+43
+-102
++34
+NFL betting
+
+Choose Pinnacle for the best NFL odds and high limits for NFL betting online.
+
+See more
+
+FAVOURITES
+Log in or Join to change your favourites.
+TOP SPORTS
+Soccer
+944
+Esports
+28
+Football
+312
+Tennis
+134
+Baseball
+36
+Basketball
+59
+MMA
+29
+Hockey
+57
+Golf
+2
+Volleyball
+5
+Handball
+2
+A-Z SPORTS
+Aussie Rules
+1
+Baseball
+36
+Basketball
+59
+Boxing
+6
+Chess
+1
+Cricket
+3
+Cycling
+101
+Entertainment
+1
+Esports
+28
+Football
+312
+Formula 1
+3
+Golf
+2
+Handball
+2
+Hockey
+57
+MMA
+29
+Rugby League
+2
+Rugby Union
+1
+Soccer
+944
+Tennis
+134
+Volleyball
+5
+BET SLIP
+MY BETS
+SINGLES
+There are no bets on your ticket.
+Click the odds to add a bet.
+MULTIPLES
+To place a Multiple bet you need a minimum of two bets on your Bet Slip. Alternatively, you can place a Single bet.
+TEASERS
+Sports Betting
+Soccer betting
+Basketball betting
+Baseball betting
+Football betting
+Tennis betting
+Hockey betting
+Esports betting
+About Pinnacle
+Corporate
+Press
+Affiliates
+Why Pinnacle?
+Policies
+Responsible Gaming
+Terms & Conditions
+Privacy Policy
+Cookie Policy
+Help & Support
+Contact us
+Betting Rules
+Bets Offered
+Help
+Sitemap
+Payment Options
+Social
+X
+YouTube
+Facebook
+LinkedIn
+Reddit
+Spotify
+Apple Podcasts
+
+Gambling can be addictive. Please know your limits and gamble responsibly.
+
+Impyrial Holdings Ltd, 8A Pitmans Alley, Main Street, Gibraltar GX11 1AA, acting for processing purposes on behalf of Ragnarok Corporation N.V.
+
+Pinnacle.com operates with the license of Ragnarok Corporation N.V., Pletterijweg 43, Willemstad, Curaçao, company number 79358, and is supervised and licensed by the Curaçao Gaming Authority under the License OGL/2023/105/0084, issued for the provision of games of chance. Licensed from June 25, 2024, with its status as being active. Pinnacle is a registered trademark.
+
+Online sports betting from Pinnacle bookmakers - your premier international sportsbook © 2004 - 2026 Pinnacle.
+Pinnacle, Pinnacle Sports, Pinbet, Pinny and all other derivative marks are registered trademarks of Pinnacle. Any and all content on the website (desktop and mobile), including sports odds, are proprietary and may not be copied or disseminated without the express written consent of Pinnacle. All Rights Reserved.
+
+v.8.4.22-rel
+Extracting odds…
+×
+The EV Parlay extension is running. Keep this tab open.
+Last import: 8:23:16 PM

@@ -322,6 +322,7 @@ export default function LoadCoveragePanel({ rows = [], onDeleteCoverageRows, onU
                                           <option value="WNBA">WNBA</option>
                                           <option value="NHL">NHL</option>
                                           <option value="MLB">MLB</option>
+                                          <option value="NFL">NFL</option>
                                           <option value="UFC">UFC</option>
                                           <option value="GOLF">GOLF</option>
                                           <option value="TENNIS">TENNIS</option>
@@ -647,7 +648,7 @@ function buildCoverage(rows = []) {
                 coverageMarkedCompleteAt: event.coverageMarkedCompleteAt || "",
                 isThin: event.coverageMarkedComplete
                   ? false
-                  : isThinEvent({ marketCount, rowCount: event.rowCount, markets }),
+                  : isThinEvent({ sport: sport.sport, marketCount, rowCount: event.rowCount, markets }),
               };
             })
             .sort((a, b) => {
@@ -684,7 +685,10 @@ function buildCoverage(rows = []) {
   };
 }
 
-function isThinEvent({ marketCount, rowCount, markets }) {
+function isThinEvent({ sport, marketCount, rowCount, markets }) {
+  if (String(sport).toUpperCase() === "NFL") {
+    return ["moneyline_2way", "spread", "total"].some(type => !markets.some(market => market.marketType === type && market.rowCount >= 2));
+  }
   if (marketCount <= 3) return true;
   if (rowCount <= 6) return true;
 
@@ -749,6 +753,10 @@ function buildExpectedMissingMarketsForCoverageEvent({ bookmaker = "", sport, ma
         marketType,
         reason,
       }));
+  }
+
+  if (sportKey === "NFL") {
+    return missingFromProfile(["moneyline_2way", "spread", "total"]);
   }
 
   if (sportKey === "WNBA") {

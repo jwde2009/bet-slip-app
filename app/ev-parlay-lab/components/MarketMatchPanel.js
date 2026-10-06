@@ -32,7 +32,7 @@ export default function MarketMatchPanel({ markets, unmatchedRows }) {
                 <div style={mutedStyle}>
                   {market.marketType}
                   {market.lineValue !== null && market.lineValue !== undefined
-                    ? ` • ${market.lineValue}`
+                    ? ` • ${market.spreadLineTeam ? `${market.spreadLineTeam} ` : ""}${market.lineValue}`
                     : ""}
                 </div>
 

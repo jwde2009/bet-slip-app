@@ -1,4 +1,5 @@
 import { americanToDecimal } from "../odds";
+import { parseNflMainLines } from "./nflMainLines";
 
 let nextId = 1;
 
@@ -8,6 +9,8 @@ function makeId() {
 
 export function parseBetMGMText(rawText = "", context = {}) {
   if (!rawText || typeof rawText !== "string") return [];
+  const nflRows = parseNflMainLines(rawText, "BetMGM", context);
+  if (nflRows !== null) return nflRows;
 
   const lines = rawText
     .split("\n")

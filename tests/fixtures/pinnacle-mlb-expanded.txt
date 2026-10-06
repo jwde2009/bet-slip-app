@@ -1,0 +1,739 @@
+JOIN
+LOG IN
+SPORTS BETTING
+LIVE CENTRE
+CASINO
+LIVE CASINO
+VIRTUAL SPORTS
+BETTING RESOURCES
+HELP
+Language
+English (EN)
+Español (ES LATAM)
+Suomi (FI)
+Français (FR)
+Italiano (IT)
+日本語 (JP)
+한국어 (KO)
+Português (PT BR)
+Русский (RU)
+Svenska (SV)
+简体中文 (ZH)
+繁體中文 (ZH TW)
+Odds format
+Decimal Odds
+American Odds
+JOIN
+LOG IN
+Sports
+Search
+Live Centre
+Casino
+Live Casino
+Virtual Sports
+Baseball
+MLB
+San Francisco Giants @ New York Mets
+Saturday, September 5, 2026 at 15:10
+San Francisco Giants
+New York Mets
+All
+Game
+1st Half
+1st Inning
+Exact Scores
+Player Props
+Money Line – Game
+Hide All
+San Francisco Giants
++148
+New York Mets
+-162
+Handicap – Game
+San Francisco Giants	New York Mets
++1.5
+-146
+-1.5
++132
+See more
+Total – Game
+Over 8
+-108
+Under 8
+-104
+See more
+Team Total – Game
+San Francisco Giants	New York Mets
+Over
+Under
+3.5
++102
+3.5
+-119
+Over
+Under
+4.5
++104
+4.5
+-121
+See more
+Handicap – 1st Half
+San Francisco Giants	New York Mets
+0
++142
+0
+-165
+See more
+Total – 1st Half
+Over 4.5
++105
+Under 4.5
+-120
+See more
+Team Total – 1st Half
+San Francisco Giants	New York Mets
+Over
+Under
+1.5
+-113
+1.5
+-107
+Over
+Under
+2.5
++110
+2.5
+-134
+Money Line – 1st Inning
+San Francisco Giants
++346
+Draw
+-126
+New York Mets
++242
+Handicap – 1st Inning
+San Francisco Giants	New York Mets
+0
++126
+0
+-148
+Total – 1st Inning
+Over 0.5
+-105
+Under 0.5
+-111
+Correct Score
+San Francisco Giants 1, New York Mets 0
++7837
+San Francisco Giants 2, New York Mets 0
++7430
+San Francisco Giants 3, New York Mets 0
++8050
+San Francisco Giants 4, New York Mets 0
++9814
+San Francisco Giants 0, New York Mets 1
++5885
+San Francisco Giants 2, New York Mets 1
++3954
+San Francisco Giants 3, New York Mets 1
++4460
+San Francisco Giants 4, New York Mets 1
++5338
+San Francisco Giants 5, New York Mets 1
++6967
+San Francisco Giants 6, New York Mets 1
++9333
+San Francisco Giants 0, New York Mets 2
++5962
+San Francisco Giants 1, New York Mets 2
++2574
+San Francisco Giants 3, New York Mets 2
++3128
+San Francisco Giants 4, New York Mets 2
++3887
+San Francisco Giants 5, New York Mets 2
++4990
+San Francisco Giants 6, New York Mets 2
++6717
+San Francisco Giants 7, New York Mets 2
++9332
+San Francisco Giants 0, New York Mets 3
++5799
+San Francisco Giants 1, New York Mets 3
++3378
+San Francisco Giants 2, New York Mets 3
++2006
+San Francisco Giants 4, New York Mets 3
++3232
+San Francisco Giants 5, New York Mets 3
++4171
+San Francisco Giants 6, New York Mets 3
++5613
+San Francisco Giants 7, New York Mets 3
++8037
+San Francisco Giants 0, New York Mets 4
++6217
+San Francisco Giants 1, New York Mets 4
++3654
+San Francisco Giants 2, New York Mets 4
++3192
+San Francisco Giants 3, New York Mets 4
++2093
+San Francisco Giants 5, New York Mets 4
++3849
+San Francisco Giants 6, New York Mets 4
++5332
+San Francisco Giants 7, New York Mets 4
++7525
+San Francisco Giants 0, New York Mets 5
++7129
+San Francisco Giants 1, New York Mets 5
++4232
+San Francisco Giants 2, New York Mets 5
++3704
+San Francisco Giants 3, New York Mets 5
++3740
+San Francisco Giants 4, New York Mets 5
++2528
+San Francisco Giants 6, New York Mets 5
++5354
+San Francisco Giants 7, New York Mets 5
++7670
+San Francisco Giants 0, New York Mets 6
++8605
+San Francisco Giants 1, New York Mets 6
++5177
+San Francisco Giants 2, New York Mets 6
++4452
+San Francisco Giants 3, New York Mets 6
++4540
+San Francisco Giants 4, New York Mets 6
++5143
+San Francisco Giants 5, New York Mets 6
++3577
+San Francisco Giants 7, New York Mets 6
++8187
+San Francisco Giants 1, New York Mets 7
++6403
+San Francisco Giants 2, New York Mets 7
++5676
+San Francisco Giants 3, New York Mets 7
++5848
+San Francisco Giants 4, New York Mets 7
++6559
+San Francisco Giants 5, New York Mets 7
++7860
+San Francisco Giants 6, New York Mets 7
++5548
+Correct Score 1st Half
+San Francisco Giants 0, New York Mets 1
++1659
+San Francisco Giants 0, New York Mets 2
++1724
+San Francisco Giants 0, New York Mets 3
++2058
+San Francisco Giants 0, New York Mets 4
++2629
+San Francisco Giants 0, New York Mets 5
++3892
+San Francisco Giants 1, New York Mets 0
++1793
+San Francisco Giants 1, New York Mets 1
++1664
+San Francisco Giants 1, New York Mets 2
++1711
+San Francisco Giants 1, New York Mets 3
++2043
+San Francisco Giants 1, New York Mets 4
++2891
+San Francisco Giants 1, New York Mets 5
++3865
+San Francisco Giants 2, New York Mets 0
++2351
+San Francisco Giants 2, New York Mets 1
++2223
+San Francisco Giants 2, New York Mets 2
++2270
+San Francisco Giants 2, New York Mets 3
++2957
+San Francisco Giants 2, New York Mets 4
++3752
+San Francisco Giants 2, New York Mets 5
++4990
+San Francisco Giants 3, New York Mets 0
++3225
+San Francisco Giants 3, New York Mets 1
++3054
+San Francisco Giants 3, New York Mets 2
++3504
+San Francisco Giants 3, New York Mets 3
++4076
+San Francisco Giants 4, New York Mets 0
++4562
+San Francisco Giants 4, New York Mets 1
++4774
+San Francisco Giants 4, New York Mets 2
++4947
+Exact Total Runs
+1
++2236
+2
++2203
+3
++931
+4
++1093
+5
++619
+6
++818
+7
++562
+8
++788
+9
++623
+10
++929
+11
++819
+12
++1240
+13
++1176
+14
++1781
+15+
++798
+Exact Total Runs 1st Half
+0
++1287
+1
++725
+2
++546
+3
++488
+4
++491
+5
++599
+6
++691
+7
++832
+8
++1033
+9
++1313
+10
++1693
+11+
++1119
+New York Mets Exact Total Runs
+0
++1261
+1
++757
+2
++552
+3
++478
+4
++480
+5
++535
+6
++643
+7
++812
+8+
++438
+New York Mets Exact Total Runs 1st Half
+0
++385
+1
++362
+2
++380
+3
++468
+4
++616
+5+
++332
+New York Mets Runs Odd/Even
+Odd
+-105
+Even
+-111
+New York Mets Runs Odd/Even 1st Half
+Odd
++110
+Even
+-128
+San Francisco Giants Exact Total Runs
+0
++813
+1
++487
+2
++430
+3
++450
+4
++516
+5
++627
+6
++798
+7
++1047
+8+
++677
+San Francisco Giants Exact Total Runs 1st Half
+0
++263
+1
++266
+2
++379
+3
++549
+4
++795
+5+
++559
+San Francisco Giants Runs Odd/Even
+Odd
+-104
+Even
+-112
+San Francisco Giants Runs Odd/Even 1st Half
+Odd
++115
+Even
+-134
+Total Runs Odd/Even
+Odd
+-147
+Even
++125
+Total Runs Odd/Even 1st Half
+Odd
+-104
+Even
+-112
+Total Runs Range
+1 - 3
++630
+4 - 6
++276
+7 - 9
++202
+10 - 12
++357
+13+
++435
+Total Runs Range 1st Half
+0 - 2
++254
+3 - 4
++231
+5 - 6
++326
+7+
++251
+Winning Margin
+San Francisco Giants By 1
++568
+San Francisco Giants By 2
++727
+San Francisco Giants By 3
++945
+San Francisco Giants By 4
++1272
+San Francisco Giants By 5+
++832
+New York Mets By 1
++361
+New York Mets By 2
++637
+New York Mets By 3
++746
+New York Mets By 4
++910
+New York Mets By 5+
++428
+Winning Margin 1st Half
+San Francisco Giants By 1
++568
+San Francisco Giants By 2
++777
+San Francisco Giants By 3+
++513
+Tie
++436
+New York Mets By 1
++482
+New York Mets By 2
++569
+New York Mets By 3+
++261
+Winning Margin Range
+San Francisco Giants By 1 - 2
++324
+San Francisco Giants By 3 - 4
++611
+San Francisco Giants By 5 - 6
++1201
+San Francisco Giants By 7+
++1737
+New York Mets By 1 - 2
++216
+New York Mets By 3 - 4
++439
+New York Mets By 5 - 6
++740
+New York Mets By 7+
++876
+A.J. Ewing Total Bases
+Over 0.5 Bases
+-200
+Under 0.5 Bases
++150
+Andrew Knizner Total Bases
+Over 0.5 Bases
+-140
+Under 0.5 Bases
++105
+Andrew Knizner Total Home Runs
+Over 0.5 Home Runs
++500
+Under 0.5 Home Runs
+-932
+Anthony Molina Total Earned Runs
+Over 2.5 Runs
+-101
+Under 2.5 Runs
+-131
+Anthony Molina Total Hits Allowed
+Over 4.5 Hits Allowed
+-131
+Under 4.5 Hits Allowed
+-102
+Anthony Molina Total Pitching Outs
+Over 14.5 Pitching Outs
+-112
+Under 14.5 Pitching Outs
+-118
+Anthony Molina Total Strikeouts
+Over 3.5 Strikeouts
++113
+Under 3.5 Strikeouts
+-151
+Bo Bichette Total Bases
+Over 1.5 Bases
++110
+Under 1.5 Bases
+-148
+Bo Bichette Total Home Runs
+Over 0.5 Home Runs
++600
+Under 0.5 Home Runs
+-1268
+Brett Baty Total Bases
+Over 0.5 Bases
+-145
+Under 0.5 Bases
++105
+Brett Baty Total Home Runs
+Over 0.5 Home Runs
++600
+Under 0.5 Home Runs
+-1268
+Bryce Eldridge Total Bases
+Over 1.5 Bases
++135
+Under 1.5 Bases
+-185
+Bryce Eldridge Total Home Runs
+Over 0.5 Home Runs
++400
+Under 0.5 Home Runs
+-668
+Carson Benge Total Bases
+Over 1.5 Bases
++118
+Under 1.5 Bases
+-157
+Carson Benge Total Home Runs
+Over 0.5 Home Runs
++575
+Under 0.5 Home Runs
+-1176
+Christian Koss Total Bases
+Over 0.5 Bases
+-125
+Under 0.5 Bases
+-105
+Francisco Alvarez Total Bases
+Over 0.5 Bases
+-135
+Under 0.5 Bases
++100
+Francisco Alvarez Total Home Runs
+Over 0.5 Home Runs
++470
+Under 0.5 Home Runs
+-846
+Francisco Lindor Total Bases
+Over 1.5 Bases
++101
+Under 1.5 Bases
+-134
+Francisco Lindor Total Home Runs
+Over 0.5 Home Runs
++400
+Under 0.5 Home Runs
+-668
+Grant McCray Total Bases
+Over 0.5 Bases
+-105
+Under 0.5 Bases
+-125
+Jared Young Total Bases
+Over 1.5 Bases
++136
+Under 1.5 Bases
+-183
+Jared Young Total Home Runs
+Over 0.5 Home Runs
++520
+Under 0.5 Home Runs
+-993
+Jonah Cox Total Bases
+Over 0.5 Bases
+-200
+Under 0.5 Bases
++145
+Jonah Cox Total Home Runs
+Over 0.5 Home Runs
++560
+Under 0.5 Home Runs
+-1123
+Juan Soto Total Bases
+Over 1.5 Bases
++117
+Under 1.5 Bases
+-156
+Juan Soto Total Home Runs
+Over 0.5 Home Runs
++290
+Under 0.5 Home Runs
+-436
+Marcus Semien Total Bases
+Over 0.5 Bases
+-175
+Under 0.5 Bases
++130
+Marcus Semien Total Home Runs
+Over 0.5 Home Runs
++520
+Under 0.5 Home Runs
+-993
+Osleivis Basabe Total Bases
+Over 0.5 Bases
+-155
+Under 0.5 Bases
++115
+Rafael Devers Total Bases
+Over 1.5 Bases
++122
+Under 1.5 Bases
+-163
+Rafael Devers Total Home Runs
+Over 0.5 Home Runs
++400
+Under 0.5 Home Runs
+-668
+Shay Whitcomb Total Bases
+Over 0.5 Bases
+-140
+Under 0.5 Bases
++105
+Shay Whitcomb Total Home Runs
+Over 0.5 Home Runs
++600
+Under 0.5 Home Runs
+-1268
+Zac Thornton Total Earned Runs
+Over 1.5 Runs
+-143
+Under 1.5 Runs
++108
+Zac Thornton Total Hits Allowed
+Over 4.5 Hits Allowed
+-133
+Under 4.5 Hits Allowed
++101
+Zac Thornton Total Pitching Outs
+Over 16.5 Pitching Outs
+-148
+Under 16.5 Pitching Outs
++112
+Zac Thornton Total Strikeouts
+Over 4.5 Strikeouts
+-135
+Under 4.5 Strikeouts
++102
+BACK TO TOP
+Sports Betting
+Soccer betting
+Basketball betting
+Baseball betting
+Football betting
+Tennis betting
+Hockey betting
+Esports betting
+About Pinnacle
+Corporate
+Press
+Affiliates
+Why Pinnacle?
+Policies
+Responsible Gaming
+Terms & Conditions
+Privacy Policy
+Cookie Policy
+Help & Support
+Contact us
+Betting Rules
+Bets Offered
+Help
+Sitemap
+Payment Options
+Social
+X
+YouTube
+Facebook
+LinkedIn
+Reddit
+Spotify
+Apple Podcasts
+
+Gambling can be addictive. Please know your limits and gamble responsibly.
+
+Impyrial Holdings Ltd, 8A Pitmans Alley, Main Street, Gibraltar GX11 1AA, acting for processing purposes on behalf of Ragnarok Corporation N.V.
+
+Pinnacle.com operates with the license of Ragnarok Corporation N.V., Pletterijweg 43, Willemstad, Curaçao, company number 79358, and is supervised and licensed by the Curaçao Gaming Authority under the License OGL/2023/105/0084, issued for the provision of games of chance. Licensed from June 25, 2024, with its status as being active. Pinnacle is a registered trademark.
+
+Online sports betting from Pinnacle bookmakers - your premier international sportsbook © 2004 - 2026 Pinnacle.
+Pinnacle, Pinnacle Sports, Pinbet, Pinny and all other derivative marks are registered trademarks of Pinnacle. Any and all content on the website (desktop and mobile), including sports odds, are proprietary and may not be copied or disseminated without the express written consent of Pinnacle. All Rights Reserved.
+
+v.8.4.22-rel
+BET SLIP
+Extracting odds…
+×
+The EV Parlay extension is running. Keep this tab open.
+Last import: 2:59:07 PM

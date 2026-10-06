@@ -1,3 +1,4 @@
+import { parseNflMainLines } from "./nflMainLines";
 import { americanToDecimal } from "../odds";
 
 let nextId = 1;
@@ -8,6 +9,8 @@ function makeId() {
 
 export function parseTheScoreText(rawText = "", context = {}) {
   if (!rawText || typeof rawText !== "string") return [];
+  const nflRows = parseNflMainLines(rawText, "TheScore", context);
+  if (nflRows !== null) return nflRows;
 
   const lines = rawText
     .split("\n")

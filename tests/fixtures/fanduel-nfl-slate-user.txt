@@ -1,0 +1,488 @@
+FANDUEL_NFL_MAIN_LINES_CAPTURE
+NFL_CAPTURE_LEAGUE: NFL
+NFL Odds
+NFL
+SPREAD
+MONEY
+TOTAL
+New England Patriots
+Seattle Seahawks
++3.5
+-112
++158
+O 44.5
+-110
+-3.5
+-108
+-188
+U 44.5
+-110
+WED 7:15PM CT
+Stats
+More wagers
+San Francisco 49ers
+Los Angeles Rams
++3.5
+-106
++164
+O 48.5
+-105
+-3.5
+-114
+-196
+U 48.5
+-115
+THU 7:35PM CT
+Stats
+More wagers
+Buffalo Bills
+Houston Texans
+-1.5
+-106
+-120
+O 44.5
+-106
++1.5
+-114
++102
+U 44.5
+-114
+SUN 12:00PM CT
+Stats
+More wagers
+Chicago Bears
+Carolina Panthers
+-2.5
+-122
+-158
+O 47.5
+-102
++2.5
++100
++134
+U 47.5
+-120
+SUN 12:01PM CT
+Stats
+More wagers
+Cleveland Browns
+Jacksonville Jaguars
++8.5
+-115
++330
+O 40.5
+-108
+-8.5
+-105
+-420
+U 40.5
+-112
+SUN 12:01PM CT
+Stats
+More wagers
+Atlanta Falcons
+Pittsburgh Steelers
++3.5
+-118
++150
+O 41.5
+-115
+-3.5
+-104
+-178
+U 41.5
+-105
+SUN 12:01PM CT
+Stats
+More wagers
+New York Jets
+Tennessee Titans
++1.5
+-110
++106
+O 39.5
+-110
+-1.5
+-110
+-124
+U 39.5
+-110
+SUN 12:01PM CT
+Stats
+More wagers
+New Orleans Saints
+Detroit Lions
++6.5
++100
++275
+O 49.5
+-115
+-6.5
+-122
+-340
+U 49.5
+-105
+SUN 12:01PM CT
+Stats
+More wagers
+Tampa Bay Buccaneers
+Cincinnati Bengals
++3.5
+-105
++176
+O 50.5
+-112
+-3.5
+-115
+-210
+U 50.5
+-108
+SUN 12:01PM CT
+Stats
+More wagers
+Baltimore Ravens
+Indianapolis Colts
+-3.5
+-104
+-178
+O 47.5
+-112
++3.5
+-118
++150
+U 47.5
+-108
+SUN 12:01PM CT
+Stats
+More wagers
+Washington Commanders
+Philadelphia Eagles
++5.5
+-115
++198
+O 44.5
+-112
+-5.5
+-105
+-240
+U 44.5
+-108
+SUN 3:25PM CT
+Stats
+More wagers
+Green Bay Packers
+Minnesota Vikings
++1.5
+-115
+-104
+O 46.5
+-110
+-1.5
+-105
+-116
+U 46.5
+-110
+SUN 3:25PM CT
+Stats
+More wagers
+Miami Dolphins
+Las Vegas Raiders
++3.5
+-115
++148
+O 40.5
+-105
+-3.5
+-105
+-176
+U 40.5
+-115
+SUN 3:26PM CT
+Stats
+More wagers
+Arizona Cardinals
+Los Angeles Chargers
++9.5
+-105
++400
+O 47.5
+-102
+-9.5
+-115
+-520
+U 47.5
+-120
+SUN 3:26PM CT
+Stats
+More wagers
+Dallas Cowboys
+New York Giants
+-2.5
+-115
+-148
+O 48.5
+-105
++2.5
+-105
++126
+U 48.5
+-115
+SUN 7:20PM CT
+Stats
+More wagers
+Denver Broncos
+Kansas City Chiefs
++2.5
+-105
++122
+O 43.5
+-110
+-2.5
+-115
+-144
+U 43.5
+-110
+SEP 14, 7:15PM CT
+Stats
+More wagers
+Indianapolis Colts
+Washington Commanders
+-1.5
+-105
+-116
+O 49.5
+-110
++1.5
+-115
+-102
+U 49.5
+-110
+OCT 4, 8:30AM CT
+Stats
+More wagers
+Philadelphia Eagles
+Jacksonville Jaguars
+-1.5
+-108
+-120
+O 44.5
+-104
++1.5
+-112
++102
+U 44.5
+-118
+OCT 11, 8:30AM CT
+Stats
+More wagers
+Houston Texans
+Jacksonville Jaguars
+-1.5
+-104
+-112
+O 40.5
+-115
++1.5
+-118
+-104
+U 40.5
+-105
+OCT 18, 8:30AM CT
+Stats
+More wagers
+Pittsburgh Steelers
+New Orleans Saints
+-1.5
+-115
+-130
+O 40.5
+-118
++1.5
+-105
++110
+U 40.5
+-104
+OCT 25, 8:30AM CT
+Stats
+More wagers
+Cincinnati Bengals
+Atlanta Falcons
+-4.5
+-104
+-215
+O 49.5
+-105
++4.5
+-118
++180
+U 49.5
+-115
+NOV 8, 8:30AM CT
+Stats
+More wagers
+New England Patriots
+Detroit Lions
+-1.5
+-105
+-118
+O 49.5
+-115
++1.5
+-115
++100
+U 49.5
+-105
+NOV 15, 8:30AM CT
+Stats
+More wagers
+Minnesota Vikings
+San Francisco 49ers
++4.5
+-115
++176
+O 47.5
+-105
+-4.5
+-105
+-210
+U 47.5
+-115
+NOV 22, 7:20PM CT
+Stats
+More wagers
+Green Bay Packers
+Los Angeles Rams
++5.5
+-115
++198
+O 48.5
+-105
+-5.5
+-105
+-240
+U 48.5
+-115
+NOV 25, 7:00PM CT
+Stats
+More wagers
+Chicago Bears
+Detroit Lions
++2.5
+-110
++110
+O 53.5
+-115
+-2.5
+-110
+-130
+U 53.5
+-105
+NOV 26, 12:00PM CT
+Stats
+More wagers
+Philadelphia Eagles
+Dallas Cowboys
++1.5
+-110
++108
+O 49.5
+-115
+-1.5
+-110
+-126
+U 49.5
+-105
+NOV 26, 3:30PM CT
+Stats
+More wagers
+Kansas City Chiefs
+Buffalo Bills
++2.5
+-104
++130
+O 50.5
+-104
+-2.5
+-118
+-154
+U 50.5
+-118
+NOV 26, 7:15PM CT
+Stats
+More wagers
+Denver Broncos
+Pittsburgh Steelers
+-1.5
+-118
+-132
+O 39.5
+-110
++1.5
+-104
++112
+U 39.5
+-110
+NOV 27, 2:01PM CT
+Stats
+More wagers
+Houston Texans
+Philadelphia Eagles
++2.5
+-115
++112
+O 38.5
+-104
+-2.5
+-105
+-132
+U 38.5
+-118
+DEC 24, 7:15PM CT
+Stats
+More wagers
+Green Bay Packers
+Chicago Bears
++1.5
+-115
++100
+O 47.5
+-115
+-1.5
+-105
+-118
+U 47.5
+-105
+DEC 25, 12:01PM CT
+Stats
+More wagers
+Buffalo Bills
+Denver Broncos
+-1.5
+-115
+-132
+O 46.5
+-115
++1.5
+-105
++112
+U 46.5
+-105
+DEC 25, 3:31PM CT
+Stats
+More wagers
+Los Angeles Rams
+Seattle Seahawks
+-1.5
+-105
+-118
+O 45.5
+-110
++1.5
+-115
++100
+U 45.5
+-110
+DEC 25, 7:15PM CT
+Stats
+More wagers
+Sportsbook Odds / NFL Odds
