@@ -18,6 +18,11 @@ jobs:
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
       - name: Regression tests and extension syntax
         shell: bash
         run: |
@@ -32,5 +37,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci
           npm run build -- --webpack

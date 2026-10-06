@@ -120,7 +120,8 @@ test('BetOnline captures cannot fall through to another book\'s odds parser', as
   const route = new vm.SourceTextModule(read('app/ev-parlay-lab/utils/parseOddsText.js'), { context });
   const calls = [];
   await route.link(specifier => {
-    const exportName = path.basename(specifier);
+    // The additive NFL module exports a parser whose name differs from its filename.
+    const exportName = path.basename(specifier) === 'nflPlayerProps' ? 'parseNflPlayerProps' : path.basename(specifier);
     return new vm.SyntheticModule([exportName], function () {
       this.setExport(exportName, () => { calls.push(exportName); return []; });
     }, { context });
@@ -134,7 +135,7 @@ test('BetOnline captures cannot fall through to another book\'s odds parser', as
   assert.deepEqual(plain(route.namespace.parseOddsText(`BETONLINE_INITIAL_CAPTURE\n${raw}`, { sportsbook: 'Auto' })), []);
   assert.deepEqual(calls, Array(4).fill('parseBetOnlineText'));
   route.namespace.parseOddsText(raw, { sportsbook: 'Pinnacle' });
-  assert.deepEqual(calls, [...Array(4).fill('parseBetOnlineText'), 'parsePinnacleText']);
+  assert.deepEqual(calls, [...Array(4).fill('parseBetOnlineText'), 'parsePinnacleText', 'parseNflPlayerProps']);
 });
 
 const bolRaw = read('tests/fixtures/betonline-mlb-no-prices.md');
@@ -464,5 +465,5 @@ test('theScore resolves MLB-only aliases without WNBA/NHL substitutions', () => 
     document: { body: { innerText: 'ATL @ NYM' }, querySelectorAll: selector => selector === 'h1, h2, h3' ? [{ innerText: 'ATL @ NYM' }] : [] },
     sportText: () => 'MLB', resolveTheScoreMlbTeam: resolve,
   });
-  assert.equal(inferEvent(), 'Atlanta Braves @ New York Mets');
+  assert.equal(inferEvent(), 'Atlanta Braves @ Philadelphia Phillies'.replace('Philadelphia Phillies', 'New York Mets'));
 });
