@@ -24,15 +24,15 @@ export function readDhoAmerican(value) {
     .replace(/[,*]/g, "")
     .replace(/[Oo](?=\d)/g, "0");
   const first = source.split(/[\n\r]/)[0].trim().replace(/\s+/g, "");
-  const match = first.match(/^([+-])(\d{3,4})(?:\.(\d{1,2}))?$/);
+  const match = first.match(/^([+-])(\d{2,4})(?:\.(\d{1,2}))?$/);
   if (!match) return null;
   const number = Number(match[1] + match[2] + (match[3] ? "." + match[3] : ""));
-  if (!Number.isFinite(number) || Math.abs(number) < 100 || Math.abs(number) > 10000) return null;
+  if (!Number.isFinite(number) || Math.abs(number) < 50 || Math.abs(number) > 10000) return null;
   return number;
 }
 export function dhoAmericanToDecimal(american) {
   const a = Number(american);
-  if (!Number.isFinite(a) || Math.abs(a) < 100) return null;
+  if (!Number.isFinite(a) || Math.abs(a) < 50) return null;
   return a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
 }
 export function dhoColumnCenter(index, first, last, count = DHO_COLUMN_COUNT) {
