@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import GuidedSgpHedgeFinder from "./GuidedSgpHedgeFinder";
 import {
   analyzeParlayHedge,
   breakEvenHedgePrices,
@@ -54,6 +55,7 @@ function scenariosFor(draft) {
 
 export default function ParlayHedgeFinder({ rows = [] }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [draft, setDraft] = useState(initial);
   const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -178,13 +180,18 @@ export default function ParlayHedgeFinder({ rows = [] }) {
         gap: 10, flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 20 }}>Parlay Hedge Finder</h2>
-          <p style={{ ...noteStyle, margin: "4px 0" }}>Before-bet hedge coverage, stake optimizer and imported-line suggestions.</p>
+          <p style={{ ...noteStyle, margin: "4px 0" }}>Enter a promotion, browse candidate combinations, confirm prices, then evaluate hedge risk.</p>
         </div>
         <button type="button" style={buttonStyle} onClick={() => setExpanded(!expanded)}>
           {expanded ? "Collapse" : "Open finder"}
         </button>
       </div>
       {expanded && <div style={{ display: "grid", gap: 13, marginTop: 14 }}>
+        <GuidedSgpHedgeFinder rows={rows} />
+        <button type="button" style={buttonStyle} onClick={() => setShowAdvanced(!showAdvanced)}>
+          {showAdvanced ? "Hide advanced manual calculator" : "Advanced: manual outcome calculator"}
+        </button>
+        {showAdvanced && <div style={{ display: "grid", gap: 13 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button style={buttonStyle} type="button" onClick={sample}>Load Ravens–Falcons example</button>
           <button style={buttonStyle} type="button" onClick={() => setDraft(initial)}>Clear form</button>
@@ -368,6 +375,7 @@ export default function ParlayHedgeFinder({ rows = [] }) {
           <p style={noteStyle}>Verify that scenarios are exhaustive and mutually exclusive, all prices and limits
             are accepted, and settlement rules match. This calculator does not place bets or count points as cash.</p>
         </div>
+        </div>}
       </div>}
     </section>
   );
