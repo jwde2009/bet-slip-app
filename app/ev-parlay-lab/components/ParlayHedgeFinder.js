@@ -120,6 +120,19 @@ export default function ParlayHedgeFinder({ rows = [] }) {
   const imports = useMemo(() => suggestedImportedHedges(rows, draft.eventName, draft.template,
     draft.totalLine, draft.teamB), [rows, draft.eventName, draft.template, draft.totalLine, draft.teamB]);
 
+  const importedComparisons = useMemo(() => imports.map(row => {
+    const odd = Number(row.oddsAmerican);
+    const odds = Number.isFinite(odd) && odd !== 0
+      ? (odd > 0 ? "+" : "") + odd : String(row.oddsDecimal) + "x";
+    const id = draft.template === "two-way" ? "second" : "under";
+    const nextHedges = options.hedges.some(h => h.id === id)
+      ? options.hedges.map(h => h.id === id ? { ...h, odds } : h)
+      : [...options.hedges, { id, odds, maxStake: "", covers: [draft.template === "two-way" ? "b" : "under"] }];
+    const outcome = analyzeParlayHedge({ ...options, hedges: nextHedges });
+    return { row, outcome };
+  }).sort((a, b) => (b.outcome.focusMinimum ?? -Infinity) - (a.outcome.focusMinimum ?? -Infinity)),
+  [imports, options, draft.template]);
+
   const allowedLoss = Math.max(0, Number(draft.maxLoss) || 0);
   const good = !analysis.error && analysis.allCovered && analysis.actualMinimum >= -allowedLoss - 0.005;
   const incomplete = !analysis.error && !analysis.allCovered;
@@ -271,19 +284,28 @@ export default function ParlayHedgeFinder({ rows = [] }) {
           </label>
           <div style={noteStyle}>{rows.length} imported rows loaded. Only exact event, full-game, matching-line
             straight-bet quotes appear here; no guessed correlated SGP payouts.</div>
-          {!imports.length ? <div style={noteStyle}>No matching imported hedge quotes. Add actual SGP or straight prices above,
+          {!importedComparisons.length ? <div style={noteStyle}>No matching imported hedge quotes. Add actual SGP or straight prices above,
             or load more sportsbook captures.</div> : <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr><th align="left">Book</th><th align="left">Selection</th><th align="right">Odds</th><th /></tr></thead>
-              <tbody>{imports.map((row, i) => <tr key={String(row.id || i)}>
+              <thead><tr><th align="left">Book</th><th align="left">Selection</th><th align="right">Odds</th>
+                <th align="right">Main-case min*</th><th /></tr></thead>
+              <tbody>{importedComparisons.map(({ row, outcome }, i) => <tr key={String(row.id || i)}>
                 <td style={{ padding: 5 }}>{row.sportsbook || row.bookmaker}</td>
                 <td style={{ padding: 5 }}>{row.selectionNormalized || row.selectionRaw} {row.lineValue || ""}</td>
-                <td align="right" style={{ padding: 5 }}>{row.oddsAmerican >= 0 ? "+" : ""}{row.oddsAmerican}</td>
+                <td align="right" style={{ padding: 5 }}>{row.oddsAmerican == null
+                  ? Number(row.oddsDecimal).toFixed(3) + "x"
+                  : (row.oddsAmerican >= 0 ? "+" : "") + row.oddsAmerican}</td>
+                <td align="right" style={{ padding: 5, color: outcome.error ? "#475569" :
+                  outcome.focusMinimum < 0 ? "#991b1b" : "#166534" }}>
+                  {outcome.error ? "—" : money(outcome.focusMinimum)}
+                </td>
                 <td style={{ padding: 5 }}><button type="button" style={buttonStyle} onClick={() => useImported(row)}>Use</button></td>
               </tr>)}</tbody>
             </table>
           </div>}
-          <p style={noteStyle}>Imports may be stale. Recheck the sportsbook before placing. Import matching is deliberately
+          <p style={noteStyle}>*Main-case minimum is a what-if comparison using other entered prices.
+            It does not include uncovered scenarios or guarantee a profit. Imports may be stale.
+            Recheck the sportsbook before placing. Import matching is deliberately
             conservative: it will not turn straight-bet odds into a same-game parlay price.</p>
         </div>
 
