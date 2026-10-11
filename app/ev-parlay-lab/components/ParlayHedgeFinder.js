@@ -44,7 +44,7 @@ function scenariosFor(draft) {
   const outcomes = [
     { id: "aOver", label: a + " wins + " + over },
     { id: "bOver", label: b + " wins + " + over },
-    { id: "under", label: "Under " + draft.totalLine + " (either winner / tie)" },
+    { id: "under", label: "Under " + draft.totalLine + (draft.template === "team-total-tie" ? " (either winner / tie)" : " (either winner)") },
   ];
   if (draft.template === "team-total-tie") outcomes.push({
     id: "tieOver", label: "Game ends tied + " + over,
@@ -97,15 +97,23 @@ export default function ParlayHedgeFinder({ rows = [] }) {
   };
 
   const scenarios = useMemo(() => scenariosFor(draft), [draft]);
+  // A whole-number total can push (and quarter-line totals may half-win/lose).
+  // Those settlement paths require a different model, so refuse this template.
+  const validTotal = draft.template === "two-way" ||
+    (Number(draft.totalLine) > 0 && Number(draft.totalLine) % 1 === 0.5);
   const options = useMemo(() => ({
     primaryStake: draft.primaryStake, primaryOdds: draft.primaryOdds,
     primaryCovers: [draft.template === "two-way" ? "a" : "aOver"],
     scenarios, hedges: draft.hedges, totalHedgeBudget: draft.hedgeBudget,
     // Keep unlikely but possible uncovered outcomes visible; do not let them
     // force the optimizer to suggest zero hedge stakes for common outcomes.
-    optimizeIds: draft.template === "team-total-tie" ? ["aOver", "bOver", "under"] : scenarios.map(s => s.id),
+    optimizeIds: draft.template === "team-total-tie" &&
+      !draft.hedges.some(h => String(h.odds || "").trim() && (h.covers || []).includes("tieOver"))
+        ? ["aOver", "bOver", "under"] : scenarios.map(s => s.id),
   }), [draft, scenarios]);
-  const analysis = useMemo(() => analyzeParlayHedge(options), [options]);
+  const analysis = useMemo(() => validTotal ? analyzeParlayHedge(options) :
+    { error: "This template requires a half-point total such as 37.5. Whole-number and quarter-line push/half-win settlements are not modeled." },
+    [options, validTotal]);
   const targets = useMemo(() => analysis.error ? [] : breakEvenHedgePrices(options), [options, analysis.error]);
   const eventNames = useMemo(() => [...new Set(rows.map(r =>
     r.canonicalEventName || r.eventLabelRaw || r.eventName || r.fixture || "").filter(Boolean))].sort().slice(0, 500), [rows]);
@@ -122,8 +130,12 @@ export default function ParlayHedgeFinder({ rows = [] }) {
     const odds = Number.isFinite(odd) && odd !== 0
       ? (odd > 0 ? "+" : "") + odd : String(row.oddsDecimal) + "x";
     const book = row.sportsbook || row.bookmaker || "Imported book";
-    updateHedge(field, { odds, book, label: draft.template === "two-way"
-      ? draft.teamB + " wins" : "Under " + draft.totalLine });
+    const patch = { odds, book, label: draft.template === "two-way"
+      ? draft.teamB + " wins" : "Under " + draft.totalLine };
+    if (draft.hedges.some(h => h.id === field)) updateHedge(field, patch);
+    else if (draft.hedges.length < 3) update({
+      hedges: [...draft.hedges, { id: field, ...patch, covers: [draft.template === "two-way" ? "b" : "under"], maxStake: "" }],
+    });
   }
 
   function copy() {
