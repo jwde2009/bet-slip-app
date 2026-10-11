@@ -11,6 +11,7 @@ import TopEdgeBetsPanel from "./components/TopEdgeBetsPanel";
 import LoadCoveragePanel from "./components/LoadCoveragePanel";
 import ParlayFilters from "./components/ParlayFilters";
 import ParlayResults from "./components/ParlayResults";
+import ParlayHedgeFinder from "./components/ParlayHedgeFinder";
 import BoostWalletPanel from "./components/BoostWalletPanel";
 import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
@@ -2745,6 +2746,8 @@ const marketBundle = useMemo(() => {
         <div id="ev-section-parlay-filters" style={{ height: 0, scrollMarginTop: 16 }} />
         <ParlayFilters filters={filters} setFilters={setFilters} />
 
+        <ParlayHedgeFinder rows={rowsForAnalysis} />
+
         <div id="ev-section-parlay-results" style={{ height: 0, scrollMarginTop: 16 }} />
         <ParlayResults
           parlays={parlayCandidates}
@@ -2785,6 +2788,7 @@ function EvParlaySideNav() {
     ["Top Edges", "ev-section-top-edges"],
     ["Boost Wallet", "ev-section-boost-wallet"],
     ["Filters", "ev-section-parlay-filters"],
+    ["Hedge Finder", "ev-section-hedge-finder"],
     ["Results", "ev-section-parlay-results"],
     ["Saved Parlays", "ev-section-saved-parlays"],
   ];
