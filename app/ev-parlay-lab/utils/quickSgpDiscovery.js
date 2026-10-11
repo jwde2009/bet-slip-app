@@ -139,8 +139,8 @@ function matchingTotal(row, candidate, side) {
   if (Number(row.lineValue) !== Number(candidate.line)) return false;
   const sel = normalize(row.selectionNormalized || row.selectionRaw);
   return side === "over"
-    ? /^(over\\b|o(?=\\s|\\d))/.test(sel)
-    : /^(under\\b|u(?=\\s|\\d))/.test(sel);
+    ? /^(over\b|o(?=\s|\d))/.test(sel)
+    : /^(under\b|u(?=\s|\d))/.test(sel);
 }
 function matchingWinner(row, team) {
   const market = normalize(row.marketType);
