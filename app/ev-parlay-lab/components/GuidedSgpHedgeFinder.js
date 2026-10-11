@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { analyzeParlayHedge, breakEvenHedgePrices, parseHedgePrice } from "../utils/parlayHedgeMath";
-import { findQuickSgpCandidates, parseQuickSgpPromotion, boostedSgpDecimal } from "../utils/quickSgpDiscovery";
+import { findQuickSgpCandidates, parseQuickSgpPromotion, boostedSgpDecimal, suggestSgpSportsbooks, suggestStraightHedgeSportsbooks } from "../utils/quickSgpDiscovery";
 
 const S = {
   box: { padding: 14, border: "1px solid #cbd5e1", borderRadius: 10, background: "white", display: "grid", gap: 11 },
@@ -28,6 +28,7 @@ const resetVerification = { primary: false, opposite: false, total: false };
 
 export default function GuidedSgpHedgeFinder({ rows = [] }) {
   const [promotionText, setPromotionText] = useState("");
+  const [promotionBook, setPromotionBook] = useState("");
   const [searchStarted, setSearchStarted] = useState(false);
   const [sport, setSport] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -54,15 +55,32 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
   [rows, promo.error, searchStarted, sport, search]);
   const selectedStillListed = ideas.some(idea => idea.id === selected?.id);
   const bookNames = useMemo(() => [...new Set(rows.map(row => row.sportsbook || row.bookmaker).filter(Boolean))].sort(), [rows]);
+  const sgpBookSuggestions = useMemo(() => suggestSgpSportsbooks(rows, selected), [rows, selected]);
+  const straightBookSuggestions = useMemo(() => suggestStraightHedgeSportsbooks(rows, selected), [rows, selected]);
+  const checkSgpBooks = sgpBookSuggestions.filter(item => item.oppositeLegsSeen);
+  function applySgpBook(book) {
+    if (oppositeBook === book) return;
+    setOppositeBook(book);
+    setOppositeOdds(""); // A quoted SGP price belongs to its actual sportsbook.
+    setConfirmed(prev => ({ ...prev, opposite: false }));
+  }
+  function applyStraightBook(quote) {
+    setStraightBook(quote.book);
+    setStraightOdds(quote.odds);
+    setConfirmed(prev => ({ ...prev, total: false }));
+  }
 
   function choose(idea) {
     setSelected(idea);
-    setPrimaryBook("");
+    setPrimaryBook(promotionBook.trim());
     setPrimaryRawOdds("");
-    setOppositeBook("");
+    // Candidate books only have the imported component markets. Their SGP price remains blank.
+    const firstSgp = suggestSgpSportsbooks(rows, idea).find(item => item.oppositeLegsSeen);
+    const firstStraight = suggestStraightHedgeSportsbooks(rows, idea)[0];
+    setOppositeBook(firstSgp?.book || "");
     setOppositeOdds("");
-    setStraightBook(idea.bestStraightBook);
-    setStraightOdds(idea.bestStraightOdds);
+    setStraightBook(firstStraight?.book || idea.bestStraightBook || "");
+    setStraightOdds(firstStraight?.odds || idea.bestStraightOdds || "");
     setStake(String(promo.maxStake));
     setOppositeCap("");
     setStraightCap("");
@@ -115,6 +133,15 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
           onChange={e => { setPromotionText(e.target.value); setSearchStarted(false); setSelected(null); }}
           placeholder='SGP parlay 20% odds boost max $250' />
       </label>
+      <label style={S.label}>Which sportsbook offers the boost?
+        <input list="guided-promotion-books" style={S.input} value={promotionBook}
+          placeholder="e.g., BetMGM (type any book)"
+          onChange={e => { setPromotionBook(e.target.value); setPrimaryBook(e.target.value);
+            setPrimaryRawOdds(""); setConfirmed(prev => ({ ...prev, primary: false })); }} />
+        <datalist id="guided-promotion-books">{bookNames.map(book => <option key={book} value={book} />)}</datalist>
+      </label>
+      <p style={S.hint}>Use the book that actually issued the boost. The promotion is not transferable
+        to another sportsbook, and loaded odds do not establish promotion eligibility.</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <button type="button" style={S.button} onClick={() => {
           setPromotionText("SGP parlay 20% odds boost max $250"); setSelected(null); setSearchStarted(true);
@@ -184,7 +211,9 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
       <div style={S.fieldGrid}>
         <label style={S.label}>Boosted SGP sportsbook
           <input list="guided-hedge-books" style={S.input} value={primaryBook}
-            placeholder="BetMGM" onChange={e => { setPrimaryBook(e.target.value); setConfirmed(x => ({ ...x, primary: false })); }} />
+            placeholder="Book offering your boost"
+            onChange={e => { setPrimaryBook(e.target.value); setPrimaryRawOdds("");
+              setConfirmed(x => ({ ...x, primary: false })); }} />
         </label>
         <label style={S.label}>Raw SGP odds (before boost)
           <input style={S.input} value={primaryRawOdds} placeholder="+250"
@@ -207,7 +236,9 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
         <div style={S.fieldGrid}>
           <label style={S.label}>Hedge SGP sportsbook
             <input list="guided-hedge-books" style={S.input} value={oppositeBook}
-              placeholder="theScore" onChange={e => { setOppositeBook(e.target.value); setConfirmed(x => ({ ...x, opposite: false })); }} />
+              placeholder="Type any sportsbook"
+              onChange={e => { setOppositeBook(e.target.value); setOppositeOdds("");
+                setConfirmed(x => ({ ...x, opposite: false })); }} />
           </label>
           <label style={S.label}>Actual SGP odds
             <input style={S.input} value={oppositeOdds} placeholder="+120 or 2.20x"
@@ -217,6 +248,22 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
             <input type="number" min="0" step="0.01" style={S.input} value={oppositeCap}
               onChange={e => setOppositeCap(e.target.value)} placeholder="Enter available balance or bet limit" />
           </label>
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          <strong style={{ fontSize: 13 }}>SGP sportsbooks worth checking</strong>
+          {checkSgpBooks.length ? <>
+            <p style={S.hint}>These books have imported prices for the opposite team moneyline and
+              matching total. That only shows the individual markets—it does NOT verify an SGP
+              can be combined or what its price will be.</p>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {checkSgpBooks.slice(0, 8).map(item => <button type="button" key={item.book}
+                style={{ ...S.button, background: oppositeBook === item.book ? "#eff6ff" : "#fff" }}
+                onClick={() => applySgpBook(item.book)}>
+                {item.book}{item.allThreeLegsSeen ? " · both team lines loaded" : ""}
+              </button>)}
+            </div>
+          </> : <p style={S.hint}>No sportsbook in your imported data has both individual SGP legs
+            for this candidate. You can still type any sportsbook above and check its actual SGP.</p>}
         </div>
         <label style={{ display: "flex", alignItems: "start", gap: 8, fontSize: 13 }}>
           <input type="checkbox" checked={confirmed.opposite}
@@ -229,7 +276,8 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
         <div style={S.fieldGrid}>
           <label style={S.label}>Straight-bet sportsbook
             <input list="guided-hedge-books" style={S.input} value={straightBook}
-              onChange={e => { setStraightBook(e.target.value); setConfirmed(x => ({ ...x, total: false })); }} />
+              onChange={e => { setStraightBook(e.target.value); setStraightOdds("");
+                setConfirmed(x => ({ ...x, total: false })); }} />
           </label>
           <label style={S.label}>Current straight odds
             <input style={S.input} value={straightOdds}
@@ -239,6 +287,22 @@ export default function GuidedSgpHedgeFinder({ rows = [] }) {
             <input type="number" min="0" step="0.01" style={S.input} value={straightCap}
               onChange={e => setStraightCap(e.target.value)} placeholder="Enter available balance or bet limit" />
           </label>
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          <strong style={{ fontSize: 13 }}>Best captured straight-bet prices</strong>
+          {straightBookSuggestions.length ? <>
+            <p style={S.hint}>Ranked by imported payout at the exact total and game, highest first.
+              These prices may be stale. Selecting one fills in its book and odds, but you still
+              need to verify the current price on that sportsbook.</p>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {straightBookSuggestions.slice(0, 8).map((quote, i) => <button type="button"
+                key={quote.book} onClick={() => applyStraightBook(quote)}
+                style={{ ...S.button, background: straightBook === quote.book ? "#eff6ff" : "#fff" }}>
+                {i === 0 ? "Best captured: " : ""}{quote.book} {quote.odds}
+              </button>)}
+            </div>
+          </> : <p style={S.hint}>No exact matching straight quotes were imported. Enter
+            a current sportsbook and price manually above.</p>}
         </div>
         <label style={{ display: "flex", alignItems: "start", gap: 8, fontSize: 13 }}>
           <input type="checkbox" checked={confirmed.total}
