@@ -123,3 +123,75 @@ export function findQuickSgpCandidates(rows, { sport = "ALL", query = "", limit 
   return out.sort((a, b) => b.ranking - a.ranking || a.event.localeCompare(b.event))
     .slice(0, Math.max(1, Math.min(200, Number(limit) || 80)));
 }
+
+  
+// Source-backed sportsbook suggestions. A book with both straight legs visible
+// is worth checking for an SGP but is NOT known to offer that SGP or any payout.
+function isMatchingRow(row, candidate) {
+  if (!eligible(row)) return false;
+  const league = String(row.sport || row.league || "").trim().toUpperCase();
+  const event = normalize(row.canonicalEventName || row.eventLabelRaw || row.eventName || row.fixture);
+  return league === candidate.sport && event === normalize(candidate.event) && price(row) !== null;
+}
+function matchingTotal(row, candidate, side) {
+  const market = normalize(row.marketType);
+  if (market !== "total" && market !== "totals") return false;
+  if (Number(row.lineValue) !== Number(candidate.line)) return false;
+  const sel = normalize(row.selectionNormalized || row.selectionRaw);
+  return side === "over"
+    ? /^(over\\b|o(?=\\s|\\d))/.test(sel)
+    : /^(under\\b|u(?=\\s|\\d))/.test(sel);
+}
+function matchingWinner(row, team) {
+  const market = normalize(row.marketType);
+  return (market === "moneyline_2way" || market === "moneyline") &&
+    normalize(row.selectionNormalized || row.selectionRaw) === normalize(team);
+}
+export function suggestSgpSportsbooks(rows, candidate) {
+  if (!candidate) return [];
+  const books = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!isMatchingRow(row, candidate)) continue;
+    const book = String(row.sportsbook || row.bookmaker || "").trim();
+    if (!book) continue;
+    const key = normalize(book);
+    if (!books.has(key)) books.set(key, { book, flags: new Set() });
+    const item = books.get(key);
+    if (matchingWinner(row, candidate.teamA)) item.flags.add("primaryWinner");
+    if (matchingWinner(row, candidate.teamB)) item.flags.add("oppositeWinner");
+    if (matchingTotal(row, candidate, candidate.direction)) item.flags.add("sameTotal");
+  }
+  return [...books.values()]
+    .filter(b => b.flags.has("sameTotal") &&
+      (b.flags.has("primaryWinner") || b.flags.has("oppositeWinner")))
+    .map(b => ({
+      book: b.book,
+      primaryLegsSeen: b.flags.has("primaryWinner") && b.flags.has("sameTotal"),
+      oppositeLegsSeen: b.flags.has("oppositeWinner") && b.flags.has("sameTotal"),
+      allThreeLegsSeen: b.flags.has("primaryWinner") && b.flags.has("oppositeWinner") && b.flags.has("sameTotal"),
+    }))
+    .sort((a, b) =>
+      Number(b.oppositeLegsSeen) - Number(a.oppositeLegsSeen) ||
+      Number(b.allThreeLegsSeen) - Number(a.allThreeLegsSeen) ||
+      a.book.localeCompare(b.book));
+}
+
+// Only directly observed quotes for the same event, market, period, and line.
+// Best decimal payout at each sportsbook wins. No cross-event / altered lines.
+export function suggestStraightHedgeSportsbooks(rows, candidate) {
+  if (!candidate) return [];
+  const opposite = candidate.direction === "over" ? "under" : "over";
+  const quotes = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!isMatchingRow(row, candidate) || !matchingTotal(row, candidate, opposite)) continue;
+    const book = String(row.sportsbook || row.bookmaker || "").trim();
+    if (!book) continue;
+    const key = normalize(book);
+    const dec = price(row);
+    const old = quotes.get(key);
+    if (!old || dec > old.decimal) quotes.set(key, {
+      book, odds: americanText(row), decimal: dec,
+    });
+  }
+  return [...quotes.values()].sort((a, b) => b.decimal - a.decimal || a.book.localeCompare(b.book));
+}
