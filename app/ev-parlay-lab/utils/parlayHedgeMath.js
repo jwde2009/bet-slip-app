@@ -5,9 +5,11 @@ export function parseHedgePrice(value) {
   const raw = String(value ?? "").trim().replace(/,/g, "");
   if (!raw) return null;
   if (/^(even|evens|evs)$/i.test(raw)) return 2;
-  const decimal = raw.match(/^(\d+(?:\.\d+)?)\s*x?$/i);
+  const decimal = raw.match(/^(\d+(?:\.\d+)?)\s*(x)?$/i);
   if (decimal) {
     const n = Number(decimal[1]);
+    // An explicit x always means decimal odds, including large multipliers.
+    if (decimal[2]) return n > 1 && Number.isFinite(n) ? n : null;
     if (n > 1 && n < 100) return n;
     if (Number.isInteger(n) && n >= 100) return 1 + n / 100;
   }
@@ -110,7 +112,7 @@ export function analyzeParlayHedge({ primaryStake, primaryOdds, primaryCovers, s
   const getCoefficients = s => parsed.map(h => (h.covers || []).includes(s.id) ? h.price - 1 : -1);
   const calculated = maximizeMinimum(included.map(getBase), included.map(getCoefficients), parsed.map(h => h.cap), budget);
   if (!calculated) return { error: "Unable to find a valid hedge allocation." };
-  const stakes = calculated.map(x => Math.max(0, Math.round((x + 1e-9) * 100) / 100));
+  const stakes = calculated.map(x => Math.max(0, Math.floor((x + 1e-7) * 100) / 100));
   // Cent-rounding can create fractional-cent discrepancies. Report exact results for executable stakes.
   const totalStaked = stake + stakes.reduce((a, b) => a + b, 0);
   const outcomes = scenarios.map(s => {
