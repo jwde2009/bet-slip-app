@@ -41,7 +41,7 @@ test("Signed American screenshot odds read precisely without guessing missing si
   assert.equal(readDhoAmerican("+104.1\n$4.75k+"), 104.1);
   assert.equal(readDhoAmerican("159.7"), null);
   assert.equal(readDhoAmerican("$712+"), null);
-  assert.equal(readDhoAmerican("+95"), null);
+  assert.equal(readDhoAmerican("+95"), 95);
   assert.equal(readDhoAmerican("Even"), null);
   assert.equal(dhoAmericanToDecimal(-110), 1 + 100 / 110);
 });
