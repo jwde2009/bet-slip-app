@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import GuidedSgpHedgeFinder from "./GuidedSgpHedgeFinder";
+import DarkHorseScreenshotImport from "./DarkHorseScreenshotImport";
+import { mergeDhoRows } from "../utils/darkHorseScreenshot";
 import {
   analyzeParlayHedge,
   breakEvenHedgePrices,
@@ -10,6 +12,7 @@ import {
 } from "../utils/parlayHedgeMath";
 
 const KEY = "EV_PARLAY_LAB_HEDGE_FINDER_V1";
+const DHO_KEY = "EV_PARLAY_LAB_DHO_REVIEWED_QUOTES_V1";
 
 function freshHedges(template) {
   return template === "two-way"
@@ -59,6 +62,24 @@ export default function ParlayHedgeFinder({ rows = [] }) {
   const [draft, setDraft] = useState(initial);
   const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [screenshotRows, setScreenshotRows] = useState([]);
+  const [screenshotRestored, setScreenshotRestored] = useState(false);
+  const lookupRows = useMemo(() => [...rows, ...screenshotRows], [rows, screenshotRows]);
+  const screenshotEvents = useMemo(() => [...new Set(rows.map(r =>
+    r.canonicalEventName || r.eventLabelRaw || r.eventName || r.fixture || "").filter(Boolean))].sort().slice(0, 500), [rows]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DHO_KEY) || "[]");
+      if (Array.isArray(saved)) setScreenshotRows(saved.filter(r =>
+        r && r.screenshotImported === true && Number.isFinite(r.oddsDecimal)).slice(-600));
+    } catch { /* corrupt storage should not prevent use of the finder */ }
+    setScreenshotRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!screenshotRestored) return;
+    try { localStorage.setItem(DHO_KEY, JSON.stringify(screenshotRows)); } catch { /* private mode */ }
+  }, [screenshotRestored, screenshotRows]);
 
   useEffect(() => {
     try {
@@ -117,10 +138,10 @@ export default function ParlayHedgeFinder({ rows = [] }) {
     { error: "This template requires a half-point total such as 37.5. Whole-number and quarter-line push/half-win settlements are not modeled." },
     [options, validTotal]);
   const targets = useMemo(() => analysis.error ? [] : breakEvenHedgePrices(options), [options, analysis.error]);
-  const eventNames = useMemo(() => [...new Set(rows.map(r =>
-    r.canonicalEventName || r.eventLabelRaw || r.eventName || r.fixture || "").filter(Boolean))].sort().slice(0, 500), [rows]);
-  const imports = useMemo(() => suggestedImportedHedges(rows, draft.eventName, draft.template,
-    draft.totalLine, draft.teamB), [rows, draft.eventName, draft.template, draft.totalLine, draft.teamB]);
+  const eventNames = useMemo(() => [...new Set(lookupRows.map(r =>
+    r.canonicalEventName || r.eventLabelRaw || r.eventName || r.fixture || "").filter(Boolean))].sort().slice(0, 500), [lookupRows]);
+  const imports = useMemo(() => suggestedImportedHedges(lookupRows, draft.eventName, draft.template,
+    draft.totalLine, draft.teamB), [lookupRows, draft.eventName, draft.template, draft.totalLine, draft.teamB]);
 
   const importedComparisons = useMemo(() => imports.map(row => {
     const odd = Number(row.oddsAmerican);
@@ -187,7 +208,15 @@ export default function ParlayHedgeFinder({ rows = [] }) {
         </button>
       </div>
       {expanded && <div style={{ display: "grid", gap: 13, marginTop: 14 }}>
-        <GuidedSgpHedgeFinder rows={rows} />
+        <DarkHorseScreenshotImport eventNames={screenshotEvents}
+          existingCount={screenshotRows.length}
+          onImport={incoming => {
+            const next = mergeDhoRows(screenshotRows, incoming).slice(-600);
+            setScreenshotRows(next);
+            return incoming.length;
+          }}
+          onClear={() => setScreenshotRows([])} />
+        <GuidedSgpHedgeFinder rows={lookupRows} />
         <button type="button" style={buttonStyle} onClick={() => setShowAdvanced(!showAdvanced)}>
           {showAdvanced ? "Hide advanced manual calculator" : "Advanced: manual outcome calculator"}
         </button>
