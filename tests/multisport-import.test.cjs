@@ -266,4 +266,3 @@ test('Recovered DK tab selector accepts event anchors inside expanded wrappers a
   assert.equal(unsafe.navigation.found,false); assert.equal(betClicks,0);
   dom.window.close();
 });
-
