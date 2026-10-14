@@ -59,7 +59,7 @@ Minimum next input: a provider-supported export/API or confirmation of permissio
 
 ## Validation and remaining work
 
-Baseline: 102 passing tests. This branch: 159 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
+Baseline: 102 passing tests. This branch: 161 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
 
 No live browser session for these books was available in the saved coding environment, and the Surface is offline. Completing the goal requires current extension TXT captures or an authorized live browser session for the uncovered matrix cells, starting with Caesars MLB/NHL/NFL, FanDuel/BetMGM MLB and NHL, and a DraftKings NFL 1.4.0 diagnostic run. Existing supplied tab HTML and the Oct 13 failed capture were already used; do not request them again. No bets or account/payment changes were made. Nothing has been merged or deployed.
 
@@ -85,3 +85,5 @@ Tests replay the actual Andrew Vaughn bases (1.645/2.230) and Robert Gasser stri
 Remaining browser gaps from the supplied navigation notes: FanDuel MLB, BetMGM MLB, Caesars NFL props and optional DraftKings NFL diagnostics returned “Site Unavailable / Unable to access this site” after one reload. Cause is undetermined; do not label these as login, geography or bot restrictions. No additional attempts were made here. An accessible authorized browser session or representative permitted captures are still needed for those paths. Pinnacle's implemented collector needs one live extension run to confirm full-page coverage and latency beyond these representative panels. Dark Horse retains its separately documented provider-permission/sample blocker.
 
 [Safe PR #3 setup](PR3-testing.md) remains extension 1.4.0 in a separate detached worktree and browser profile, using port 3000 and preserving local October 13 repairs.
+
+Focused follow-up: tracking query strings now preserve the same MLB event and original source URL. Event-path/ID changes still abort capture. CSS-only hidden outcomes, ancestors and price spans are excluded using computed display/visibility, alongside hidden/aria-hidden checks. Regressions cover query-only navigation, a changed event ID, stylesheet hiding and a hidden stale price span. The setup still fetches the latest remote draft before creating a separate worktree. Live validation remains pending.

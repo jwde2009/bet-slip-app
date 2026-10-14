@@ -5,6 +5,14 @@ async function capturePinnacleMlbPage() {
   const diagnostics = [];
   const packet = { version: 1, url: initialUrl.href, capturedAt: new Date().toISOString(), mainText: String(document.body?.innerText || ''), panels: [], diagnostics };
   const sameEvent = () => location.origin === initialUrl.origin && location.pathname === initialUrl.pathname;
+  const visible = element => {
+    for (let node = element; node; node = node.parentElement) {
+      if (node.hidden || node.getAttribute('aria-hidden') === 'true') return false;
+      const style = getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    }
+    return true;
+  };
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
   const titleOf = drawer => {
     const title = drawer.querySelector(':scope > .collapse-title')?.cloneNode(true);
@@ -55,9 +63,9 @@ async function capturePinnacleMlbPage() {
     const content = current()?.querySelector(':scope > .collapse-content');
     const quotes = [];
     for (const button of content?.querySelectorAll('button.market-btn') || []) {
-      if (button.disabled || button.getAttribute('aria-disabled') === 'true' || button.closest('[hidden], [aria-hidden="true"]')) continue;
+      if (button.disabled || button.getAttribute('aria-disabled') === 'true' || !visible(button)) continue;
       const label = clean(button.getAttribute('title'));
-      const spans = [...button.querySelectorAll('span')].map(s => clean(s.textContent));
+      const spans = [...button.querySelectorAll('span')].filter(visible).map(s => clean(s.textContent));
       if (!spans.includes(label)) continue;
       const prices = spans.filter(s => s !== label && /^(?:[+-]\d{3,6}|\d+\.\d+)$/.test(s));
       if (prices.length !== 1) continue;

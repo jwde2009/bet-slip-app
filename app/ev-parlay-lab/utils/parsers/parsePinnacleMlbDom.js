@@ -7,7 +7,7 @@ export function parsePinnacleMlbDom(raw, parseLegacy) {
   let packet;
   try { packet = JSON.parse(raw.slice('PINNACLE_MLB_DOM_V1: '.length)); } catch { return []; }
   if (packet?.version !== 1 || !Array.isArray(packet.panels) || packet.panels.length > 80 || !Number.isFinite(Date.parse(packet.capturedAt))) return [];
-  const match = String(packet.url || '').match(/^https:\/\/(?:[a-z0-9-]+\.)*pinnacle\.com\/en\/baseball\/mlb\/([^/]+)-vs-([^/]+)\/\d+\/?(?:#[^\s]*)?$/i);
+  const match = String(packet.url || '').match(/^https:\/\/(?:[a-z0-9-]+\.)*pinnacle\.com\/en\/baseball\/mlb\/([^/]+)-vs-([^/]+)\/\d+\/?(?:\?[^#\s]*)?(?:#[^\s]*)?$/i);
   if (!match) return [];
   const team = slug => slug.split('-').map(s => s[0]?.toUpperCase() + s.slice(1)).join(' ');
   const away = team(match[1]), home = team(match[2]);

@@ -28,7 +28,7 @@ function browser(html, url=fixture.source_url) {
   Object.defineProperty(dom.window.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
   let clock = Date.parse(fixture.observed_at);
   class Clock extends Date { constructor(...args){super(...(args.length?args:[clock]));} static now(){return clock;} }
-  const context = vm.createContext({document:dom.window.document,location:dom.window.location,URL,Date:Clock,
+  const context = vm.createContext({document:dom.window.document,location:dom.window.location,URL,Date:Clock,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),
     setTimeout: fn => {clock+=100; queueMicrotask(fn);},extractSinglePayloadFromTab:async()=>({source:'legacy'}),console});
   vm.runInContext(source,context);
   return {dom,context,run:()=>vm.runInContext('capturePinnacleMlbPage()',context)};
@@ -151,4 +151,39 @@ test('Synthetic suffix/unit variations preserve player parentheses and keep aria
 test('Disabled outcomes are not treated as priced pairs',async()=>{
   const b=browser(fixture.expanded[0]);b.dom.window.document.querySelector('.market-btn').disabled=true;
   assert.equal((await parser())((await b.run()).text).length,0);
+});
+
+
+test('Tracking query parameters preserve event identity and original source URL',async()=>{
+  const parse=await parser();
+  for (const query of ['?utm_source=test', '?tracking=1&return=%2Fen%2Fbaseball%2Fmlb%2Fother-event%2F1%2F']) {
+    const url=fixture.source_url.replace('#player-props',query+'#player-props');
+    const rows=parse((await browser(fixture.expanded[0],url).run()).text);
+    assert.equal(rows.length,2);
+    assert.ok(rows.every(r=>r.eventLabelRaw==='Milwaukee Brewers @ Los Angeles Dodgers'&&r.sourceUrl===url));
+  }
+  // A query-only navigation is benign; a changed event ID/path is not.
+  for(const changeEvent of [false,true]) {
+    const b=browser(fixture.expanded[0],fixture.source_url.replace('#player-props','?tracking=old#all'));
+    b.dom.window.document.querySelector('#player-props').onclick=()=>b.dom.reconfigure({url:fixture.source_url.replace('1638279070',changeEvent?'9999999999':'1638279070').replace('#player-props','?tracking=new#player-props')});
+    const result=await b.run();
+    assert.equal(parse(result.text).length,changeEvent?0:2);
+    if(changeEvent)assert.match(result.text,/Event navigation detected/);
+  }
+});
+
+test('CSS-only hidden outcomes, ancestors and price spans cannot become priced pairs',async()=>{
+  const parse=await parser();
+  for(const rule of ['display: none','visibility: hidden','visibility: collapse']) {
+    for(const target of ['.market-btn','.collapse-content','.market-btn span:last-child']) {
+      const b=browser('<style>.test-hidden {'+rule+'}</style>'+fixture.expanded[0]);
+      b.dom.window.document.querySelector(target).classList.add('test-hidden');
+      assert.equal(parse((await b.run()).text).length,0,rule+' '+target);
+    }
+  }
+  const b=browser('<style>.test-hidden { display: none }</style>'+fixture.expanded[0]);
+  const hidden=b.dom.window.document.createElement('span');hidden.className='test-hidden';hidden.textContent='9.999';
+  b.dom.window.document.querySelector('.market-btn').appendChild(hidden);
+  const rows=parse((await b.run()).text);
+  assert.equal(rows.length,2);assert.equal(rows[0].oddsDecimal,1.645);
 });
