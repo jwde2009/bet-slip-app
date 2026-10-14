@@ -1,6 +1,6 @@
 # DraftKings MLB and responsive import text
 
-Extension version: **1.1.2**. This update addresses the reported freeze when copying an import and missing DraftKings MLB rows.
+Extension version: **1.4.0**. This update addresses the reported freeze when copying an import and missing DraftKings MLB rows.
 
 ## Import behavior
 
@@ -22,15 +22,15 @@ Extension version: **1.1.2**. This update addresses the reported freeze when cop
 
 ## Verification and limits
 
-Run `npm.cmd run test:parsers` on Windows, or `npm run test:parsers` elsewhere. The new suite tests MLB parsing boundaries, market matching, workflow tab selection, full-text copy/download, worker success/error/timeout/cancel paths, zero-row session preservation and rendering of the real React input component with a large capture. Existing MLB and NFL fixtures also run. No additional dependencies are added.
+Run `npm.cmd run test:parsers` on Windows, or `npm run test:parsers` elsewhere. The new suite tests MLB parsing boundaries, market matching, workflow tab selection, full-text copy/download, worker success/error/timeout/cancel paths, zero-row session preservation and rendering of the real React input component with a large capture. Existing MLB and NFL fixtures also run. Run `npm ci` first; DOM regressions use the locked jsdom development dependency.
 
-**The DraftKings MLB fixtures are synthetic.** Their row-major arrangement derives from the supplied DraftKings NFL capture; Run Line / Total / Moneyline terminology is documented by [DraftKings](https://help.draftkings.com/hc/en-us/articles/4405230607507-What-is-a-total-or-Over-Under-wager-US). They are not a supplied MLB export or live odds. Public MLB pages identified baseball tab labels but did not expose priced tables in this environment.
+**Evidence:** the supplied October 13 failed MLB capture now replays to 162 rows. Additional small fixtures and DOM tests are synthetic and test isolated boundaries. Neither replay nor synthetic DOM tests establish successful live navigation. The recovered `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair is preserved; live NFL tab switching remains unverified.
 
 `npm run build -- --webpack` passes, including the worker bundle. The reported freeze has not been reproduced in the user's saved session. A cloud-browser attempt to open the local test server was blocked (`ERR_BLOCKED_BY_CLIENT`), so this is not a completed browser interaction or live extension navigation check.
 
 ## Update and one live check
 
-1. Stop the app. In the project terminal, run `git fetch origin`, `git switch codex/mlb-capture-first-pass`, `git pull --ff-only`, then `npm.cmd run dev`. Preserve local edits if Git reports a conflict.
-2. Reload EV Parlay Extractor at `chrome://extensions` and confirm **1.1.2**. Refresh the app and DraftKings tabs.
-3. On one DraftKings MLB game, select full-game lines, wait for prices, and capture. Check the two teams and the six main-line rows against the book. Prop support depends on the exact visible format; do not treat the synthetic tests as proof of complete live coverage.
-4. If rows are still missing, expand **Import Odds**, click **Download TXT**, and attach the saved file. This sends the actual import contents without selecting thousands of lines or copying the whole app page. Include which visible market is missing.
+1. Follow [the isolated PR #3 setup](PR3-testing.md). It uses a separate worktree and browser profile and preserves the local October 13 repairs.
+2. Confirm EV Parlay Extractor **1.4.0** is loaded from the test worktree. Refresh the test app and DraftKings tabs.
+3. On one DraftKings MLB game, select full-game lines, wait for prices, and capture. Compare both teams, all six main-line rows and one complete prop pair against the book. Replay tests do not establish complete live coverage.
+4. If rows are missing, expand **Import Odds** and click **Download TXT**. Save the actual capture, including diagnostics, and record the missing visible market. Do not copy the whole app page or resend the already supplied October 13 capture/tab HTML.

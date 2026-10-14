@@ -6,11 +6,11 @@ The latest DraftKings MLB and import-copy changes are documented in [DraftKings-
 
 NFL main-line support for Pinnacle, BetMGM, FanDuel, DraftKings and theScore capture is documented in [NFL-main-lines.md](NFL-main-lines.md). `test:parsers` runs both the MLB and NFL suites.
 
-Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-parsers.test.cjs`). No additional packages are required. Node's VM-module experimental warning is expected.
+Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-parsers.test.cjs`). Install the locked dependencies with `npm ci` first. Node's VM-module experimental warning is expected.
 
 ## Fixtures and limits
 
-- `thescore-mlb-legacy.txt` is the supplied Giants/Mets structured capture. It produces 145 literal rows. **This is not a verified betting dataset**: duplicated main-line prices and suspected shifted ladder labels were already present in the input. Tests preserve those literal values, rather than guessing corrections. Four team-total rows are still unsupported and omitted.
+- `thescore-mlb-legacy.txt` is the supplied Giants/Mets structured capture. **It is rejected with a recapture diagnostic.** Its 145 formerly accepted rows included duplicated prices and ambiguous shifted ladder labels. Tests verify rejection, not guessed historic corrections.
 - `pinnacle-mlb-collapsed.txt` is the market-content excerpt from the same game's supplied Pinnacle capture. Its prop headings contain no prices; the correct result is six main-line rows and zero player-prop rows.
 - `pinnacle-mlb-expanded.txt` is the full follow-up capture supplied on September 5, 2026. It produces 82 rows: six full-game main-line rows and 76 player-prop rows (38 Over/Under pairs). The pairs cover 17 total-bases markets, 13 home-run markets, and two each for pitcher strikeouts, outs, hits allowed and earned runs. The test checks actual captured prices and that expanded inning/team-total/exact-score markets do not contaminate full-game rows. This capture contains no batter hits or RBI markets.
 - The isolated expanded-header test prices and DOM mocks remain explicitly synthetic. The new full-page fixture uses supplied prices. Replaying that fixture verifies parsing of the supplied text, not automatic live browser navigation or current prices.
@@ -38,11 +38,10 @@ Run `npm run test:parsers` (or `node --experimental-vm-modules --test tests/mlb-
 4. BetOnline's supplied screenshot confirms displayed strikeout prices. Its inspected price paragraph contains ordinary text, and the published extension reads `document.body.innerText` with a `BETONLINE_INITIAL_CAPTURE` marker. The subsequent EV Parlay Lab page export shows 18 BetOnline rows for Arizona Diamondbacks @ Houston Astros: two strikeout rows, eight home-run rows, and eight hits+runs+RBIs rows. It contains neither the raw 4,506-character input nor the editable selection/line/odds values, so it confirms loaded rows but cannot verify their individual prices or full market coverage. It is not used as a fabricated odds fixture. No further price-element HTML is needed for the auto-parse fix.
 5. BetOnline served a persistent Cloudflare firewall denial to the separate cloud browser after one reload. Live DOM inspection stopped. The user browser's price-rendering method has not been verified; no selector, CSS, iframe or hidden-data extraction was invented to work around that limitation.
 
-Full Next.js build, live extension navigation, Pinnacle automatic drawer expansion, MLB team totals, FanDuel's MLB workflow, and the remaining tennis/football roadmap are not validated or completed by this batch. Existing unrelated local changes are excluded.
+The current PR passes its production build in CI. Live extension navigation, Pinnacle automatic drawer expansion, MLB team totals and FanDuel's automatic MLB workflow remain unverified or incomplete; see the current matrix. Existing unrelated local changes are excluded.
 
-## Surface test of the draft branch
+## Isolated test of the current draft
 
-1. Stop the running app. In the existing bet-slip-app VS Code terminal, run `git fetch origin`, then `git switch codex/mlb-capture-first-pass`, then `git pull --ff-only`. If Git reports conflicting local edits, stop and resolve those without discarding them. Main is not merged by this switch.
-2. For a quick test in Windows PowerShell, run `npm.cmd run dev` and open EV Parlay Lab at `http://localhost:3000/ev-parlay-lab`. The repository also contains `build-and-start-bet-slip-app.bat` for a production build/start.
-3. At `chrome://extensions`, reload EV Parlay Extractor. Its unpacked folder must be this checkout's `ev-parlay-extension` directory.
-4. Refresh EV Parlay Lab with Auto-parse extension imports ON. Refresh the full BetOnline MLB game page, expand the desired markets, and run the extension once. Supported complete prop pairs should parse automatically. If the result is incomplete, supply the extension-generated raw text from the input box; copying the whole app page omits text-box values. Existing loaded rows do not establish that a new import parsed successfully.
+Use [PR3-testing.md](PR3-testing.md) for extension **1.4.0**, a separate worktree and browser profile, and preservation of local October 13 fixes. The current branch is `codex/multisport-darkhorse-import`; do not switch the working Surface checkout to an older first-pass branch. The Surface is not required for development in the saved coding environment.
+
+BetOnline notes above document retained historical tests; BetOnline is excluded from this six-book implementation task.
