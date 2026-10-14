@@ -77,7 +77,8 @@ export function parseOddsText(rawText, context = {}) {
   }
 
   if (sportsbook === "pinnacle") {
-    const rows = [...parsePinnacleText(normalizedRawText, context), ...parseNflPlayerProps(normalizedRawText, "Pinnacle")];
+    const rows = parsePinnacleText(normalizedRawText, context);
+    rows.push(...parseNflPlayerProps(normalizedRawText, "Pinnacle"));
     console.log("PINNACLE PARSER ROW COUNT", rows.length);
     return rows;
   }

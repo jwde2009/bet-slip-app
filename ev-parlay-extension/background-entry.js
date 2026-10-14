@@ -37,3 +37,4 @@ extractSinglePayloadFromTab = async function extractWithNflProps(tabId) {
 // October 13 local repair, recovered without replacing legacy workflows.
 importScripts("nflBookCapture.js");
 importScripts("mlbVisibleCapture.js");
+importScripts("pinnacleMlbCapture.js");

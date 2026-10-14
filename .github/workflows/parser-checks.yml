@@ -33,6 +33,7 @@ jobs:
           node --check ev-parlay-extension/theScoreNflCapture.js
           node --check ev-parlay-extension/nflBookCapture.js
           node --check ev-parlay-extension/mlbVisibleCapture.js
+          node --check ev-parlay-extension/pinnacleMlbCapture.js
           node --experimental-vm-modules --test tests/*.test.cjs
           git diff --check
       - name: Next.js production build

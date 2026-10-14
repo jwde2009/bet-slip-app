@@ -452,7 +452,7 @@ function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDelete
                   <span style={getConfidencePillStyle(row.confidence)}>{row.confidence || "medium"}</span>
                 </td>
                 <td style={{ ...tdStyle, background: zebraBg }}>{warnings}
-                  {row.sourceType === "odds_table" && <div style={{ fontSize: 12, marginTop: 6 }}>
+                  {["odds_table", "pinnacle_dom"].includes(row.sourceType) && <div style={{ fontSize: 12, marginTop: 6 }}>
                     {row.source} · {row.period}<br />
                     Captured: {row.capturedAt}<br />
                     Listed: {row.originalOdds} ({row.originalOddsFormat})

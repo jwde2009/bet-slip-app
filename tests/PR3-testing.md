@@ -35,7 +35,7 @@ Open the test app URL above in that profile. Confirm its import controls include
 
 - Supported books in this task: DraftKings, FanDuel, BetMGM, Caesars, Pinnacle and theScore. BetOnline is excluded from new work.
 - Start with a single known event. Compare event, period, participant, line and both quoted prices before relying on imported rows. Save **Download TXT** from Import Odds to retain the actual capture and diagnostics.
-- Pinnacle MLB automatic drawer expansion remains pending exact DOM-fixture access. For the existing parser, manually open the desired props, capture once, and compare a complete pair. The supplied expanded text replays to 82 rows; this does not prove automatic navigation.
+- Pinnacle MLB now opens Player Props and supported collapsed drawers automatically, based on the supplied rendered DOM. Start at an English MLB event page, capture once, and compare one complete bases/strikeouts pair and the capture diagnostics. No outcome buttons should be clicked. The actual DOM sample gives four prop rows; the older expanded text gives 82 rows. These replays do not establish full live-page coverage. Guest displayed odds may be delayed.
 - DraftKings NFL live tab switching remains unverified despite recovered selectors and synthetic tests. Keep diagnostics from any new run; the old tab HTML and October 13 failed capture are already preserved.
 - Dark Horse is not an installed capture integration. The manual CSV/TSV importer requires the documented schema and a permitted data source; it is not proof of compatibility with a provider export.
 

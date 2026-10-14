@@ -1,3 +1,4 @@
+import { parsePinnacleMlbDom } from "./parsePinnacleMlbDom";
 import { decimalToAmerican } from "../odds";
 import { parseNflMainLines } from "./nflMainLines";
  
@@ -9,6 +10,7 @@ function makeId() {
  
 export function parsePinnacleText(rawText = "", context = {}) {
   if (!rawText || typeof rawText !== "string") return [];
+  if (rawText.startsWith("PINNACLE_MLB_DOM_V1:")) return parsePinnacleMlbDom(rawText, text => parsePinnacleText(text, context));
   const nflRows = parseNflMainLines(rawText, "Pinnacle", context);
   if (nflRows !== null) return nflRows;
  
