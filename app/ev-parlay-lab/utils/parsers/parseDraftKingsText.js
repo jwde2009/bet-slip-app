@@ -621,6 +621,7 @@ function parseDraftKingsStandardPlusLadderSections(block, event, context) {
             consumedIndex = j;
             break;
           }
+          lastPlus = null;
         }
 
         i = Math.max(i, consumedIndex);
@@ -774,6 +775,7 @@ function parseDraftKingsComboSections(block, event, context) {
             consumedIndex = j;
             break;
           }
+          lastPlus = null;
         }
 
         i = Math.max(i, consumedIndex);

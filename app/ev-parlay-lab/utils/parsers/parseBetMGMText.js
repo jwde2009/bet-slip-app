@@ -1,3 +1,4 @@
+import { matchupLeague } from "./matchupLeague";
 import { americanToDecimal } from "../odds";
 import { parseNflMainLines } from "./nflMainLines";
 
@@ -31,7 +32,7 @@ export function parseBetMGMText(rawText = "", context = {}) {
   if (eventBlocks.length) {
     for (const eventBlock of eventBlocks) {
       const blockLines = lines.slice(eventBlock.startIndex, eventBlock.endIndex);
-      const blockSport = inferSport(blockLines, context) || sport;
+      const blockSport = matchupLeague(eventBlock.away, eventBlock.home) || inferSport(blockLines, context) || sport;
       const awayRaw = eventBlock.away;
       const homeRaw = eventBlock.home;
       const away = normalizeBetMgmEventTeamName(awayRaw);
@@ -52,6 +53,7 @@ export function parseBetMGMText(rawText = "", context = {}) {
       const away = normalizeBetMgmEventTeamName(awayRaw);
       const home = normalizeBetMgmEventTeamName(homeRaw);
       const event = `${away} @ ${home}`;
+      sport = matchupLeague(away, home) || sport;
 
       rows.push(...parseMainLines(lines, detailEvent.startIndex, event, awayRaw, homeRaw, sport));
       rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));

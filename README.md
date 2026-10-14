@@ -1,3 +1,5 @@
+Current draft sportsbook imports: [safe PR #3 testing](tests/PR3-testing.md) and [tested/unverified coverage](tests/Multisport-import-audit.md).
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
 ## Getting Started

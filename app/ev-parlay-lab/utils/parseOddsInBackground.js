@@ -22,7 +22,10 @@ export function parseOddsInBackground(text, context, {
       worker.onmessage = event => {
         const result = event.data;
         if (result?.error) finish(reject, new Error(result.error));
-        else if (Array.isArray(result?.rows)) finish(resolve, result.rows);
+        else if (Array.isArray(result?.rows)) {
+          if (result.diagnostics) result.rows.importDiagnostics = result.diagnostics;
+          finish(resolve, result.rows);
+        }
         else finish(reject, new Error("Invalid parser response."));
       };
       worker.onerror = () => finish(reject, new Error("Background parser could not start. Refresh the app and try again."));

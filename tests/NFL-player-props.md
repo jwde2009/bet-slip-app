@@ -15,7 +15,7 @@ Run `node --experimental-vm-modules --test tests/*.test.cjs`, extension syntax c
 
 ## Next live validation
 
-Pull the combined branch/main after merge, restart the app, reload EV Parlay Extractor (version 1.2.0) and refresh the sportsbook page. Start at theScore's NFL event Popular tab and run the extension once. Use the app's full-text download to share the capture if no props appear; the THESCORE_NFL_PROPS_VERSION and THESCORE_NFL_DEBUG lines identify this capture path and show actual tab/drawer labels. Reparse the supplied Pinnacle capture for a 120-row reference check.
+Follow [the isolated PR #3 setup](PR3-testing.md) using a separate worktree and browser profile. Load EV Parlay Extractor **1.4.0** from the test worktree and refresh the sportsbook page. No merge or replacement of local repairs is needed. Start at theScore's NFL event Popular tab and run the extension once. Use the app's full-text download to share the capture if no props appear; the THESCORE_NFL_PROPS_VERSION and THESCORE_NFL_DEBUG lines identify this capture path and show actual tab/drawer labels. Reparse the supplied Pinnacle capture for a 120-row reference check.
 
 ## Still excluded
 

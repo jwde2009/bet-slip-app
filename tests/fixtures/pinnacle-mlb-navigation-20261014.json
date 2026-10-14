@@ -1,0 +1,40 @@
+{
+  "observed_at": "2026-10-14T03:30:10Z",
+  "source_url": "https://www.pinnacle.com/en/baseball/mlb/milwaukee-brewers-vs-los-angeles-dodgers/1638279070/#player-props",
+  "navigation_evidence": [
+    {
+      "type": "text",
+      "text": "{\n  phase: 'All active',\n  url: 'https://www.pinnacle.com/en/baseball/mlb/milwaukee-brewers-vs-los-angeles-dodgers/1638279070/#all',\n  playerProps: '<button id=\"player-props\" class=\"button-lqr6Lmuq7V\">Player Props</button>'\n}{\n  phase: 'Player Props active',\n  url: 'https://www.pinnacle.com/en/baseball/mlb/milwaukee-brewers-vs-los-angeles-dodgers/1638279070/#player-props',\n  playerProps: '<button id=\"player-props\" class=\"button-lqr6Lmuq7V loading-YJI2iy4IML selected-yyBykkcyLl\">Player Props</button>'\n}"
+    }
+  ],
+  "implementation_notes": [
+    "Read-only public guest inspection. Pinnacle states guest odds are delayed. No account actions, sign-in, selections, or bets.",
+    "Clicking Player Props button changes #all to #player-props and renders expanded prop panels. Click title to collapse; collapsed wrapper keeps data-collapsed=true but removes collapse-content completely. Show All restores panels.",
+    "Outcome aria-label says Money Line even on prop outcomes. Market type/player must be derived from enclosing panel title and outcome label, not aria-label.",
+    "Displayed decimal and aria American prices are separately observed representations, not guaranteed exact equivalent. Example 1.645 corresponds mathematically to approximately -155.03876, while aria-label is -155; 2.230 corresponds to +123 exactly. Do not concatenate decimal and American values as two prices or double-count outcomes.",
+    "Use stable semantic attributes and collapse-title/collapse-content/market-btn hooks where possible; hashed class suffixes and event numeric IDs are not promised stable.",
+    "Parentheses, suffixes and units belong to parser tests: Over 0.5 Bases, Over 0.5 Home Runs, Over 3.5 Strikeouts, Over 3.5 Hits Allowed, Over 11.5 Pitching Outs; player market title contains full player name plus Total category."
+  ],
+  "blocked": [
+    {
+      "url": "https://sportsbook.fanduel.com/baseball?tab=mlb",
+      "target": "MLB market drawers",
+      "result": "Site Unavailable / Unable to access this site. Same result after one reload; screenshot confirms. Cause undetermined; not enough evidence to classify as geographic restriction, sign-in requirement, bot block, or missing markets. No further attempts."
+    },
+    {
+      "url": "https://www.betmgm.com/en/sports/baseball-23/betting",
+      "target": "MLB market drawers",
+      "result": "Site Unavailable / Unable to access this site. Same result after one reload; screenshot confirms. Cause undetermined; not enough evidence to classify as geographic restriction, sign-in requirement, bot block, or missing markets. No further attempts."
+    },
+    {
+      "url": "https://sportsbook.caesars.com/",
+      "target": "NFL prop table",
+      "result": "Site Unavailable / Unable to access this site. Same result after one reload; screenshot confirms. Cause undetermined; not enough evidence to classify as geographic restriction, sign-in requirement, bot block, or missing markets. No further attempts."
+    },
+    {
+      "url": "https://sportsbook.draftkings.com/",
+      "target": "optional NFL tab diagnostics",
+      "result": "Site Unavailable / Unable to access this site. Same result after one reload; screenshot confirms. Cause undetermined; not enough evidence to classify as geographic restriction, sign-in requirement, bot block, or missing markets. No further attempts."
+    }
+  ]
+}

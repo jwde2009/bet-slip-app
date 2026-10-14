@@ -2593,6 +2593,10 @@ function isDraftKingsMlbPage() {
 }
 
 function getDraftKingsWorkflowLabels() {
+  if (/\/nhl\b|nhl-odds|hockey-odds/i.test(String(window.location.pathname || "")) ||
+      /Sportsbook\s*\/\s*Hockey Odds\s*\/\s*NHL Odds/i.test(clean(document.body?.innerText || ""))) {
+    return ["Game Lines", "Goalscorer", "Shots On Goal", "Points", "Assists", "Goalie"];
+  }
   // Resolve the sport before basketball target labels can override it.
   if (isDraftKingsMlbPage()) {
     return ["Game Lines", "Batter Props", "Batter", "Home Runs", "Hits", "Hits O/U", "Total Bases", "Total Bases O/U",
@@ -6387,11 +6391,16 @@ async function buildFanDuelOneNextNbaTabRawText() {
     if (host.includes("betmgm")) return "BetMGM";
     if (host.includes("draftkings")) return "DraftKings";
     if (host.includes("thescore")) return "TheScore";
+    if (host === "caesars.com" || host.endsWith(".caesars.com")) return "Caesars";
 
     return "";
   }
 
   const detectedSource = detectBookSource();
+
+  if (detectedSource === "Caesars") {
+    return { source: detectedSource, text: `CAESARS_VISIBLE_CAPTURE\n${rawPageText()}` };
+  }
 
   function footballCaptureLeague() {
     const path = String(window.location.pathname || "");

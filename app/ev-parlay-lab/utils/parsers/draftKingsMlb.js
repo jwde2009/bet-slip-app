@@ -70,8 +70,73 @@ function propType(value) {
 }
 const partial = /^(?:(?:(?:1st|2nd|3rd|4th|5th|First|Last)\s+)?(?:[1-9]\s+)?Innings?(?: Lines)?|First Five(?: Innings)?|Team Totals?|Alternate (?:Run Line|Total)|Live)$/i;
 
+
+// DRAFTKINGS_MLB_IMPORT_VERSION: 20261013_1
+// Strip only the observed MLB navigation run, not real inning-market headings.
+// A merged export repeats the run once per pass. Its INNINGS / TEAM choices
+// describe available tabs, not the period of the priced table that follows.
+const mlbNavigationLabels = new Set([
+  "POPULAR", "BATTER", "PITCHER", "BATTER PROPS", "PITCHER PROPS", "1ST INNING",
+  "PLATE APPEARANCE", "EITHER/COMBINED", "1ST OF GAME", "1ST X INNINGS",
+  "GAME LINES", "GAME TOTALS", "TEAM", "GAME PROPS", "INNINGS", "CORRECT SCORE",
+]);
+function stripMlbNavigation(lines) {
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i] === "POPULAR") {
+      let end = i + 1;
+      while (end < lines.length && mlbNavigationLabels.has(lines[end])) {
+        const last = lines[end++];
+        if (last === "CORRECT SCORE") break;
+      }
+      const run = lines.slice(i, end);
+      // Require the observed beginning and a substantial contiguous tab group.
+      // Case-sensitive matching stops at the actual title "Game" / "Game Lines".
+      if (run.length >= 6 && run.includes("BATTER") && run.includes("PITCHER") &&
+          run.includes("GAME LINES") && run.at(-1) === "CORRECT SCORE" && /^(?:Odds|Stats|Stats & Trends|Quick SGP)$/.test(lines[i - 1] || "")) {
+        i = end - 1;
+        continue;
+      }
+    }
+    out.push(lines[i]);
+  }
+  return out;
+}
+
+const playerLabel = value => !team(value) &&
+  /^[\p{L}][\p{L}.'’ -]*\s+[\p{L}][\p{L}.'’ -]*$/u.test(value || "") &&
+  !/\b(?:Odds|Player|Over|Under|Total|Runs|Run Line|Moneyline|Strikeouts|Hits|Bases|Allowed|Game|Inning|Pitcher|Batter|Locked|Suspended)\b/i.test(value);
+
+// Skip only a known statistical annotation attached to this player. Never skip
+// a missing price, unknown word, next player or market heading to fill a pair.
+function afterPlayerStatistic(lines, start) {
+  const label = (lines[start] || "").match(/^(AVG|SLG|HR|RBI|R|H\+R\+RBI|H\/9|K\/9|BBPG|ERA|IP):\s*(\d+(?:\.\d+)?|--)?$/i);
+  if (!label) return { start, statistic: "" };
+  let next = start + 1;
+  while (next < lines.length && next - start <= 160 && /^(?:\d+(?:\.\d+)?|\.|--)$/.test(lines[next])) next += 1;
+  if (next - start > 160) return { start: -1, statistic: label[1].toUpperCase() };
+  return { start: next, statistic: label[1].toUpperCase() };
+}
+
+// The observed detail table includes exactly one named starter under each team.
+// Both team cells are still validated; a pitcher can never stand in for a team.
+function mainParticipants(lines, i, detailEvent) {
+  const away = team(lines[i]);
+  if (!away) return null;
+  let home = "", start = -1;
+  if (/^(?:AT|@|VS\.?)$/i.test(lines[i + 1] || "")) {
+    home = team(lines[i + 2]); start = i + 3;
+  } else if (playerLabel(lines[i + 1]) && /^(?:AT|@|VS\.?)$/i.test(lines[i + 2] || "") &&
+      playerLabel(lines[i + 4])) {
+    home = team(lines[i + 3]); start = i + 5;
+  }
+  if (!home || away === home || detailEvent && detailEvent !== `${away} @ ${home}`) return null;
+  return { away, home, start };
+}
+
 export function parseDraftKingsMlb(rawText, context = {}) {
-  const lines = rawText.split(/\r?\n/).map(clean).filter(Boolean);
+  const rawLines = String(rawText || "").split(/\r?\n/).map(clean).filter(Boolean);
+  const lines = stripMlbNavigation(rawLines);
   const forced = String(context.league || context.sport || "").toUpperCase() === "MLB" || lines.includes("MLB_CAPTURE_LEAGUE: MLB");
   const breadcrumb = /Sportsbook\s*\/\s*Baseball Odds\s*\/\s*MLB Odds/i;
   if (!forced && !lines.some(line => breadcrumb.test(line))) return null;
@@ -79,12 +144,13 @@ export function parseDraftKingsMlb(rawText, context = {}) {
   const rows = [];
   // DK also labels a pitcher tab "Hits". A text export listing that tab does
   // not prove which tab was selected; require a typed heading in that case.
-  const hasPitcherTabs = lines.some(line => /^(?:Pitcher|Pitcher Props)$/i.test(line));
+  const hasPitcherTabs = rawLines.some(line => /^(?:Pitcher|Pitcher Props)$/i.test(line));
   let active = forced;
   let mainTable = false;
   let fullGame = true;
   let detailEvent = "";
   let market = "";
+  let ambiguousHits = false;
   for (let i = 0; i < lines.length; i += 1) {
     const value = lines[i];
     if (/^DRAFTKINGS_(?:CURRENT_CAPTURE|INITIAL_CAPTURE|AUTOPASS_\d+)$/.test(value)) {
@@ -95,6 +161,9 @@ export function parseDraftKingsMlb(rawText, context = {}) {
       mainTable = false; fullGame = true; market = "";
       detailEvent = active ? gameTitle(value) : "";
     }
+    if (/^(?:DraftKings Inc\.|BET SLIP|View Bet Details)$/i.test(value)) {
+      active = false; mainTable = false; market = "";
+    }
     if (!active) continue;
     const title = gameTitle(value);
     if (title) detailEvent = title;
@@ -104,8 +173,8 @@ export function parseDraftKingsMlb(rawText, context = {}) {
       mainTable = fullGame; market = ""; i += 2; continue;
     }
     if (propType(value)) {
-      const ambiguousHits = hasPitcherTabs && /^Hits\s+(?:O\/U|Over\/Under)$/i.test(value);
-      market = fullGame && !ambiguousHits ? propType(value) : ""; mainTable = false; continue;
+      ambiguousHits = hasPitcherTabs && /^Hits\s+(?:O\/U|Over\/Under)$/i.test(value);
+      market = fullGame ? propType(value) : ""; mainTable = false; continue;
     }
     // A new unsupported market cannot inherit the previous market's prices.
     if (/^(?:Batter|Pitcher|Player|Game|Team) Props$/i.test(value) || /O\/U$|Over\/Under$|\d+\+$/.test(value) || /^(?:Home Runs|Hits|Total Bases|RBIs|Runs|Strikeouts|Walks|Hits Allowed|Earned Runs|Outs)$/i.test(value)) {
@@ -113,9 +182,10 @@ export function parseDraftKingsMlb(rawText, context = {}) {
     }
 
     const away = team(value);
-    const home = /^(?:AT|@|VS\.?)$/i.test(lines[i + 1] || "") ? team(lines[i + 2]) : "";
-    if (mainTable && away && home && away !== home) {
-      const cells = cellsAt(lines, i + 3, 12);
+    const participants = mainTable ? mainParticipants(lines, i, detailEvent) : null;
+    if (participants) {
+      const { away, home, start } = participants;
+      const cells = cellsAt(lines, start, 12);
       if (cells.length && /^O$/i.test(cells[2]) && /^U$/i.test(cells[8])) {
         const event = `${away} @ ${home}`;
         addPair(rows, event, "spread", [away, home], [spread(cells[0]), spread(cells[6])], [cells[1], cells[7]]);
@@ -128,7 +198,9 @@ export function parseDraftKingsMlb(rawText, context = {}) {
     if (!market || !detailEvent) continue;
     if (/^(?:Player|Over|Under)$/i.test(value)) continue;
     if (away || !/^[A-Za-zÀ-ž][A-Za-zÀ-ž.'’ -]+\s+[A-Za-zÀ-ž.'’ -]+$/.test(value)) { market = ""; continue; }
-    const cells = cellsAt(lines, i + 1, 6);
+    const annotation = afterPlayerStatistic(lines, i + 1);
+    if (annotation.start < 0 || ambiguousHits && annotation.statistic !== "AVG") { market = ""; continue; }
+    const cells = cellsAt(lines, annotation.start, 6);
     if (!cells.length || !/^O$/i.test(cells[0]) || !/^U$/i.test(cells[3])) { market = ""; continue; }
     const over = number(cells[1]);
     const under = number(cells[4]);

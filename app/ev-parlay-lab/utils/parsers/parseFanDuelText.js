@@ -554,7 +554,7 @@ function parsePlusLadders(lines, startIndex, event, sport) {
         const odds = parseAmericanOdds(token);
 
         if (plus !== null) {
-          lastPlus = plus;
+          lastPlus = Number.isInteger(plus) && plus > 0 ? plus : null;
         } else if (odds !== null && lastPlus !== null) {
           rows.push(buildRow({
             sport,
@@ -564,6 +564,9 @@ function parsePlusLadders(lines, startIndex, event, sport) {
             lineValue: lastPlus - 0.5,
             oddsAmerican: odds,
           }));
+          lastPlus = null;
+        } else {
+          lastPlus = null;
         }
 
         j += 1;

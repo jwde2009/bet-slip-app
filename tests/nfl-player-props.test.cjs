@@ -113,7 +113,7 @@ class Element {
   getAttribute(name) { return this.attrs[name] ?? null; }
   hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
   getBoundingClientRect() { return { width: this.hidden ? 0 : 100, height: this.hidden ? 0 : 30 }; }
-  click() { this.clicks += 1; }
+  click() { this.clicks += 1; if (this.tagName === "SUMMARY" && this.parentElement?.tagName === "DETAILS") this.parentElement.open = !this.parentElement.open; if (this.onClick) this.onClick(); }
   matches(selector) {
     const attrs = [...selector.matchAll(/\[([^\]=*]+)(\*?=)?"?([^\]"]*)"?\]/g)];
     const base = selector.replace(/\[[^\]]+\]/g, '');
@@ -156,6 +156,26 @@ test('NFL capture: two adjacent players retain their own prices; only the safe t
   assert.ok(r.text.includes('Bijan Robinson | OVER | 36.5 | -110')); assert.ok(r.text.includes('Drake London | UNDER | 80.5 | -120'));
   assert.equal(r.event, event); assert.equal(passing.clicks, 1); assert.equal(unsafe.clicks, 0); assert.equal(other.clicks, 0);
   assert.equal(over.clicks + under.clicks, 0); assert.equal(r.done, false); assert.ok(d.open);
+});
+
+test('theScore lazy drawer loads through the real summary click before reading prices', async () => {
+  const d = drawer('Receiving Yards (O/U)');
+  const summary = d.querySelector('summary');
+  const over = button('O 69.5 -110', 'OVER'), under = button('U 69.5 -115', 'UNDER');
+  summary.onClick = () => { const a = article('Drake London', over, under); a.parentElement = d; d.children.push(a); };
+  const result = await capture([d]);
+  assert.equal(summary.clicks,1); assert.equal(over.clicks + under.clicks,0);
+  assert.match(result.text,/Drake London \| OVER \| 69.5 \| -110/);
+});
+
+test('theScore plain Main Lines matchup resolves the event without h1, but conflicting headers stop prices', async () => {
+  const main = drawer('Main Lines', el('div','ATL Falcons @ NO Saints'));
+  const prop = drawer('Receiving Yards', article('Drake London',button('O 69.5 -110','OVER'),button('U 69.5 -110','UNDER')));
+  const good = await capture([main,prop],{header:''});
+  assert.equal(good.event,event); assert.match(good.text,/Drake London \| OVER/);
+  const conflict = await capture([main,prop],{header:'New York Jets @ Buffalo Bills'});
+  assert.doesNotMatch(conflict.text,/Drake London \| OVER/);
+  assert.match(conflict.text,/Conflicting current-game headers/);
 });
 
 test('NFL capture: blank table corner and locked cells do not shift ladder odds', async () => {

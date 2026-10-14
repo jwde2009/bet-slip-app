@@ -1,3 +1,5 @@
+import { parseOddsTable, isOddsTable } from "./parsers/parseOddsTable";
+import { parseNflCapture } from "./parsers/parseNflCapture";
 import { parseDraftKingsText } from "./parsers/parseDraftKingsText";
 import { parseFanDuelText } from "./parsers/parseFanDuelText";
 import { parseBetMGMText } from "./parsers/parseBetMGMText";
@@ -38,6 +40,12 @@ export function parseOddsText(rawText, context = {}) {
     return [];
   }
 
+  if (sportsbook === "odds table" || isOddsTable(normalizedRawText)) return parseOddsTable(normalizedRawText);
+
+  if (/^NFL_MARKET_V2:|^NFL_CAPTURE_(?:RUN|DIAGNOSTICS):/m.test(normalizedRawText)) {
+    return parseNflCapture(normalizedRawText, { ...context, sportsbook });
+  }
+
   // BetOnline must never fall through to another book's generic page detection.
   if (
     sportsbook === "betonline" ||
@@ -69,7 +77,8 @@ export function parseOddsText(rawText, context = {}) {
   }
 
   if (sportsbook === "pinnacle") {
-    const rows = [...parsePinnacleText(normalizedRawText, context), ...parseNflPlayerProps(normalizedRawText, "Pinnacle")];
+    const rows = parsePinnacleText(normalizedRawText, context);
+    rows.push(...parseNflPlayerProps(normalizedRawText, "Pinnacle"));
     console.log("PINNACLE PARSER ROW COUNT", rows.length);
     return rows;
   }
