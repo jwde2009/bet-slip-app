@@ -267,3 +267,42 @@ test('Recovered DK tab selector accepts event anchors inside expanded wrappers a
   assert.equal(unsafe.navigation.found,false); assert.equal(betClicks,0);
   dom.window.close();
 });
+
+const caesarsNhl = 'NHL\nEdmonton Oilers\nAT\nFlorida Panthers\n';
+test('Caesars refuses partial-period captures instead of assigning full_game', async () => {
+  const {parseCaesarsText: parse} = await loadModule('app/ev-parlay-lab/utils/parsers/parseCaesarsText.js');
+  for (const label of ['1st Period','First Half','2nd Inning','Q1','Period: first_period']) {
+    assert.throws(() => parse(caesarsNhl + label + '\nShots\nConnor McDavid\n2+\n-110'), /period labels/);
+  }
+});
+for (const book of ['Caesars','FanDuel']) {
+  test(`${book} ladder thresholds cannot borrow a later or second price`, async () => {
+    // Exercise the actual helper with controlled row construction, independent of event detection.
+    const source = read(`app/ev-parlay-lab/utils/parsers/parse${book}Text.js`).replace(/^import .*;$/gm, '').replace(/export /g, '');
+    const context = vm.createContext({americanToDecimal: n => n > 0 ? 1+n/100 : 1-100/n, console});
+    vm.runInContext(source, context);
+    for (const tokens of [['2+','Locked','-120'],['2+','-110','+200'],['0+','-110']]) {
+      context.input = [book === 'FanDuel' ? 'Player Points' : 'Points','Connor McDavid',...tokens];
+      const rows = vm.runInContext("parsePlusLadders(input, 0, 'Edmonton Oilers @ Florida Panthers', 'NHL')", context);
+      assert.equal(rows.length, tokens.includes('Locked') || tokens.includes('0+') ? 0 : 1);
+      if (rows.length) assert.equal(rows[0].oddsAmerican,-110);
+    }
+  });
+}
+test('Caesars section boundary prevents Hits prices from becoming Total Bases', async () => {
+  const {parseCaesarsText: parse} = await loadModule('app/ev-parlay-lab/utils/parsers/parseCaesarsText.js');
+  const rows = parse('MLB\nSan Francisco Giants\nAT\nNew York Mets\nTotal Bases\nJuan Soto\n2+\n-110\nHits\nPete Alonso\n2+\n+180');
+  assert.deepEqual(plain(rows.map(r=>[r.marketType,r.selectionNormalized,r.oddsAmerican])), [['player_hits','Pete Alonso Over',180],['player_total_bases','Juan Soto Over',-110]]);
+});
+test('theScore ambiguous historical MLB rejection reaches the app router', async () => {
+  const {parseOddsText: parse} = await loadModule(routerFile);
+  assert.throws(()=>parse(read('tests/fixtures/thescore-mlb-legacy.txt'),{sportsbook:'TheScore'}), /ambiguous price-column labels/);
+});
+test('theScore structured period labels exclude partial-game props', async () => {
+  const {parseTheScoreText: parse} = await loadModule('app/ev-parlay-lab/utils/parsers/parseTheScoreText.js');
+  const prefix = 'THESCORE_STRUCTURED_EXPORT\nSport: NHL\nEvent: Edmonton Oilers @ Florida Panthers\n';
+  const props = 'Market: Shots on Goal\nConnor McDavid | OVER | 2.5 | -110\nConnor McDavid | UNDER | 2.5 | -120';
+  assert.equal(parse(prefix + props).length,2);
+  assert.equal(parse(prefix + 'Period: 1st_period\n' + props).length,0);
+  assert.equal(parse(prefix + 'Period: 1st_period\n' + props + '\nPeriod: full_game\n' + props).length,2);
+});

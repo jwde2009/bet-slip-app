@@ -15,6 +15,11 @@ export function parseCaesarsText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
 
+  // Flattened text cannot tell navigation labels from active partial-game markets.
+  // Reject the entire ambiguous capture rather than silently price it as full game.
+  if (lines.some(line => /\b(?:first|second|third|fourth|1st|2nd|3rd|4th)\s*(?:half|quarter|period|inning)\b|\b(?:half|quarter|period|inning)\s*[1-9]|^(?:1h|2h|q[1-4]|p[1-3])$|^period:/i.test(line))) {
+    throw new Error("Caesars capture contains period labels without market boundaries. Import a full-game-only capture or a table with explicit periods.");
+  }
   let sport = inferSport(lines, context);
   const rows = [];
 
@@ -87,6 +92,7 @@ function parseMainLines(lines, startIndex, event, away, home, sport) {
   const teamIdx = gameIdx === -1 ? findNextTeamPair(lines, startIndex) : findNextTeamPair(lines, gameIdx);
   if (teamIdx === -1) return [];
 
+  if (lines[teamIdx] !== away || lines[teamIdx + 2] !== home) return [];
   const block = lines.slice(teamIdx, teamIdx + 16);
   const parsed = parseMainBlock(block);
   if (!parsed) return [];
@@ -98,7 +104,7 @@ function parseMainBlock(block) {
   const working = block.filter((line) => !isSkippableLine(line));
 
   const atIdx = working.findIndex((line) => isAtMarker(line));
-  if (atIdx === -1 || atIdx + 10 >= working.length) return null;
+  if (atIdx === -1 || atIdx + 11 >= working.length) return null;
 
   const spreadA = parseSignedNumber(working[atIdx + 2]);
   const spreadAOdds = parseAmericanOdds(working[atIdx + 3]);
@@ -224,7 +230,7 @@ function parsePlusLadders(lines, startIndex, event, sport) {
         const odds = parseAmericanOdds(token);
 
         if (plus !== null) {
-          lastPlus = plus;
+          lastPlus = Number.isInteger(plus) && plus > 0 ? plus : null;
         } else if (odds !== null && lastPlus !== null) {
           rows.push(buildRow({
             sport,
@@ -234,6 +240,9 @@ function parsePlusLadders(lines, startIndex, event, sport) {
             lineValue: lastPlus - 0.5,
             oddsAmerican: odds,
           }));
+          lastPlus = null;
+        } else {
+          lastPlus = null;
         }
 
         j += 1;
@@ -305,7 +314,7 @@ function isSkippableLine(value) {
 
 function isLikelySectionHeader(value) {
   const text = normalizeLine(value);
-  return /^(all odds|sgp|builder|stats|quick sgp|popular|game lines|player props|points|rebounds|assists|threes|combos|shots|goals|points o\/u|rebounds o\/u|assists o\/u|threes o\/u|pts \+ reb \+ ast o\/u|shots on goal o\/u|betting news)$/i.test(text);
+  return /^(all odds|sgp|builder|stats|quick sgp|popular|game lines|player props|points|rebounds|assists|threes|combos|hits|total bases|shots|goals|points o\/u|rebounds o\/u|assists o\/u|threes o\/u|pts \+ reb \+ ast o\/u|shots on goal o\/u|betting news)$/i.test(text);
 }
 
 function findLineIndexAfter(lines, startIndex, pattern) {
@@ -337,7 +346,7 @@ function parseAmericanOdds(value) {
   const text = normalizeLine(value);
   if (!/^[+-]\d{2,5}$/.test(text)) return null;
   const n = Number(text);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && Math.abs(n) >= 100 ? n : null;
 }
 
 function parseSignedNumber(value) {

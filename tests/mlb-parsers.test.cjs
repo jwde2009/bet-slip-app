@@ -39,16 +39,9 @@ function extensionSection(start, end, bindings = {}) {
   return vm.runInNewContext(`${extension.slice(from, to)}\n${start.match(/function (\w+)/)[1]}`, { clean, ...bindings });
 }
 
-test('supplied theScore export: 145 literal rows; team totals are not supported yet', async () => {
+test('supplied legacy theScore export rejects ambiguous historic price columns', async () => {
   const parse = await parser('TheScore');
-  const rows = parse(read('tests/fixtures/thescore-mlb-legacy.txt'));
-  assert.equal(rows.length, 145);
-  assert.ok(rows.every(row => row.sport === 'MLB'));
-  assert.ok(rows.every(row => row.eventLabelRaw === 'San Francisco Giants @ New York Mets'));
-  // Preserve literal captured values, not an inferred repair of historic odds.
-  const soto = rows.find(row => row.marketType === 'player_home_runs' && row.selectionNormalized === 'J. Soto Over');
-  assert.equal(soto.lineValue, 1.5);
-  assert.equal(soto.oddsAmerican, 240);
+  assert.throws(() => parse(read('tests/fixtures/thescore-mlb-legacy.txt')), /ambiguous price-column labels/);
 });
 
 test('supplied collapsed Pinnacle props yield no invented prop rows', async () => {
