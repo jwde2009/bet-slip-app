@@ -37,11 +37,12 @@ export function buildCanonicalMarkets(rows) {
     const marketKey = [
       String(row.sport || "").trim().toUpperCase(),
       eventKey,
-      row.period || "full_game",
-      row.eventStart || "",
       normalizedMarketType,
       subjectKey,
       normalizedLineValue,
+      // Preserve saved full-game market IDs; qualify only explicit differences.
+      ...(row.period && row.period !== "full_game" ? [`period:${row.period}`] : []),
+      ...(row.eventStart ? [`start:${row.eventStart}`] : []),
     ].join("||");
 
     if (!marketMap.has(marketKey)) {

@@ -110,6 +110,7 @@ for (const book of ['DraftKings','FanDuel','BetMGM','Caesars','Pinnacle','TheSco
     const {buildCanonicalMarkets} = await loadModule('app/ev-parlay-lab/utils/matchMarkets.js');
     const result = buildCanonicalMarkets(rows);
     assert.equal(result.markets.length,1); assert.equal(result.markets[0].selections.length,2);
+    assert.equal(result.markets[0].id.split('||').length,5, 'Keep legacy full-game market ID shape for saved sessions');
   });
 }
 
