@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ImportTextInput from "./ImportTextInput";
+import { isOddsTable } from "../utils/parsers/parseOddsTable";
 
 const SPORTSBOOK_OPTIONS = [
   "Auto",
@@ -41,6 +42,7 @@ export default function ImportPanel({
   defaultCollapsed = true,
   ladderHelperEvents = [],
 }) {
+  const isTableImport = sportsbook === "Odds table" || isOddsTable(rawText);
   const safeLadderEvents = Array.isArray(ladderHelperEvents) ? ladderHelperEvents : [];
   const defaultBetMgmLadderEvent = safeLadderEvents[0]?.eventName || "";
   const [betMgmLadderEvent, setBetMgmLadderEvent] = useState("");
@@ -186,10 +188,12 @@ export default function ImportPanel({
         <label style={fieldStyle}>
           <span style={fieldLabelStyle}>Batch Role</span>
           <select
-            value={batchRole}
+            value={isTableImport ? "per_book" : batchRole}
+            disabled={isTableImport}
             onChange={(e) => setBatchRole(e.target.value)}
             style={inputStyle}
           >
+            {isTableImport && <option value="per_book">Per book: Pinnacle sharp, others target</option>}
             <option value="target">Target book</option>
             <option value="fair_odds">Fair odds / sharp source</option>
           </select>
