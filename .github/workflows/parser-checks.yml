@@ -31,6 +31,8 @@ jobs:
           node --check ev-parlay-extension/background.js
           node --check ev-parlay-extension/background-entry.js
           node --check ev-parlay-extension/theScoreNflCapture.js
+          node --check ev-parlay-extension/nflBookCapture.js
+          node --check ev-parlay-extension/mlbVisibleCapture.js
           node --experimental-vm-modules --test tests/*.test.cjs
           git diff --check
       - name: Next.js production build

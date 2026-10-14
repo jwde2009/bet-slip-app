@@ -37,6 +37,8 @@ export function buildCanonicalMarkets(rows) {
     const marketKey = [
       String(row.sport || "").trim().toUpperCase(),
       eventKey,
+      row.period || "full_game",
+      row.eventStart || "",
       normalizedMarketType,
       subjectKey,
       normalizedLineValue,
@@ -48,10 +50,11 @@ export function buildCanonicalMarkets(rows) {
         displayName: buildCanonicalDisplayName(row),
         eventKey,
         sport: row.sport,
+        period: row.period || "full_game",
         marketType: normalizedMarketType,
         subjectKey,
         lineValue: normalizedLineValue === "" ? null : Number(normalizedLineValue),
-        spreadLineTeam: /^(NFL|MLB)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread"
+        spreadLineTeam: /^(NFL|MLB|NHL)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread"
           ? cleanTeam(row.awayTeam || splitEventLabel(row.eventLabelRaw, row.sport).away, row.sport) : "",
         selections: [],
       });
@@ -66,7 +69,7 @@ export function buildCanonicalMarkets(rows) {
       selection = {
         id: `${marketKey}::${selectionLabel}`,
         label: selectionLabel,
-        lineValue: /^(NFL|MLB)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread" ? row.lineValue : undefined,
+        lineValue: /^(NFL|MLB|NHL)$/.test(String(row.sport).toUpperCase()) && normalizedMarketType === "spread" ? row.lineValue : undefined,
         quotes: [],
       };
       market.selections.push(selection);
@@ -83,6 +86,11 @@ export function buildCanonicalMarkets(rows) {
       originalEventLabelRaw: row.eventLabelRaw,
       originalSelectionNormalized: row.selectionNormalized,
       originalMarketType: row.marketType,
+      capturedAt: row.capturedAt || null,
+      source: row.source || null,
+      sourceType: row.sourceType || null,
+      originalOdds: row.originalOdds ?? null,
+      originalOddsFormat: row.originalOddsFormat || null,
       lineValue: row.lineValue,
       subjectKey,
     });
@@ -206,7 +214,7 @@ function normalizeLineValueForMarket(row) {
     return "";
   }
 
-  if (marketType === "spread" && /^(NFL|MLB)$/.test(String(row.sport).toUpperCase())) {
+  if (marketType === "spread" && /^(NFL|MLB|NHL)$/.test(String(row.sport).toUpperCase())) {
     const event = splitEventLabel(row.eventLabelRaw, row.sport);
     const home = cleanTeam(row.homeTeam || event.home, row.sport);
     const selection = cleanTeam(row.selectionNormalized || row.selectionRaw, row.sport);

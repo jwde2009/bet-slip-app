@@ -1,3 +1,5 @@
+Current six-book audit and manual table importer: [Multisport-import-audit.md](Multisport-import-audit.md).
+
 # MLB capture/parser repair: first batch
 
 The latest DraftKings MLB and import-copy changes are documented in [DraftKings-MLB-import.md](DraftKings-MLB-import.md).

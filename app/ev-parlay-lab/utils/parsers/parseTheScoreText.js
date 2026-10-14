@@ -1051,6 +1051,8 @@ function buildMainRows(event, away, home, sport, parsed) {
 function inferSport(lines, context) {
   if (context?.sport) return String(context.sport).toUpperCase();
 
+  const explicit = lines.map(line => line.match(/^Sport: (MLB|NHL|NFL|NBA|WNBA)$/i)?.[1]?.toUpperCase()).filter(Boolean);
+  if (new Set(explicit).size === 1) return explicit[0];
   const text = lines.slice(0, 220).join(" ");
 
   if (/The Score NHL|NHL Landing Page|Game Page – Main|Game Page – Shots on Goal|Game Page – Goals|Game Page – Points \/ Assists|Game Page – Saves|Shots On Goal|Goalie\/Defense|SEA Kraken|COL Avalanche|MTL Canadiens|TB Lightning|OTT Senators|CAR Hurricanes|Vegas Golden Knights|Colorado Avalanche|Montreal Canadiens|Carolina Hurricanes/i.test(text)) {

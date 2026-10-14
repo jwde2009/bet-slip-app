@@ -451,7 +451,13 @@ function PlayerGroup({ playerGroup, isCollapsed, onToggle, onUpdateRow, onDelete
                 <td style={{ ...tdStyle, background: zebraBg }}>
                   <span style={getConfidencePillStyle(row.confidence)}>{row.confidence || "medium"}</span>
                 </td>
-                <td style={{ ...tdStyle, background: zebraBg }}>{warnings}</td>
+                <td style={{ ...tdStyle, background: zebraBg }}>{warnings}
+                  {row.sourceType === "odds_table" && <div style={{ fontSize: 12, marginTop: 6 }}>
+                    {row.source} · {row.period}<br />
+                    Captured: {row.capturedAt}<br />
+                    Listed: {row.originalOdds} ({row.originalOddsFormat})
+                  </div>}
+                </td>
                 <td style={{ ...tdStyle, background: zebraBg }}>
                   <button type="button" onClick={() => onDeleteRow(row.id)} style={dangerButtonStyle}>
                     Delete

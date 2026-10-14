@@ -1,3 +1,4 @@
+import { matchupLeague } from "./matchupLeague";
 import { americanToDecimal } from "../odds";
 
 let nextId = 1;
@@ -14,11 +15,12 @@ export function parseCaesarsText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
 
-  const sport = inferSport(lines, context);
+  let sport = inferSport(lines, context);
   const rows = [];
 
   const detailEvent = findDetailEvent(lines);
   if (detailEvent) {
+    sport = matchupLeague(detailEvent.away, detailEvent.home) || sport;
     const event = `${detailEvent.away} @ ${detailEvent.home}`;
     rows.push(...parseMainLines(lines, detailEvent.startIndex, event, detailEvent.away, detailEvent.home, sport));
     rows.push(...parseOverUnderPlayerProps(lines, detailEvent.startIndex, event, sport));
@@ -46,7 +48,7 @@ function parseLandingGames(lines, sport) {
     if (!parsed) continue;
 
     const event = `${away} @ ${home}`;
-    rows.push(...buildMainRows(event, away, home, sport, parsed));
+    rows.push(...buildMainRows(event, away, home, matchupLeague(away, home) || sport, parsed));
     i += 10;
   }
 
@@ -114,7 +116,7 @@ function parseMainBlock(block) {
     spreadA === null || spreadAOdds === null ||
     totalOver === null || totalOverOdds === null ||
     moneylineA === null || spreadB === null || spreadBOdds === null ||
-    totalUnder === null || totalUnderOdds === null || moneylineB === null
+    totalUnder === null || totalUnderOdds === null || moneylineB === null || totalOver !== totalUnder || Math.abs(spreadA + spreadB) > 0.0001
   ) {
     return null;
   }
@@ -258,6 +260,7 @@ function buildMainRows(event, away, home, sport, parsed) {
 function inferSport(lines, context) {
   if (context?.sport) return String(context.sport).toUpperCase();
   const text = lines.slice(0, 80).join(" ");
+  if (/\bNFL\b/i.test(text) && !/\b(?:NBA|WNBA|NHL|MLB)\b/i.test(text)) return "NFL";
   if (/NBA/i.test(text)) return "NBA";
   if (/NHL/i.test(text)) return "NHL";
   if (/MLB/i.test(text)) return "MLB";
@@ -380,6 +383,7 @@ function buildRow({ sport, event, marketType, selection, lineValue, oddsAmerican
     isSharpSource: false,
     isTargetBook: true,
     batchRole: "target",
+    period: "full_game",
     confidence: "medium",
     parseWarnings: [],
   };

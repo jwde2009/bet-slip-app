@@ -1,3 +1,5 @@
+import { parseOddsTable, isOddsTable } from "./parsers/parseOddsTable";
+import { parseNflCapture } from "./parsers/parseNflCapture";
 import { parseDraftKingsText } from "./parsers/parseDraftKingsText";
 import { parseFanDuelText } from "./parsers/parseFanDuelText";
 import { parseBetMGMText } from "./parsers/parseBetMGMText";
@@ -36,6 +38,12 @@ export function parseOddsText(rawText, context = {}) {
   if (!normalizedRawText.trim()) {
     console.log("NO RAW TEXT PROVIDED");
     return [];
+  }
+
+  if (sportsbook === "odds table" || isOddsTable(normalizedRawText)) return parseOddsTable(normalizedRawText);
+
+  if (/^NFL_MARKET_V2:|^NFL_CAPTURE_(?:RUN|DIAGNOSTICS):/m.test(normalizedRawText)) {
+    return parseNflCapture(normalizedRawText, { ...context, sportsbook });
   }
 
   // BetOnline must never fall through to another book's generic page detection.

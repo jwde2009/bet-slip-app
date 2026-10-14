@@ -242,23 +242,22 @@ test('A sidebar NFL label does not prevent a later MLB event from parsing', asyn
   assert.deepEqual(parse(`Football\nNFL\n${input}`).map(({ id, ...row }) => row), parse(input).map(({ id, ...row }) => row));
 });
 
-test('Unsupported Pinnacle NFL input shows next steps without changing loaded rows or parse time', async () => {
+test('Unsupported Pinnacle NFL input retains loaded rows after background parsing', async () => {
   const source = read('app/ev-parlay-lab/page.js');
   const start = source.indexOf('   async function handleParse()');
   const end = source.indexOf('  function applyBatchRoleToRows(', start);
-  assert.ok(start >= 0 && end > start);
-  const { parseNflMainLines } = await moduleExports('app/ev-parlay-lab/utils/parsers/nflMainLines.js');
-  const messages = [];
-  const fail = () => { throw new Error('Unsupported input must stop before parsing, normalizing or changing session state'); };
+  const { parseOddsText } = await moduleExports('app/ev-parlay-lab/utils/parseOddsText.js');
+  const notices = [];
+  const fail = () => { throw new Error('Unsupported input must not change loaded rows or parse time'); };
   const handle = vm.runInNewContext(`${source.slice(start, end)}\nhandleParse`, {
-    rawText: legacyNflLanding, sportsbook: 'Pinnacle', parseNflMainLines,
-    console: { log() {} }, alert: message => messages.push(message),
-    parseOddsInBackground: fail, setRows: fail, setRawText: fail, setLastParsedAt: fail,
+    rawText: legacyNflLanding, sportsbook: 'Pinnacle', cancelActiveParse() {}, setIsParsing() {}, parseJob:{current:null},
+    setParseNotice: message => notices.push(message), console: {log() {}}, alert: fail,
+    parseOddsInBackground: (text,context) => ({promise:Promise.resolve(parseOddsText(text,context))}),
+    setRows:fail, setRawText:fail, setLastParsedAt:fail,
   });
   await handle();
-  assert.equal(messages.length, 1);
-  assert.match(messages[0], /individual NFL game/);
-  assert.match(messages[0], /input and loaded rows are preserved/);
+  assert.match(notices.at(-1), /No supported priced rows found/);
+  assert.match(notices.at(-1), /input and loaded rows are retained/);
 });
 
 test('Pinnacle NFL detail yields exactly six full-game sharp rows despite mixed-sport navigation', async () => {
@@ -635,7 +634,8 @@ test('theScore corrupted user export is rejected instead of inventing football i
   const parse = await parser('TheScore');
   assert.deepEqual(parse(read('tests/fixtures/thescore-nfl-corrupt-user.txt')), []);
   const page = read('app/ev-parlay-lab/page.js');
-  assert.match(page, /theScore NFL: no usable full-game pairs found/);
+  assert.match(page, /No supported priced rows found/);
+  assert.doesNotMatch(page, /const nflRows = parseNflMainLines\(inputText/);
 });
 
 test('All four supplied NFL slates normalize and calculate together with FanDuel in sharp mode', async () => {

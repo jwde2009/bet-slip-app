@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:parsers": "node --experimental-vm-modules --test tests/mlb-parsers.test.cjs tests/nfl-main-lines.test.cjs tests/draftkings-mlb-import.test.cjs"
+    "test:parsers": "node --experimental-vm-modules --test tests/*.test.cjs"
   },
   "dependencies": {
     "next": "16.2.2",
@@ -19,6 +19,7 @@
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4"
   }
 }

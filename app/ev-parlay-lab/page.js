@@ -16,8 +16,8 @@ import SessionReadinessPanel from "./components/SessionReadinessPanel";
 
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsInBackground } from "./utils/parseOddsInBackground";
+import { mergeOddsTableImports } from "./utils/parsers/parseOddsTable";
 import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
-import { parseNflMainLines } from "./utils/parsers/nflMainLines";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
 import { calculateFairOddsForMarkets } from "./utils/fairOdds";
@@ -1204,22 +1204,6 @@ export default function EVParlayLabPage() {
     return;
   }
 
-  if (/^pinnacle$/i.test(String(sportsbook || "").trim())) {
-    const nflRows = parseNflMainLines(inputText, "Pinnacle");
-    if (nflRows !== null && !nflRows.length) {
-      alert("Pinnacle NFL: no complete full-game main lines found. Select All or Game on the NFL listing, or open an individual NFL game, then capture again once prices are visible. Your input and loaded rows are preserved.");
-      return;
-    }
-  }
-
-  if (/^thescore$/i.test(String(sportsbook || "").trim())) {
-    const nflRows = parseNflMainLines(inputText, "TheScore");
-    if (nflRows !== null && !nflRows.length) {
-      alert("theScore NFL: no usable full-game pairs found. Older captures replaced NFL teams with other leagues' names. Reload extension 1.1.1 or later, refresh the NFL page, select full-game lines, and capture again. Your input and loaded rows are preserved.");
-      return;
-    }
-  }
-
   if (/^bet\s*online$/i.test(String(sportsbook || "").trim()) || /^BETONLINE_INITIAL_CAPTURE\s*$/m.test(inputText)) {
     const capture = inspectBetOnlineText(inputText);
     if (!capture.rows.length) {
@@ -1273,24 +1257,30 @@ export default function EVParlayLabPage() {
       (existingRow) => !shouldRemoveExistingRowForImportMode(existingRow, normalized, importMode)
     );
 
-    const existingKeys = new Set(baseRows.map((row) => makeRowMergeKey(row)));
+    const mergedBaseRows = mergeOddsTableImports(baseRows, normalized);
+    const existingKeys = new Set(mergedBaseRows.map((row) => makeRowMergeKey(row)));
 
     const additions = normalized.filter((row) => {
+      if (row.sourceType === "odds_table") return false;
       const key = makeRowMergeKey(row);
       if (existingKeys.has(key)) return false;
       existingKeys.add(key);
       return true;
     });
 
-    return normalizeParsedRows([...baseRows, ...additions]) || [...baseRows, ...additions];
+    return normalizeParsedRows([...mergedBaseRows, ...additions]) || [...mergedBaseRows, ...additions];
   });
 
   setLastParsedAt(parsedAtIso);
-  setParseNotice(`Parsed rows: ${normalized.length}`);
+  const diagnostics = parsed.importDiagnostics;
+  setParseNotice(diagnostics
+    ? `Imported ${diagnostics.accepted} rows; skipped ${diagnostics.skipped}; duplicates ${diagnostics.duplicates}. ${diagnostics.errors.join(" ")}`
+    : `Parsed rows: ${normalized.length}`);
 }
 
   function applyBatchRoleToRows(parsedRows, { sportsbook, batchRole }) {
     return (parsedRows || []).map((row) => {
+      if (row.sourceType === "odds_table") return row;
       const resolvedRole =
         batchRole ||
         (/^(pinnacle|bet\s*online)$/i.test(String(sportsbook || "").trim())
@@ -1380,6 +1370,8 @@ function shouldRemoveExistingRowForImportMode(existingRow, incomingRows, mode) {
       String(row.sportsbook || "").trim().toLowerCase(),
       String(row.sport || "").trim().toLowerCase(),
       String(row.eventLabelRaw || "").trim().toLowerCase(),
+      String(row.period || "full_game").trim().toLowerCase(),
+      String(row.eventStart || ""),
       String(row.marketType || "").trim().toLowerCase(),
       String(row.selectionNormalized || "").trim().toLowerCase(),
       row.lineValue ?? "",

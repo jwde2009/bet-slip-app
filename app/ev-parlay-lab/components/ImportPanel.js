@@ -13,6 +13,7 @@ const SPORTSBOOK_OPTIONS = [
   "BetOnline",
   "TheScore",
   "Manual",
+  "Odds table",
 ];
 
 export default function ImportPanel({

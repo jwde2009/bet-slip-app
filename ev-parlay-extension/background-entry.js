@@ -33,3 +33,7 @@ extractSinglePayloadFromTab = async function extractWithNflProps(tabId) {
     return { source: "TheScore", text: [mainText, ...captures].filter(Boolean).join("\n\n") };
   } finally { nflRuns.delete(tabId); }
 };
+
+// October 13 local repair, recovered without replacing legacy workflows.
+importScripts("nflBookCapture.js");
+importScripts("mlbVisibleCapture.js");
