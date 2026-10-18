@@ -70,6 +70,15 @@ test('Already expanded observed panels are read without Hide All or outcome clic
   const result=await b.run();assert.equal(clicks,0);assert.equal((await parser())(result.text).length,2);
 });
 
+test('Pinnacle targeted strikeouts retry skips the collapsed bases drawer and all outcome buttons',async()=>{
+  const b=browser(fixture.strikeouts_and_collapsed.join('')+tabHtml);
+  let clicks=0;b.dom.window.document.addEventListener('click',()=>clicks++);
+  const result=await b.context.capturePinnacleMlbPage({targets:['pitcher_strikeouts'],labels:['Strikeouts']});
+  const data=packet(result.text);
+  assert.equal(data.panels.length,1);assert.match(data.panels[0].title,/Strikeouts$/);assert.equal(clicks,0);
+  assert.equal((await parser())(result.text).filter(r=>r.marketType==='pitcher_strikeouts').length,2);
+});
+
 test('Collapsed title without Show All can reveal lazily replaced content',async()=>{
   const b=browser(fixture.strikeouts_and_collapsed[0]+tabHtml);
   const doc=b.dom.window.document;

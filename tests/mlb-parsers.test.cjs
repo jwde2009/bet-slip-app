@@ -116,7 +116,7 @@ test('BetOnline captures cannot fall through to another book\'s odds parser', as
   await route.link(specifier => {
     // The additive NFL module exports a parser whose name differs from its filename.
     if (path.basename(specifier) === 'parseOddsTable') return new vm.SyntheticModule(['parseOddsTable', 'isOddsTable'], function () { this.setExport('parseOddsTable', () => []); this.setExport('isOddsTable', () => false); }, { context });
-    const exportName = path.basename(specifier) === 'nflPlayerProps' ? 'parseNflPlayerProps' : path.basename(specifier);
+    const exportName = path.basename(specifier) === 'normalizeTeams' ? 'normalizeParsedRows' : path.basename(specifier) === 'nflPlayerProps' ? 'parseNflPlayerProps' : path.basename(specifier);
     return new vm.SyntheticModule([exportName], function () {
       this.setExport(exportName, () => { calls.push(exportName); return []; });
     }, { context });

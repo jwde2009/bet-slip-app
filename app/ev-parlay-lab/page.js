@@ -17,6 +17,7 @@ import SessionReadinessPanel from "./components/SessionReadinessPanel";
 import { SAMPLE_RAW_TEXT, SAMPLE_FILTERS } from "./data/sampleData";
 import { parseOddsInBackground } from "./utils/parseOddsInBackground";
 import { mergeOddsTableImports } from "./utils/parsers/parseOddsTable";
+import { mergeCaptureImports } from "./utils/mergeCaptureImports";
 import { inspectBetOnlineText } from "./utils/parsers/parseBetOnlineText";
 import { normalizeParsedRows } from "./utils/normalizeTeams";
 import { buildCanonicalMarkets } from "./utils/matchMarkets";
@@ -1253,15 +1254,17 @@ export default function EVParlayLabPage() {
     id: makeParsedRowId(row, parsedAt, index),
   }));
   setRows((prev) => {
+    const incremental=normalized.some(row=>row.incrementalCapture===true||row.sourceType==='extension_capture');
     const baseRows = (prev || []).filter(
-      (existingRow) => !shouldRemoveExistingRowForImportMode(existingRow, normalized, importMode)
+      (existingRow) => incremental || !shouldRemoveExistingRowForImportMode(existingRow, normalized, importMode)
     );
 
-    const mergedBaseRows = mergeOddsTableImports(baseRows, normalized);
+    const mergedBaseRows = mergeCaptureImports(mergeOddsTableImports(baseRows, normalized), normalized);
     const existingKeys = new Set(mergedBaseRows.map((row) => makeRowMergeKey(row)));
 
     const additions = normalized.filter((row) => {
       if (row.sourceType === "odds_table") return false;
+      if (row.sourceType === "extension_capture" || row.incrementalCapture === true) return false;
       const key = makeRowMergeKey(row);
       if (existingKeys.has(key)) return false;
       existingKeys.add(key);

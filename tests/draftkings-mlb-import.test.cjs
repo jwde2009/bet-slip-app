@@ -121,8 +121,8 @@ test('MLB run-line matching keeps opposite alternate handicaps separate and pres
 });
 
 const extension = read('ev-parlay-extension/background.js');
-function workflow(pathname, page, visible = []) {
-  const stored = new Map([['EV_DK_TARGET_WORKFLOW_LABELS', '["POINTS","COMBOS"]']]);
+function workflow(pathname, page, visible = [], targets = ["POINTS","COMBOS"]) {
+  const stored = new Map([['EV_DK_TARGET_WORKFLOW_LABELS', JSON.stringify(targets)]]);
   const from = extension.indexOf('function isDraftKingsMlbPage()');
   const to = extension.indexOf('    function scheduleDraftKingsClickByLabel', from);
   const context = vm.createContext({ window: { location: { pathname, href: pathname } }, document: { body: { innerText: page } },
@@ -148,6 +148,14 @@ test('DraftKings MLB capture ignores stale basketball targets and skips absent t
   assert.equal(flow.next(), '');
   assert.equal(workflow('/event/123', 'Sportsbook / Baseball Odds / MLB Odds / Rangers @ Mets Odds').isMlb(), true);
   assert.equal(workflow('/leagues/basketball/nba', 'MLB NBA').isMlb(), false);
+});
+
+test('DraftKings MLB/NHL repeat workflows visit only supplied missing categories',()=>{
+  const mlb=workflow('/leagues/baseball/mlb','MLB',['Batter Props','Total Bases','Pitcher Props','Strikeouts'],['Pitcher Props','Strikeouts']);
+  assert.deepEqual(plain(mlb.labels()),['Pitcher Props','Strikeouts']);
+  assert.equal(mlb.next(),'Pitcher Props');assert.equal(mlb.next(),'Strikeouts');assert.equal(mlb.next(),'');
+  const nhl=workflow('/event/nhl-odds','NHL',['Points','Goalscorer','Shots On Goal'],['Shots On Goal']);
+  assert.deepEqual(plain(nhl.labels()),['Shots On Goal']);assert.equal(nhl.next(),'Shots On Goal');assert.equal(nhl.next(),'');
 });
 
 test('Large import previews are bounded; copy and download preserve every character including CRLF and Unicode', async () => {

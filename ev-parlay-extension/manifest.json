@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "EV Parlay Extractor",
-  "version": "1.4.1",
-  "permissions": ["activeTab", "scripting", "tabs"],
+  "version": "1.4.2",
+  "permissions": ["activeTab", "scripting", "tabs", "contextMenus"],
   "host_permissions": [
   "https://*.thescore.bet/*",
   "https://*.thescore.com/*",

@@ -38,6 +38,101 @@ function extensionContext(extra = {}) {
   return context;
 }
 
+function targetingContext(extra={}) {
+  const ctx=extensionContext(extra);
+  vm.runInContext(read('ev-parlay-extension/captureDemand.js'),ctx);
+  return ctx;
+}
+for(const book of ['DraftKings','FanDuel','BetMGM','Caesars','Pinnacle','TheScore'])for(const sport of ['MLB','NHL','NFL']) {
+  test(`${book} ${sport} shared demand distinguishes initial, missing, complete and explicit refresh`,()=>{
+    const ctx=targetingContext(),scope={book,sport,event:'Away @ Home'};
+    const snapshot={books:[{bookmaker:book,sports:[{sport,events:[{eventName:scope.event,missingExpectedMarkets:[{marketType:'spread'}],missingSharpMarkets:[{marketType:'total'}]}]}]}]};
+    assert.equal(ctx.resolveCaptureDemand(null,scope).mode,'initial');
+    assert.deepEqual(plain(ctx.resolveCaptureDemand(snapshot,scope).targets),['spread','total']);
+    assert.equal(ctx.resolveCaptureDemand(snapshot,{...scope,event:'Different @ Event'}).mode,'initial');
+    const event=snapshot.books[0].sports[0].events[0];event.missingExpectedMarkets=[];event.missingSharpMarkets=[];
+    assert.equal(ctx.resolveCaptureDemand(snapshot,scope).mode,'complete');
+    assert.equal(ctx.resolveCaptureDemand(snapshot,scope,{refresh:true}).mode,'refresh');
+    event.coverageMarkedComplete=true;event.missingSharpMarkets=[{marketType:'total'}];
+    assert.equal(ctx.resolveCaptureDemand(snapshot,scope).mode,'complete');
+  });
+}
+
+test('FanDuel second run resumes only incomplete tabs/drawers despite changed app target demand',async()=>{
+  let saved=null,run=1,active='Popular',snapshot=null;
+  const calls=[];const href='https://sportsbook.fanduel.com/football/atl-no/123?tab=popular';
+  const base={book:'FanDuel',recognized:true,pregame:true,event:nflEvent,origin:new URL(href).origin,path:new URL(href).pathname,href};
+  const tabs=['Popular','Passing Props','Receiving Props','Rushing Props','TD Scorer Props'];
+  const ctx=targetingContext({sleepBackground:async()=>{},safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>snapshot,
+    chrome:{tabs:{get:async()=>({url:href}),update:async(id,{url})=>{active=tabs.find(t=>url.includes(t.toLowerCase().replaceAll(' ','-')))||'Popular';}},scripting:{executeScript:async({func,args})=>{
+      if(func.name==='nflNavCheckpoint'){if(args[0]==='write')saved=plain(args[2]);return [{result:args[0]==='read'?saved:true}];}
+      const r=args[1];
+      if(r.mode==='probe')return [{result:{...base,tabs}}];
+      if(['plan-tab','tab-state'].includes(r.mode))return [{result:{...base,ready:active===r.tab,navigation:{found:true,active:active===r.tab,href:href.replace('popular',r.tab.toLowerCase().replaceAll(' ','-'))}}}];
+      calls.push({run,tab:r.tab,processed:plain(r.processedLabels),targets:plain(r.targetTypes)});
+      if(run===1&&r.tab==='Receiving Props'&&r.processedLabels.length)return [{result:{...base,stopped:'Context changed while loading markets',records:[]}}];
+      const title=r.tab==='Receiving Props'?(run===1?'priced first drawer':'missing second drawer'):r.tab;
+      return [{result:{...base,records:[{book:'FanDuel',event:nflEvent,period:'full_game',title,quotes:[quote('Over'),quote('Under')]}],processedLabels:[title],remaining:run===1&&r.tab==='Receiving Props',diagnostics:{}}}];
+    }}}});
+  await ctx.tryNflNavigationCapture(1,'FanDuel');
+  assert.equal(saved.incomplete,true);assert.deepEqual(saved.completed,['Popular','Passing Props']);
+  run=2;snapshot={books:[{bookmaker:'FanDuel',sports:[{sport:'NFL',events:[{eventName:nflEvent,missingExpectedMarkets:[{marketType:'player_rushing_yards'}],missingSharpMarkets:[]}]}]}]};
+  const result=await ctx.tryNflNavigationCapture(1,'FanDuel');
+  assert.deepEqual(calls.filter(c=>c.run===2).map(c=>c.tab),['Rushing Props','Receiving Props','TD Scorer Props']);
+  assert.deepEqual(calls.find(c=>c.run===2&&c.tab==='Receiving Props').processed,['priced first drawer']);
+  assert.match(result.text,/"complete":true/);
+  run=3;snapshot.books[0].sports[0].events[0].missingExpectedMarkets=[];
+  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.equal(calls.filter(c=>c.run===3).length,0);
+  run=4;vm.runInContext("captureDemandRuns.set(1,{mode:'refresh'})",ctx);
+  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===4).map(c=>c.tab),tabs);
+});
+
+test('Target probe preserves basketball workflows and refuses an ambiguous event on retry',async()=>{
+  const ctx=targetingContext({location:{pathname:'/basketball/nba/game',origin:'https://sports.example'},document:{title:'NBA',querySelector:()=>null,body:{innerText:''}}});
+  assert.equal(ctx.captureDemandProbe('DraftKings',null).outOfScope,true);
+  ctx.location.pathname='/event/game';ctx.document.title='NFL';ctx.document.body.innerText='A @ B\nC @ D';
+  ctx.sessionStorage={getItem:()=>null,setItem(){}};
+  const snapshot={books:[{bookmaker:'DraftKings',sports:[{sport:'NFL',events:[{eventName:'A @ B'},{eventName:'C @ D'}]}]}]};
+  assert.equal(ctx.captureDemandProbe('DraftKings',snapshot).ambiguous,true);
+});
+
+test('Targeted native import filters event and markets; merge updates prices without losing unvisited rows',async()=>{
+  const {parseOddsText:parse}=await loadModule(routerFile);
+  const {mergeCaptureImports:merge}=await loadModule('app/ev-parlay-lab/utils/mergeCaptureImports.js');
+  const raw=read('tests/fixtures/pinnacle-nfl-event-live-20261018.txt');
+  const packet={book:'Pinnacle',sport:'NFL',event:'Dallas Cowboys @ Green Bay Packers',targets:['player_receiving_yards'],text:raw};
+  const rows=plain(parse('CAPTURE_DEMAND_V1: '+JSON.stringify(packet),{sportsbook:'Pinnacle'}));
+  assert.equal(rows.length,28);assert.ok(rows.every(r=>r.marketType==='player_receiving_yards'));
+  assert.equal(parse('CAPTURE_DEMAND_V1: '+JSON.stringify({...packet,event:'Other @ Event'}),{sportsbook:'Pinnacle'}).length,0);
+  const prior=plain(parse(raw,{sportsbook:'Pinnacle'}));
+  const update={...rows[0],oddsAmerican:120,oddsDecimal:2.2};
+  const result=plain(merge(prior,[update,update]));
+  assert.equal(result.length,136);assert.equal(result.find(r=>r.selectionNormalized===update.selectionNormalized&&r.marketType===update.marketType).oddsDecimal,2.2);
+  assert.equal(result.filter(r=>r.marketType==='moneyline_2way').length,2);
+  assert.equal(merge(result,[update]).length,136);
+});
+
+test('Observed BetMGM ds toggle opens its aria-controls price panel once, not nested wrappers or outcomes',async()=>{
+  const {JSDOM}=require('jsdom');
+  // dsaccordiontoggle / slot title / aria-controls are from the live capture;
+  // the price panel is synthetic because the supplied capture omitted its DOM.
+  const dom=new JSDOM(`<main><pre>USA | NFL\nToday\nDallas Cowboys\nGreen Bay Packers\n</pre><nav>${['Players','Spreads','Totals','All'].map(x=>`<button role="tab" class="ds-pill" aria-selected="${x==='Players'}">${x}</button>`).join('')}</nav><div class="ds-accordion-header-wrapper"><ds-accordion-header class="ds-accordion-header"><button dsaccordiontoggle aria-expanded="false" aria-controls="ds-accordion-content-1"><div class="ds-accordion-header-start"><span slot="title">Passing yards</span></div></button></ds-accordion-header></div><div id="ds-accordion-content-1" hidden>Dak Prescott\nOver 274.5\n-110\nUnder 274.5\n-110<button data-type="outcome">Place selection</button></div></main>`,{url:'https://sports.betmgm.com/en/sports/events/dallas-greenbay-123'});
+  const w=dom.window;let toggles=0,outcomes=0;
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});w.HTMLElement.prototype.scrollIntoView=()=>{};
+  const button=w.document.querySelector('[dsaccordiontoggle]');
+  button.onclick=()=>{toggles++;button.setAttribute('aria-expanded','true');w.document.getElementById('ds-accordion-content-1').hidden=false;};
+  w.document.querySelector('[data-type]').onclick=()=>outcomes++;
+  const ctx=targetingContext({window:w,document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{queueMicrotask(fn);return 1;},getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})});
+  const probe=await ctx.nflDetailPageStep('BetMGM',{mode:'probe'});
+  assert.deepEqual(plain(probe.tabs),['Players','Spreads','Totals','All']);
+  const result=await ctx.nflDetailPageStep('BetMGM',{captureOnly:true,targetTypes:['player_passing_yards']});
+  assert.equal(toggles,1);assert.equal(outcomes,0);assert.equal(result.records.length,1);assert.equal(result.records[0].quotes.length,2);
+  assert.deepEqual(plain(ctx.nflTabsForTypes('BetMGM',['player_passing_yards'])),['Players']);
+  assert.deepEqual(plain(ctx.nflTabsForTypes('BetMGM',['spread','total'])),['Spreads','Totals']);
+  dom.window.close();
+});
+
 test('Recovered browser core and app core stay identical', () => {
   const extension = read('ev-parlay-extension/nflBookCapture.js');
   const core = extension.slice(extension.indexOf('function createNflCaptureCore()'), extension.indexOf('\n)();'));
@@ -87,7 +182,7 @@ test('NFL listing adapter preserves actual supplied DK/FD slates without clickin
   }
 });
 
-test('NFL navigation only permits same-event allowlisted tab destinations and bounds checkpoint age', () => {
+test('NFL navigation only permits same-event allowlisted tab destinations and validates checkpoints', () => {
   const ctx = extensionContext();
   const href = 'https://sportsbook.draftkings.com/event/atl-no/123?category=odds&subcategory=popular';
   const base = {book:'DraftKings',event:nflEvent,href,origin:new URL(href).origin,path:new URL(href).pathname};
@@ -413,6 +508,13 @@ test('Live theScore capture matches 449 rows / 15 markets and later prices repla
   assert.equal(rows.filter(r=>r.marketType==='player_touchdowns').length,59);
 });
 
+test('Latest theScore positive retest retains 448 unique rows and all 15 captured markets',async()=>{
+  const {parseOddsText:parse}=await loadModule(routerFile);
+  const rows=plain(parse(read('tests/fixtures/thescore-nfl-retest-20261018.txt'),{sportsbook:'TheScore'}));
+  assert.equal(rows.length,448);assert.equal(new Set(rows.map(r=>r.marketType)).size,15);
+  assert.equal(new Set(rows.map(r=>[r.marketType,r.selectionNormalized,r.lineValue].join('|'))).size,448);
+});
+
 test('Live BetMGM diagnostics-only failure must not invent rows', async () => {
   const {parseOddsText:parse}=await loadModule(routerFile);
   const raw=read('tests/fixtures/betmgm-nfl-event-live-20261018.txt');
@@ -420,32 +522,19 @@ test('Live BetMGM diagnostics-only failure must not invent rows', async () => {
   assert.match(raw,/"unpricedDrawers":\["Game lines","Anytime TD scorer","Passing TDs"\]/);
 });
 
-test('BetMGM coordinator reinjects bounded batches and stops on a context change', async () => {
-  const calls=[];
-  const ctx=extensionContext({safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>null,
-    safeExecuteScript:async({args})=>{
-      const request=args[1];
-      if(request.mode==='probe')return [{result:{recognized:true,pregame:true,event:nflEvent,path:'/event/1',origin:'https://sports.betmgm.com'}}];
-      calls.push(plain(request));
-      if(calls.length===1)return [{result:{recognized:true,records:[{book:'BetMGM',event:nflEvent,period:'full_game',title:'Receiving Yards',quotes:[quote('Over'),quote('Under')]}],processedLabels:['Receiving Yards'],remaining:true,diagnostics:{}}}];
-      return [{result:{recognized:true,records:[],stopped:'Context changed while loading markets',diagnostics:{contextFailure:{reason:'Selected event changed'}}}}];
-    }});
-  const result=await ctx.tryNflCaptureV2(1,'BetMGM');
-  assert.equal(calls.length,2);assert.deepEqual(calls[1].processedLabels,['Receiving Yards']);
-  assert.match(result.text,/NFL_MARKET_V2:/);assert.match(result.text,/Selected event changed/);
-});
 
 test('FanDuel and BetMGM context stops report the failing header instead of the initial header', async () => {
   const {JSDOM}=require('jsdom');
   for(const book of ['FanDuel','BetMGM']) {
     const dom=new JSDOM('<main><a href="?tab=passing-props" aria-selected="true">Passing Props</a><details><summary>Dak Prescott - Passing Yds</summary></details></main>',{url:'https://sports.example/event/1?tab=passing-props'});
     const {window}=dom;
+    if(book==='BetMGM')window.document.querySelector('details').outerHTML='<button dsaccordiontoggle aria-expanded="false" aria-controls="panel"><span slot="title">Passing yards</span></button><div id="panel"></div>';
     const hero=book==='FanDuel'?'Football / NFL Odds / Dallas Cowboys @ Green Bay Packers\nPopular\nSun, Oct 18\nSame Game Parlay™':'USA | NFL\nToday\nDallas Cowboys\nGreen Bay Packers';
     let raw=hero;
     Object.defineProperty(window.HTMLElement.prototype,'innerText',{get(){return /^(MAIN|BODY)$/.test(this.tagName)?raw:this.textContent;}});
     window.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});
     window.HTMLElement.prototype.scrollIntoView=()=>{};
-    window.document.querySelector('summary').onclick=()=>{raw='Header temporarily unavailable';};
+    window.document.querySelector('summary,button[dsaccordiontoggle]').onclick=()=>{raw='Header temporarily unavailable';};
     const ctx=extensionContext({document:window.document,location:window.location,Node:window.Node,
       setTimeout:fn=>{fn();return 1;},getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})});
     const result=await ctx.nflDetailPageStep(book,{captureOnly:true,tab:book==='FanDuel'?'Passing Props':''});
@@ -498,5 +587,5 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.1');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.2');
 });

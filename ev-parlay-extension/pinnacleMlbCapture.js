@@ -1,5 +1,5 @@
 // User-triggered, rendered DOM only. Selectors are grounded in the Oct 14 sample.
-async function capturePinnacleMlbPage() {
+async function capturePinnacleMlbPage(demand = {}) {
   const initialUrl = new URL(location.href);
   if (!/(^|\.)pinnacle\.com$/i.test(initialUrl.hostname) || !/^\/en\/baseball\/mlb\/[^/]+-vs-[^/]+\/\d+\/?$/.test(initialUrl.pathname)) return null;
   const diagnostics = [];
@@ -14,12 +14,18 @@ async function capturePinnacleMlbPage() {
     return true;
   };
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
+  const progressKey='EV_CAPTURE_PENDING::'+initialUrl.origin+initialUrl.pathname;
+  const marketType=title=>{
+    const types={bases:'player_total_bases',strikeouts:'pitcher_strikeouts','home runs':'player_home_runs','hits allowed':'pitcher_hits_allowed','earned runs':'pitcher_earned_runs_allowed','pitching outs':'pitcher_outs_recorded',hits:'player_hits','runs batted in':'player_rbis',rbis:'player_rbis',runs:'player_runs','walks allowed':'pitcher_walks_allowed'};
+    return types[title.split(/ Total /i).at(-1).toLowerCase()]||'';
+  };
   const titleOf = drawer => {
     const title = drawer.querySelector(':scope > .collapse-title')?.cloneNode(true);
     title?.querySelectorAll('button, .collapse-icon').forEach(el => el.remove());
     return clean(title?.textContent);
   };
-  const supported = title => /^.+? Total (?:Bases|Strikeouts|Home Runs|Hits Allowed|Earned Runs|Pitching Outs|Hits|Runs Batted In|RBIs|Runs|Walks Allowed)$/i.test(title) &&
+  const wanted = title => !demand.targets?.length || demand.labels?.some(label=>title.toLowerCase().endsWith(' total '+label.toLowerCase()));
+  const supported = title => wanted(title) && /^.+? Total (?:Bases|Strikeouts|Home Runs|Hits Allowed|Earned Runs|Pitching Outs|Hits|Runs Batted In|RBIs|Runs|Walks Allowed)$/i.test(title) &&
     !/\b(?:inning|half|period|live|first|last)\b/i.test(title);
   const drawers = () => [...document.querySelectorAll('[data-test-id^="Event.Row "][data-collapsed]')];
   const deadline = Date.now() + 25000;
@@ -31,7 +37,21 @@ async function capturePinnacleMlbPage() {
     }
     return false;
   };
-  const finish = () => ({source: 'Pinnacle', text: 'PINNACLE_MLB_DOM_V1: ' + JSON.stringify(packet)});
+  const finish = () => {
+    if(sameEvent()) {
+      const paired=panel=>panel.quotes.length>=2&&panel.quotes.every(q=>{
+        const m=q.label.match(/^(Over|Under) (.+)$/i);if(!m)return false;
+        const peers=panel.quotes.filter(x=>x.label.toLowerCase()===(m[1].toLowerCase()==='over'?'under ':'over ')+m[2].toLowerCase());
+        return peers.length===1&&panel.quotes.filter(x=>x.label===q.label).length===1;
+      });
+      const pending=drawers().filter(d=>supported(titleOf(d))&&!packet.panels.some(p=>p.title===titleOf(d)&&paired(p))).map(d=>marketType(titleOf(d))).filter(Boolean);
+      if(demand.targets?.length)try{pending.push(...JSON.parse(sessionStorage.getItem(progressKey)||'[]').filter(t=>!demand.targets.includes(t)));}catch{}
+      // Persist unfinished market demand; absence of any rendered drawers is not completion.
+      if(pending.length||packet.panels.length)try{sessionStorage.setItem(progressKey,JSON.stringify([...new Set(pending)]));}catch{}
+    }
+    return {source: 'Pinnacle', text: 'PINNACLE_MLB_DOM_V1: ' + JSON.stringify(packet)};
+  };
+  if(demand.targets?.length&&demand.targets.every(t=>['spread','total','moneyline_2way'].includes(t)))return finish();
   const tab = document.querySelector('button#player-props');
   if (!tab || tab.disabled || clean(tab.textContent) !== 'Player Props') {
     diagnostics.push('Player Props control unavailable; only initial main lines captured.');
@@ -90,7 +110,7 @@ extractSinglePayloadFromTab = async function(tabId) {
   if (pinnacleMlbRuns.has(tabId)) return { source: 'Pinnacle', text: 'PINNACLE_MLB_DOM_V1: ' + JSON.stringify({version:1, url:url.href, diagnostics:['A capture is already running.'], panels:[]}) };
   pinnacleMlbRuns.add(tabId);
   try {
-    const results = await safeExecuteScript({tabId, func:capturePinnacleMlbPage});
+    const results = await safeExecuteScript({tabId, func:capturePinnacleMlbPage,args:[typeof captureDemandFor==='function'&&captureDemandFor(tabId)?.mode==='missing'?{targets:captureDemandFor(tabId).targets,labels:captureTargetLabels('MLB',captureDemandFor(tabId).targets)}:{}]});
     return results?.[0]?.result || {source:'Pinnacle', text:'PINNACLE_MLB_DOM_V1: ' + JSON.stringify({version:1,url:url.href,panels:[],diagnostics:['Capture injection failed.']})};
   } finally { pinnacleMlbRuns.delete(tabId); }
 };

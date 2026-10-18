@@ -27,5 +27,5 @@ export function parseNflCapture(text, context = {}) {
   if (/^THESCORE_STRUCTURED_EXPORT$/m.test(text) && (!books.has(requested) || requested === 'thescore')) {
     for (const row of parseNflPlayerProps(text, 'TheScore')) rows.set(row.id, row);
   }
-  return [...rows.values()];
+  return [...rows.values()].map(row=>({...row,sourceType:'extension_capture'}));
 }

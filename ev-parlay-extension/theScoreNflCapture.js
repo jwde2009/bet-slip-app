@@ -1,6 +1,6 @@
 // Self-contained: Chrome serializes this function into the current sportsbook tab.
 // It reads market prices and clicks only same-event tabs / expansion controls.
-async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expectedPath = "") {
+async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expectedPath = "", demand = {}) {
   const clean = value => String(value || "").replace(/\u2212/g, "-").replace(/[\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\s+/g, " ").trim();
   const text = el => clean(el?.innerText || el?.textContent || "");
   const list = (el, selector) => Array.from(el?.querySelectorAll(selector) || []);
@@ -77,7 +77,8 @@ async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expec
     const market = title(drawer);
     const index = occurrences.get(market) || 0;
     occurrences.set(market, index + 1);
-    if (supported.test(market)) drawerKeys.push({ market, index });
+    const normalize=v=>clean(v).toLowerCase().replace(/\s*\(o\/u\)$/, '').replace(/^player\s+/, '').replace(/^total\s+/, '').replace(/ and /g,' + ');
+    if (supported.test(market)&&(!demand.targetTypes?.length||demand.targetLabels?.some(label=>normalize(label)===normalize(market)))) drawerKeys.push({ market, index });
   }
   function findDrawer(key) {
     // Click handlers may replace the drawer element; never keep reading a stale node.
@@ -199,7 +200,7 @@ async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expec
     }
     if (!sameContext()) break;
     drawer = findDrawer(key);
-    if (!rows.size) emptyDrawers.push(key.market);
+    if (!rows.size||list(drawer,'button').some(b=>visible(b)&&noSelection(b)&&/^(Show more|See more|Show all)$/i.test(text(b)))) emptyDrawers.push(key.market);
     if (event && rows.size) { out.push(`Market: ${key.market}`, ...rows); rowCount += rows.size; }
     drawerSamples.push({ title: key.market, open: !!drawer?.open, rows: rows.size, text: String(drawer?.innerText || "").slice(0, 3000) });
   }
@@ -225,7 +226,8 @@ async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expec
   // Preserve loaded samples before an exclusive accordion closes them again.
   const samples = [...drawerSamples, ...drawers.filter(drawer => !supported.test(title(drawer))).map(drawer => ({ title: title(drawer), text: String(drawer.innerText || "").slice(0, 3000) }))];
   for (const sample of samples.slice(0, 32)) debug.push(`THESCORE_NFL_RAW_DRAWER: ${JSON.stringify(sample)}`);
-  const next = tabs.find(el => !seen.has(tabLabel(el)));
+  const wantedTabs=new Set((demand.targetTypes||[]).flatMap(type=>type==='player_touchdowns'?['popular','touchdowns']:type.startsWith('player_passing')?['passing','pass props','passing props','player passing']:type.startsWith('player_rushing')?['rushing','rush props','rushing props','player rushing']:['receiving','receiving props','player receiving']));
+  const next = tabs.find(el => !seen.has(tabLabel(el))&&(!demand.targetTypes?.length||wantedTabs.has(tabLabel(el))));
   let done = true;
   if (next) {
     seen.add(tabLabel(next));
@@ -233,5 +235,6 @@ async function captureTheScoreNflPropsStep(visited = [], hintedEvent = "", expec
     debug.push(`THESCORE_NFL_DEBUG: Requested tab ${tabLabel(next)}`);
     done = false;
   }
-  return result({ event, visited: [...seen], done, text: [...out, ...debug].join("\n") });
+  return result({ event, visited: [...seen], done, pendingMarkets:emptyDrawers,
+    pricedMarkets:drawerSamples.filter(s=>s.rows>0&&!emptyDrawers.includes(s.title)).map(s=>s.title),text: [...out, ...debug].join("\n") });
 }

@@ -1,0 +1,1003 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: TheScore
+Sport: NFL
+
+
+NFL_CAPTURE_RUN: {"book":"TheScore","event":"Dallas Cowboys @ Green Bay Packers","mode":"full-core-markets","targets":[]}
+
+NFL_MARKET_V2: {"book":"TheScore","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":100,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-120,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-110,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-110,"side":"Under","subject":""},{"line":null,"marketType":"moneyline_2way","odds":-120,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":100,"side":"Home","subject":"Green Bay Packers"}],"rawSample":"\n\n\nMain Lines\n \n\n\n\n \n \n\n\n\nDallas Cowboys @ Green Bay Packers\n \n \n\n\n\n \nSpread\n \nTotal\n \nMoney\n\n \n\nDAL Cowboys\n \n\n \n-1.5\n \n \nEven\n\n \n\n \n\n \nO 53.5\n \n \n-110\n\n \n\n \n\n \n \n-120\n\n \n\n\n \n\nGB Packers\n \n\n \n+1.5\n \n \n-120\n\n \n\n \n\n \nU 53.5\n \n \n-110\n\n \n\n \n\n \n \nEven\n\n \n\n\n\n \n\n\n\n\n","title":"Main Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"availableHeadings":["Main Lines","Total Touchdowns","Total Passing Yards","Total Passing Touchdowns","Total Rushing Yards","Total Receiving Yards","Total Receptions","Total Rushing + Receiving Yards","Total Passing Yards (O/U)","Total Passing Touchdowns (O/U)","Total Receiving Yards (O/U)","Total Rushing Yards (O/U)","Total Receptions (O/U)","Total Rushing + Receiving Yards (O/U)"],"book":"TheScore","clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":[],"quotedRows":6,"tab":"","unavailableTabs":[],"unpricedDrawers":[],"version":"20261012_1"}
+
+NFL_MARKET_V2: {"book":"TheScore","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":100,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-120,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-110,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-110,"side":"Under","subject":""},{"line":null,"marketType":"moneyline_2way","odds":-120,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":100,"side":"Home","subject":"Green Bay Packers"}],"rawSample":"\n\n\nMain Lines\n \n\n\n\n \n \n\n\n\nDallas Cowboys @ Green Bay Packers\n \n \n\n\n\n \nSpread\n \nTotal\n \nMoney\n\n \n\nDAL Cowboys\n \n\n \n-1.5\n \n \nEven\n\n \n\n \n\n \nO 53.5\n \n \n-110\n\n \n\n \n\n \n \n-120\n\n \n\n\n \n\nGB Packers\n \n\n \n+1.5\n \n \n-120\n\n \n\n \n\n \nU 53.5\n \n \n-110\n\n \n\n \n\n \n \nEven\n\n \n\n\n\n \n\n\n\n\n","title":"Main Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"availableHeadings":["Main Lines","Total Touchdowns","Total Passing Yards","Total Passing Touchdowns","Total Rushing Yards","Total Receiving Yards","Total Receptions","Total Rushing + Receiving Yards","Total Passing Yards (O/U)","Total Passing Touchdowns (O/U)","Total Receiving Yards (O/U)","Total Rushing Yards (O/U)","Total Receptions (O/U)","Total Rushing + Receiving Yards (O/U)"],"book":"TheScore","clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":[],"quotedRows":6,"tab":"Popular","unavailableTabs":[],"unpricedDrawers":[],"version":"20261012_1"}
+
+THESCORE_STRUCTURED_EXPORT
+THESCORE_NFL_PROPS_VERSION: 20261011_1
+Sport: NFL
+Event: Dallas Cowboys @ Green Bay Packers
+Period: full_game
+Market: Total Touchdowns
+Jav. Williams | 1+ | -200
+Jav. Williams | 2+ | +225
+Jav. Williams | 3+ | +1000
+M. Lloyd | 1+ | -130
+M. Lloyd | 2+ | +400
+M. Lloyd | 3+ | +1800
+C. Lamb | 1+ | +120
+C. Lamb | 2+ | +800
+C. Lamb | 3+ | +3500
+C. Watson | 1+ | +130
+C. Watson | 2+ | +900
+C. Watson | 3+ | +4000
+G. Pickens | 1+ | +145
+G. Pickens | 2+ | +1100
+G. Pickens | 3+ | +5000
+M. Golden | 1+ | +160
+M. Golden | 2+ | +1200
+M. Golden | 3+ | +5000
+T. Kraft | 1+ | +185
+T. Kraft | 2+ | +1400
+T. Kraft | 3+ | +6000
+J. Ferguson | 1+ | +260
+J. Ferguson | 2+ | +2200
+J. Ferguson | 3+ | +5000
+R. Flournoy | 1+ | +300
+R. Flournoy | 2+ | +2500
+R. Flournoy | 3+ | +6000
+B. Melton | 1+ | +450
+B. Melton | 2+ | +4000
+B. Melton | 3+ | +7500
+K. Johnson | 1+ | +550
+K. Johnson | 2+ | +5000
+K. Johnson | 3+ | +7500
+D. Prescott | 1+ | +600
+D. Prescott | 2+ | +5000
+D. Prescott | 3+ | +10000
+K. Turpin | 1+ | +700
+K. Turpin | 2+ | +5000
+K. Turpin | 3+ | +10000
+Jon. Smith | 1+ | +800
+Jon. Smith | 2+ | +6000
+Jon. Smith | 3+ | +10000
+J. Love | 1+ | +850
+J. Love | 2+ | +6000
+J. Love | 3+ | +10000
+T. Goodson | 1+ | +900
+T. Goodson | 2+ | +6000
+T. Goodson | 3+ | +10000
+B. Spann-Ford | 1+ | +900
+B. Spann-Ford | 2+ | +6000
+H. Luepke | 1+ | +1100
+H. Luepke | 2+ | +6000
+J. Mingo | 1+ | +1100
+J. Mingo | 2+ | +6000
+L. Schoonmaker | 1+ | +1100
+L. Schoonmaker | 2+ | +6000
+J. Whyle | 1+ | +1600
+J. Whyle | 2+ | +7500
+M. Redman | 1+ | +1800
+M. Redman | 2+ | +7500
+Market: Total Passing Yards
+D. Prescott | 150+ | -15000
+D. Prescott | 175+ | -3000
+D. Prescott | 200+ | -1100
+D. Prescott | 225+ | -450
+D. Prescott | 250+ | -225
+D. Prescott | 275+ | -120
+D. Prescott | 300+ | +155
+D. Prescott | 325+ | +275
+D. Prescott | 350+ | +450
+D. Prescott | 375+ | +800
+J. Love | 150+ | -8000
+J. Love | 175+ | -2500
+J. Love | 200+ | -1000
+J. Love | 225+ | -450
+J. Love | 250+ | -225
+J. Love | 275+ | -125
+J. Love | 300+ | +145
+J. Love | 325+ | +225
+J. Love | 350+ | +400
+Market: Total Passing Touchdowns
+J. Love | 1+ | -1500
+J. Love | 2+ | -200
+J. Love | 3+ | +185
+J. Love | 4+ | +700
+J. Love | 5+ | +1800
+D. Prescott | 1+ | -1400
+D. Prescott | 2+ | -185
+D. Prescott | 3+ | +210
+D. Prescott | 4+ | +750
+D. Prescott | 5+ | +2000
+Market: Total Rushing Yards
+Jav. Williams | 25+ | -2500
+Jav. Williams | 30+ | -1600
+Jav. Williams | 35+ | -1000
+Jav. Williams | 40+ | -650
+Jav. Williams | 45+ | -450
+Jav. Williams | 50+ | -300
+Jav. Williams | 60+ | -170
+Jav. Williams | 70+ | -105
+Jav. Williams | 75+ | +125
+Jav. Williams | 80+ | +155
+Jav. Williams | 90+ | +225
+Jav. Williams | 100+ | +350
+Jav. Williams | 125+ | +900
+M. Lloyd | 20+ | -800
+M. Lloyd | 25+ | -450
+M. Lloyd | 30+ | -275
+M. Lloyd | 35+ | -190
+M. Lloyd | 40+ | -135
+M. Lloyd | 45+ | +100
+M. Lloyd | 50+ | +135
+M. Lloyd | 60+ | +210
+M. Lloyd | 70+ | +350
+M. Lloyd | 75+ | +425
+M. Lloyd | 80+ | +550
+M. Lloyd | 90+ | +800
+M. Lloyd | 100+ | +1200
+T. Goodson | 20+ | +210
+T. Goodson | 25+ | +325
+T. Goodson | 30+ | +450
+T. Goodson | 35+ | +650
+T. Goodson | 40+ | +900
+T. Goodson | 45+ | +1200
+T. Goodson | 50+ | +1600
+T. Goodson | 60+ | +2500
+D. Prescott | 20+ | +300
+D. Prescott | 25+ | +500
+D. Prescott | 30+ | +750
+D. Prescott | 35+ | +1100
+J. Love | 20+ | +375
+J. Love | 25+ | +600
+J. Love | 30+ | +900
+J. Love | 35+ | +1400
+J. Love | 40+ | +2000
+J. Love | 45+ | +3000
+Market: Total Receiving Yards
+C. Lamb | 20+ | -5000
+C. Lamb | 30+ | -1800
+C. Lamb | 40+ | -1000
+C. Lamb | 50+ | -525
+C. Lamb | 60+ | -325
+C. Lamb | 70+ | -200
+C. Lamb | 80+ | -135
+C. Lamb | 90+ | +105
+C. Lamb | 100+ | +155
+C. Lamb | 110+ | +210
+C. Lamb | 120+ | +300
+C. Lamb | 130+ | +425
+C. Lamb | 140+ | +550
+C. Watson | 20+ | -2500
+C. Watson | 30+ | -1200
+C. Watson | 40+ | -550
+C. Watson | 50+ | -350
+C. Watson | 60+ | -220
+C. Watson | 70+ | -140
+C. Watson | 80+ | +100
+C. Watson | 90+ | +145
+C. Watson | 100+ | +200
+C. Watson | 110+ | +275
+C. Watson | 120+ | +400
+C. Watson | 130+ | +550
+C. Watson | 140+ | +750
+G. Pickens | 20+ | -2000
+G. Pickens | 30+ | -1000
+G. Pickens | 40+ | -475
+G. Pickens | 50+ | -275
+G. Pickens | 60+ | -170
+G. Pickens | 70+ | -110
+G. Pickens | 80+ | +135
+G. Pickens | 90+ | +200
+G. Pickens | 100+ | +275
+G. Pickens | 110+ | +400
+G. Pickens | 120+ | +550
+M. Golden | 10+ | -5000
+M. Golden | 20+ | -1600
+M. Golden | 30+ | -800
+M. Golden | 40+ | -400
+M. Golden | 50+ | -240
+M. Golden | 60+ | -155
+M. Golden | 70+ | +100
+M. Golden | 80+ | +145
+M. Golden | 90+ | +210
+M. Golden | 100+ | +300
+M. Golden | 110+ | +425
+M. Golden | 120+ | +600
+M. Golden | 130+ | +850
+T. Kraft | 10+ | -2250
+T. Kraft | 20+ | -800
+T. Kraft | 30+ | -375
+T. Kraft | 40+ | -190
+T. Kraft | 50+ | -120
+T. Kraft | 60+ | +135
+T. Kraft | 70+ | +200
+T. Kraft | 80+ | +300
+T. Kraft | 90+ | +450
+T. Kraft | 100+ | +650
+T. Kraft | 110+ | +900
+R. Flournoy | 10+ | -900
+R. Flournoy | 20+ | -300
+R. Flournoy | 30+ | -135
+R. Flournoy | 40+ | +135
+R. Flournoy | 50+ | +225
+R. Flournoy | 60+ | +350
+R. Flournoy | 70+ | +550
+R. Flournoy | 80+ | +900
+J. Ferguson | 10+ | -500
+J. Ferguson | 20+ | -160
+J. Ferguson | 30+ | +130
+J. Ferguson | 40+ | +260
+J. Ferguson | 50+ | +450
+J. Ferguson | 60+ | +750
+J. Ferguson | 70+ | +1200
+J. Ferguson | 80+ | +1800
+Jav. Williams | 10+ | -185
+Jav. Williams | 20+ | +175
+Jav. Williams | 30+ | +400
+Jav. Williams | 40+ | +800
+Jav. Williams | 50+ | +1200
+M. Lloyd | 10+ | -130
+M. Lloyd | 20+ | +210
+M. Lloyd | 30+ | +425
+M. Lloyd | 40+ | +850
+M. Lloyd | 50+ | +1400
+B. Melton | 10+ | -105
+B. Melton | 20+ | +175
+B. Melton | 30+ | +300
+B. Melton | 40+ | +450
+B. Melton | 50+ | +650
+B. Melton | 60+ | +900
+K. Turpin | 10+ | +125
+K. Turpin | 20+ | +275
+K. Turpin | 30+ | +550
+K. Turpin | 40+ | +1000
+K. Turpin | 50+ | +1800
+Jon. Smith | 10+ | +140
+Jon. Smith | 20+ | +375
+Jon. Smith | 30+ | +750
+Jon. Smith | 40+ | +1500
+Market: Total Receptions
+C. Lamb | 4+ | -1200
+C. Lamb | 5+ | -450
+C. Lamb | 6+ | -210
+C. Lamb | 7+ | -110
+C. Lamb | 8+ | +160
+C. Lamb | 9+ | +275
+G. Pickens | 3+ | -1200
+G. Pickens | 4+ | -400
+G. Pickens | 5+ | -170
+G. Pickens | 6+ | +120
+G. Pickens | 7+ | +225
+M. Golden | 3+ | -1100
+M. Golden | 4+ | -350
+M. Golden | 5+ | -155
+M. Golden | 6+ | +135
+M. Golden | 7+ | +260
+C. Watson | 3+ | -1000
+C. Watson | 4+ | -325
+C. Watson | 5+ | -140
+C. Watson | 6+ | +140
+C. Watson | 7+ | +275
+C. Watson | 8+ | +500
+C. Watson | 9+ | +1000
+T. Kraft | 2+ | -2250
+T. Kraft | 3+ | -525
+T. Kraft | 4+ | -200
+T. Kraft | 5+ | +110
+T. Kraft | 6+ | +225
+T. Kraft | 7+ | +450
+J. Ferguson | 2+ | -700
+J. Ferguson | 3+ | -220
+J. Ferguson | 4+ | +115
+J. Ferguson | 5+ | +250
+J. Ferguson | 6+ | +550
+R. Flournoy | 2+ | -700
+R. Flournoy | 3+ | -220
+R. Flournoy | 4+ | +115
+R. Flournoy | 5+ | +260
+R. Flournoy | 6+ | +550
+Jav. Williams | 2+ | -400
+Jav. Williams | 3+ | -135
+Jav. Williams | 4+ | +185
+Jav. Williams | 5+ | +425
+M. Lloyd | 1+ | -800
+M. Lloyd | 2+ | -155
+M. Lloyd | 3+ | +160
+M. Lloyd | 4+ | +360
+Jon. Smith | 1+ | -210
+Jon. Smith | 2+ | +210
+Jon. Smith | 3+ | +750
+K. Turpin | 1+ | -175
+K. Turpin | 2+ | +300
+K. Turpin | 3+ | +1000
+B. Melton | 1+ | -155
+B. Melton | 2+ | +225
+B. Melton | 3+ | +650
+B. Spann-Ford | 1+ | -145
+B. Spann-Ford | 2+ | +275
+B. Spann-Ford | 3+ | +850
+Market: Total Rushing + Receiving Yards
+Jav. Williams | 35+ | -3000
+Jav. Williams | 40+ | -2000
+Jav. Williams | 45+ | -1300
+Jav. Williams | 50+ | -900
+Jav. Williams | 60+ | -450
+Jav. Williams | 70+ | -240
+Jav. Williams | 75+ | -185
+Jav. Williams | 80+ | -140
+Jav. Williams | 90+ | +105
+Jav. Williams | 100+ | +160
+Jav. Williams | 125+ | +400
+Jav. Williams | 150+ | +1000
+M. Lloyd | 20+ | -2250
+M. Lloyd | 25+ | -1400
+M. Lloyd | 30+ | -900
+M. Lloyd | 35+ | -525
+M. Lloyd | 40+ | -350
+M. Lloyd | 45+ | -250
+M. Lloyd | 50+ | -185
+M. Lloyd | 60+ | -105
+M. Lloyd | 70+ | +150
+M. Lloyd | 75+ | +185
+M. Lloyd | 80+ | +225
+M. Lloyd | 90+ | +350
+M. Lloyd | 100+ | +500
+M. Lloyd | 125+ | +1300
+Market: Total Passing Yards (O/U)
+D. Prescott | OVER | 274.5 | -120
+D. Prescott | UNDER | 274.5 | -110
+J. Love | OVER | 279.5 | -110
+J. Love | UNDER | 279.5 | -120
+Market: Total Passing Touchdowns (O/U)
+J. Love | OVER | 1.5 | -200
+J. Love | UNDER | 1.5 | +150
+D. Prescott | OVER | 1.5 | -190
+D. Prescott | UNDER | 1.5 | +140
+Market: Total Receiving Yards (O/U)
+C. Watson | OVER | 74.5 | -120
+C. Watson | UNDER | 74.5 | -110
+C. Lamb | OVER | 84.5 | -115
+C. Lamb | UNDER | 84.5 | -115
+M. Golden | OVER | 64.5 | -125
+M. Golden | UNDER | 64.5 | -105
+G. Pickens | OVER | 69.5 | -110
+G. Pickens | UNDER | 69.5 | -120
+T. Kraft | OVER | 49.5 | -120
+T. Kraft | UNDER | 49.5 | -110
+J. Ferguson | OVER | 24.5 | -105
+J. Ferguson | UNDER | 24.5 | -125
+R. Flournoy | OVER | 31.5 | -120
+R. Flournoy | UNDER | 31.5 | -110
+B. Melton | OVER | 9.5 | -105
+B. Melton | UNDER | 9.5 | -125
+M. Lloyd | OVER | 10.5 | -115
+M. Lloyd | UNDER | 10.5 | -115
+Jav. Williams | OVER | 14.5 | +110
+Jav. Williams | UNDER | 14.5 | -140
+K. Turpin | OVER | 4.5 | -130
+K. Turpin | UNDER | 4.5 | +100
+Jon. Smith | OVER | 6.5 | -105
+Jon. Smith | UNDER | 6.5 | -125
+Market: Total Rushing Yards (O/U)
+Jav. Williams | OVER | 69.5 | +100
+Jav. Williams | UNDER | 69.5 | -130
+M. Lloyd | OVER | 44.5 | +100
+M. Lloyd | UNDER | 44.5 | -130
+T. Goodson | OVER | 9.5 | -130
+T. Goodson | UNDER | 9.5 | +100
+J. Love | OVER | 6.5 | +100
+J. Love | UNDER | 6.5 | -130
+D. Prescott | OVER | 10.5 | +100
+D. Prescott | UNDER | 10.5 | -130
+Market: Total Receptions (O/U)
+C. Lamb | OVER | 6.5 | -110
+C. Lamb | UNDER | 6.5 | -120
+C. Watson | OVER | 4.5 | -140
+C. Watson | UNDER | 4.5 | +110
+T. Kraft | OVER | 4.5 | +115
+T. Kraft | UNDER | 4.5 | -150
+G. Pickens | OVER | 5.5 | +120
+G. Pickens | UNDER | 5.5 | -155
+M. Golden | OVER | 4.5 | -155
+M. Golden | UNDER | 4.5 | +120
+J. Ferguson | OVER | 3.5 | +115
+J. Ferguson | UNDER | 3.5 | -150
+R. Flournoy | OVER | 3.5 | +115
+R. Flournoy | UNDER | 3.5 | -150
+Jav. Williams | OVER | 2.5 | -135
+Jav. Williams | UNDER | 2.5 | +105
+M. Lloyd | OVER | 1.5 | -155
+M. Lloyd | UNDER | 1.5 | +120
+K. Turpin | OVER | 0.5 | -180
+K. Turpin | UNDER | 0.5 | +135
+B. Melton | OVER | 0.5 | -155
+B. Melton | UNDER | 0.5 | +120
+Jon. Smith | OVER | 0.5 | -200
+Jon. Smith | UNDER | 0.5 | +150
+B. Spann-Ford | OVER | 0.5 | -150
+B. Spann-Ford | UNDER | 0.5 | +115
+Market: Total Rushing + Receiving Yards (O/U)
+Jav. Williams | OVER | 84.5 | -115
+Jav. Williams | UNDER | 84.5 | -115
+M. Lloyd | OVER | 59.5 | -105
+M. Lloyd | UNDER | 59.5 | -125
+THESCORE_NFL_DEBUG: {"event":"Dallas Cowboys @ Green Bay Packers","hash":"popular","tabs":["popular","passing","receiving","rushing"],"drawers":["Main Lines","Alternate Game Spread","Alternate Total Points","Total Touchdowns","First Touchdown Scorer","1st Half Moneyline","1st Half Spread","1st Half Total Points","Team Total Points","Total Passing Yards","Total Passing Touchdowns","Total Rushing Yards","Total Receiving Yards","Total Receptions","Total Rushing + Receiving Yards","Total Passing Yards (O/U)","Total Passing Touchdowns (O/U)","Total Receiving Yards (O/U)","Total Rushing Yards (O/U)","Total Receptions (O/U)","Total Rushing + Receiving Yards (O/U)"],"rows":392,"drawerClicks":13,"expanded":0,"emptyDrawers":[]}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Touchdowns","open":true,"rows":60,"text":"Total Touchdowns\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\nJav. Williams\t\n-200\n-200\n\t\n+225\n+225\n\t\n+1000\n+1000\n\nM. Lloyd\t\n-130\n-130\n\t\n+400\n+400\n\t\n+1800\n+1800\n\nC. Lamb\t\n+120\n+120\n\t\n+800\n+800\n\t\n+3500\n+3500\n\nC. Watson\t\n+130\n+130\n\t\n+900\n+900\n\t\n+4000\n+4000\n\nG. Pickens\t\n+145\n+145\n\t\n+1100\n+1100\n\t\n+5000\n+5000\n\nM. Golden\t\n+160\n+160\n\t\n+1200\n+1200\n\t\n+5000\n+5000\n\nT. Kraft\t\n+185\n+185\n\t\n+1400\n+1400\n\t\n+6000\n+6000\n\nJ. Ferguson\t\n+260\n+260\n\t\n+2200\n+2200\n\t\n+5000\n+5000\n\nR. Flournoy\t\n+300\n+300\n\t\n+2500\n+2500\n\t\n+6000\n+6000\n\nB. Melton\t\n+450\n+450\n\t\n+4000\n+4000\n\t\n+7500\n+7500\n\nK. Johnson\t\n+550\n+550\n\t\n+5000\n+5000\n\t\n+7500\n+7500\n\nD. Prescott\t\n+600\n+600\n\t\n+5000\n+5000\n\t\n+10000\n+10000\n\nK. Turpin\t\n+700\n+700\n\t\n+5000\n+5000\n\t\n+10000\n+10000\n\nJon. Smith\t\n+800\n+800\n\t\n+6000\n+6000\n\t\n+10000\n+10000\n\nJ. Love\t\n+850\n+850\n\t\n+6000\n+6000\n\t\n+10000\n+10000\n\nT. Goodson\t\n+900\n+900\n\t\n+6000\n+6000\n\t\n+10000\n+10000\n\nB. Spann-Ford\t\n+900\n+900\n\t\n+6000\n+6000\n\t\n--\n\nH. Luepke\t\n+1100\n+1100\n\t\n+6000\n+6000\n\t\n--\n--\n\nJ. Mingo\t\n+1100\n+1100\n\t\n+6000\n+6000\n\t\n--\n\nL. Schoonmaker\t\n+1100\n+1100\n\t\n+6000\n+6000\n\t\n--\n\nJ. Whyle\t\n+1600\n+1600\n\t\n+7500\n+7500\n\t\n--\n\nM. Redman\t\n+1800\n+1800\n\t\n+7500\n+7500\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Yards","open":true,"rows":19,"text":"Total Passing Yards\nDallas Cowboys @ Green Bay Packers\n\t150+\t175+\t200+\t225+\t250+\t275+\t300+\t325+\t350+\t375+\nD. Prescott\t\n-15000\n-15000\n\t\n-3000\n-3000\n\t\n-1100\n-1100\n\t\n-450\n-450\n\t\n-225\n-225\n\t\n-120\n-120\n\t\n+155\n+155\n\t\n+275\n+275\n\t\n+450\n+450\n\t\n+800\n+800\n\nJ. Love\t\n-8000\n-8000\n\t\n-2500\n-2500\n\t\n-1000\n-1000\n\t\n-450\n-450\n\t\n-225\n-225\n\t\n-125\n-125\n\t\n+145\n+145\n\t\n+225\n+225\n\t\n+400\n+400\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Touchdowns","open":true,"rows":10,"text":"Total Passing Touchdowns\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\t4+\t5+\nJ. Love\t\n-1500\n-1500\n\t\n-200\n-200\n\t\n+185\n+185\n\t\n+700\n+700\n\t\n+1800\n+1800\n\nD. Prescott\t\n-1400\n-1400\n\t\n-185\n-185\n\t\n+210\n+210\n\t\n+750\n+750\n\t\n+2000\n+2000"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Yards","open":true,"rows":44,"text":"Total Rushing Yards\nDallas Cowboys @ Green Bay Packers\n\t20+\t25+\t30+\t35+\t40+\t45+\t50+\t60+\t70+\t75+\t80+\t90+\t100+\t125+\nJav. Williams\t\n--\n\t\n-2500\n-2500\n\t\n-1600\n-1600\n\t\n-1000\n-1000\n\t\n-650\n-650\n\t\n-450\n-450\n\t\n-300\n-300\n\t\n-170\n-170\n\t\n-105\n-105\n\t\n+125\n+125\n\t\n+155\n+155\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+900\n+900\n\nM. Lloyd\t\n-800\n-800\n\t\n-450\n-450\n\t\n-275\n-275\n\t\n-190\n-190\n\t\n-135\n-135\n\t\nEven\nEven\n\t\n+135\n+135\n\t\n+210\n+210\n\t\n+350\n+350\n\t\n+425\n+425\n\t\n+550\n+550\n\t\n+800\n+800\n\t\n+1200\n+1200\n\t\n--\n\nT. Goodson\t\n+210\n+210\n\t\n+325\n+325\n\t\n+450\n+450\n\t\n+650\n+650\n\t\n+900\n+900\n\t\n+1200\n+1200\n\t\n+1600\n+1600\n\t\n+2500\n+2500\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nD. Prescott\t\n+300\n+300\n\t\n+500\n+500\n\t\n+750\n+750\n\t\n+1100\n+1100\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJ. Love\t\n+375\n+375\n\t\n+600\n+600\n\t\n+900\n+900\n\t\n+1400\n+1400\n\t\n+2000\n+2000\n\t\n+3000\n+3000\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receiving Yards","open":true,"rows":102,"text":"Total Receiving Yards\nDallas Cowboys @ Green Bay Packers\n\t10+\t20+\t30+\t40+\t50+\t60+\t70+\t80+\t90+\t100+\t110+\t120+\t130+\t140+\nC. Lamb\t\n--\n\t\n-5000\n-5000\n\t\n-1800\n-1800\n\t\n-1000\n-1000\n\t\n-525\n-525\n\t\n-325\n-325\n\t\n-200\n-200\n\t\n-135\n-135\n\t\n+105\n+105\n\t\n+155\n+155\n\t\n+210\n+210\n\t\n+300\n+300\n\t\n+425\n+425\n\t\n+550\n+550\n\nC. Watson\t\n--\n\t\n-2500\n-2500\n\t\n-1200\n-1200\n\t\n-550\n-550\n\t\n-350\n-350\n\t\n-220\n-220\n\t\n-140\n-140\n\t\nEven\nEven\n\t\n+145\n+145\n\t\n+200\n+200\n\t\n+275\n+275\n\t\n+400\n+400\n\t\n+550\n+550\n\t\n+750\n+750\n\nG. Pickens\t\n--\n\t\n-2000\n-2000\n\t\n-1000\n-1000\n\t\n-475\n-475\n\t\n-275\n-275\n\t\n-170\n-170\n\t\n-110\n-110\n\t\n+135\n+135\n\t\n+200\n+200\n\t\n+275\n+275\n\t\n+400\n+400\n\t\n+550\n+550\n\t\n--\n\t\n--\n\nM. Golden\t\n-5000\n-5000\n\t\n-1600\n-1600\n\t\n-800\n-800\n\t\n-400\n-400\n\t\n-240\n-240\n\t\n-155\n-155\n\t\nEven\nEven\n\t\n+145\n+145\n\t\n+210\n+210\n\t\n+300\n+300\n\t\n+425\n+425\n\t\n+600\n+600\n\t\n+850\n+850\n\t\n--\n\nT. Kraft\t\n-2250\n-2250\n\t\n-800\n-800\n\t\n-375\n-375\n\t\n-190\n-190\n\t\n-120\n-120\n\t\n+135\n+135\n\t\n+200\n+200\n\t\n+300\n+300\n\t\n+450\n+450\n\t\n+650\n+650\n\t\n+900\n+900\n\t\n--\n\t\n--\n\t\n--\n\nR. Flournoy\t\n-900\n-900\n\t\n-300\n-300\n\t\n-135\n-135\n\t\n+135\n+135\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+550\n+550\n\t\n+900\n+900\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJ. Ferguson\t\n-500\n-500\n\t\n-160\n-160\n\t\n+130\n+130\n\t\n+260\n+260\n\t\n+450\n+450\n\t\n+750\n+750\n\t\n+1200\n+1200\n\t\n+1800\n+1800\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJav. Williams\t\n-185\n-185\n\t\n+175\n+175\n\t\n+400\n+400\n\t\n+800\n+800\n\t\n+1200\n+1200\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nM. Lloyd\t\n-130\n-130\n\t\n+210\n+210\n\t\n+425\n+425\n\t\n+850\n+850\n\t\n+1400\n+1400\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Melton\t\n-105\n-105\n\t\n+175\n+175\n\t\n+300\n+300\n\t\n+450\n+450\n\t\n+650\n+650\n\t\n+900\n+900\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nK. Turpin\t\n+125\n+125\n\t\n+275\n+275\n\t\n+550\n+550\n\t\n+1000\n+1000\n\t\n+1800\n+1800\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJon. Smith\t\n+140\n+140\n\t\n+375\n+375\n\t\n+750\n+750\n\t\n+1500\n+1500\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receptions","open":true,"rows":59,"text":"Total Receptions\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\t4+\t5+\t6+\t7+\t8+\t9+\nC. Lamb\t\n--\n\t\n--\n\t\n--\n\t\n-1200\n-1200\n\t\n-450\n-450\n\t\n-210\n-210\n\t\n-110\n-110\n\t\n+160\n+160\n\t\n+275\n+275\n\nG. Pickens\t\n--\n\t\n--\n\t\n-1200\n-1200\n\t\n-400\n-400\n\t\n-170\n-170\n\t\n+120\n+120\n\t\n+225\n+225\n\t\n--\n\t\n--\n\nM. Golden\t\n--\n\t\n--\n\t\n-1100\n-1100\n\t\n-350\n-350\n\t\n-155\n-155\n\t\n+135\n+135\n\t\n+260\n+260\n\t\n--\n\t\n--\n\nC. Watson\t\n--\n\t\n--\n\t\n-1000\n-1000\n\t\n-325\n-325\n\t\n-140\n-140\n\t\n+140\n+140\n\t\n+275\n+275\n\t\n+500\n+500\n\t\n+1000\n+1000\n\nT. Kraft\t\n--\n\t\n-2250\n-2250\n\t\n-525\n-525\n\t\n-200\n-200\n\t\n+110\n+110\n\t\n+225\n+225\n\t\n+450\n+450\n\t\n--\n\t\n--\n\nJ. Ferguson\t\n--\n\t\n-700\n-700\n\t\n-220\n-220\n\t\n+115\n+115\n\t\n+250\n+250\n\t\n+550\n+550\n\t\n--\n\t\n--\n\t\n--\n\nR. Flournoy\t\n--\n\t\n-700\n-700\n\t\n-220\n-220\n\t\n+115\n+115\n\t\n+260\n+260\n\t\n+550\n+550\n\t\n--\n\t\n--\n\t\n--\n\nJav. Williams\t\n--\n\t\n-400\n-400\n\t\n-135\n-135\n\t\n+185\n+185\n\t\n+425\n+425\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nM. Lloyd\t\n-800\n-800\n\t\n-155\n-155\n\t\n+160\n+160\n\t\n+360\n+360\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJon. Smith\t\n-210\n-210\n\t\n+210\n+210\n\t\n+750\n+750\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nK. Turpin\t\n-175\n-175\n\t\n+300\n+300\n\t\n+1000\n+1000\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Melton\t\n-155\n-155\n\t\n+225\n+225\n\t\n+650\n+650\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Spann-Ford\t\n-145\n-145\n\t\n+275\n+275\n\t\n+850\n+850\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards","open":true,"rows":26,"text":"Total Rushing + Receiving Yards\nDallas Cowboys @ Green Bay Packers\n\t20+\t25+\t30+\t35+\t40+\t45+\t50+\t60+\t70+\t75+\t80+\t90+\t100+\t125+\t150+\nJav. Williams\t\n--\n\t\n--\n\t\n--\n\t\n-3000\n-3000\n\t\n-2000\n-2000\n\t\n-1300\n-1300\n\t\n-900\n-900\n\t\n-450\n-450\n\t\n-240\n-240\n\t\n-185\n-185\n\t\n-140\n-140\n\t\n+105\n+105\n\t\n+160\n+160\n\t\n+400\n+400\n\t\n+1000\n+1000\n\nM. Lloyd\t\n-2250\n-2250\n\t\n-1400\n-1400\n\t\n-900\n-900\n\t\n-525\n-525\n\t\n-350\n-350\n\t\n-250\n-250\n\t\n-185\n-185\n\t\n-105\n-105\n\t\n+150\n+150\n\t\n+185\n+185\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+500\n+500\n\t\n+1300\n+1300\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Yards (O/U)","open":true,"rows":4,"text":"Total Passing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 274.5\n-120\n-120\nU 274.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 279.5\n-110\n-110\nU 279.5\n-120\n-120"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Touchdowns (O/U)","open":true,"rows":4,"text":"Total Passing Touchdowns (O/U)\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 1.5\n-200\n-200\nU 1.5\n+150\n+150\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 1.5\n-190\n-190\nU 1.5\n+140\n+140"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receiving Yards (O/U)","open":true,"rows":24,"text":"Total Receiving Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nC. Watson\nO 74.5\n-120\n-120\nU 74.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nC. Lamb\nO 84.5\n-115\n-115\nU 84.5\n-115\n-115\nDallas Cowboys @ Green Bay Packers\nM. Golden\nO 64.5\n-125\n-125\nU 64.5\n-105\n-105\nDallas Cowboys @ Green Bay Packers\nG. Pickens\nO 69.5\n-110\n-110\nU 69.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nT. Kraft\nO 49.5\n-120\n-120\nU 49.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nJ. Ferguson\nO 24.5\n-105\n-105\nU 24.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nR. Flournoy\nO 31.5\n-120\n-120\nU 31.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nB. Melton\nO 9.5\n-105\n-105\nU 9.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 10.5\n-115\n-115\nU 10.5\n-115\n-115\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 14.5\n+110\n+110\nU 14.5\n-140\n-140\nDallas Cowboys @ Green Bay Packers\nK. Turpin\nO 4.5\n-130\n-130\nU 4.5\nEven\nEven\nDallas Cowboys @ Green Bay Packers\nJon. Smith\nO 6.5\n-105\n-105\nU 6.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Yards (O/U)","open":true,"rows":10,"text":"Total Rushing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 69.5\nEven\nEven\nU 69.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 44.5\nEven\nEven\nU 44.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nT. Goodson\nO 9.5\n-130\n-130\nU 9.5\nEven\nEven\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 6.5\nEven\nEven\nU 6.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 10.5\nEven\nEven\nU 10.5\n-130\n-130"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receptions (O/U)","open":true,"rows":26,"text":"Total Receptions (O/U)\nDallas Cowboys @ Green Bay Packers\nC. Lamb\nO 6.5\n-110\n-110\nU 6.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nC. Watson\nO 4.5\n-140\n-140\nU 4.5\n+110\n+110\nDallas Cowboys @ Green Bay Packers\nT. Kraft\nO 4.5\n+115\n+115\nU 4.5\n-150\n-150\nDallas Cowboys @ Green Bay Packers\nG. Pickens\nO 5.5\n+120\n+120\nU 5.5\n-155\n-155\nDallas Cowboys @ Green Bay Packers\nM. Golden\nO 4.5\n-155\n-155\nU 4.5\n+120\n+120\nDallas Cowboys @ Green Bay Packers\nJ. Ferguson\nO 3.5\n+115\n+115\nU 3.5\n-150\n-150\nDallas Cowboys @ Green Bay Packers\nR. Flournoy\nO 3.5\n+115\n+115\nU 3.5\n-150\n-150\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 2.5\n-135\n-135\nU 2.5\n+105\n+105\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 1.5\n-155\n-155\nU 1.5\n+120\n+120\nDallas Cowboys @ Green Bay Packers\nK. Turpin\nO 0.5\n-180\n-180\nU 0.5\n+135\n+135\nDallas Cowboys @ Green Bay Packers\nB. Melton\nO 0.5\n-155\n-155\nU 0.5\n+120\n+120\nDallas Cowboys @ Green Bay Packers\nJon. Smith\nO 0.5\n-200\n-200\nU 0.5\n+150\n+150\nDallas Cowboys @ Green Bay Packers\nB. Spann-Ford\nO 0.5\n-150\n-150\nU 0.5\n+115\n+115"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards (O/U)","open":true,"rows":4,"text":"Total Rushing + Receiving Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 84.5\n-115\n-115\nU 84.5\n-115\n-115\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 59.5\n-105\n-105\nU 59.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Main Lines","text":"Main Lines\nDallas Cowboys @ Green Bay Packers\n\tSpread\tTotal\tMoney\nDAL Cowboys\t\n-1.5\nEven\nEven\n\t\nO 53.5\n-110\n-115\n\t\n-120\n-120\n\nGB Packers\t\n+1.5\n-120\n-120\n\t\nU 53.5\n-110\n-105\n\t\nEven\nEven"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Alternate Game Spread","text":"Alternate Game Spread"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Alternate Total Points","text":"Alternate Total Points"}
+THESCORE_NFL_RAW_DRAWER: {"title":"First Touchdown Scorer","text":"First Touchdown Scorer"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Moneyline","text":"1st Half Moneyline"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Spread","text":"1st Half Spread"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Points","text":"1st Half Total Points"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Team Total Points","text":"Team Total Points"}
+THESCORE_NFL_DEBUG: Requested tab passing
+
+THESCORE_STRUCTURED_EXPORT
+THESCORE_NFL_PROPS_VERSION: 20261011_1
+Sport: NFL
+Event: Dallas Cowboys @ Green Bay Packers
+Period: full_game
+Market: Total Passing Yards
+D. Prescott | 150+ | -15000
+D. Prescott | 175+ | -3000
+D. Prescott | 200+ | -1100
+D. Prescott | 225+ | -450
+D. Prescott | 250+ | -225
+D. Prescott | 275+ | -120
+D. Prescott | 300+ | +155
+D. Prescott | 325+ | +275
+D. Prescott | 350+ | +450
+D. Prescott | 375+ | +800
+J. Love | 150+ | -8000
+J. Love | 175+ | -2500
+J. Love | 200+ | -1000
+J. Love | 225+ | -450
+J. Love | 250+ | -225
+J. Love | 275+ | -125
+J. Love | 300+ | +145
+J. Love | 325+ | +225
+J. Love | 350+ | +400
+Market: Total Passing Touchdowns
+J. Love | 1+ | -1500
+J. Love | 2+ | -200
+J. Love | 3+ | +185
+J. Love | 4+ | +700
+J. Love | 5+ | +1800
+D. Prescott | 1+ | -1400
+D. Prescott | 2+ | -185
+D. Prescott | 3+ | +210
+D. Prescott | 4+ | +750
+D. Prescott | 5+ | +2000
+Market: Total Passing Attempts
+D. Prescott | 30+ | -650
+D. Prescott | 35+ | -155
+D. Prescott | 40+ | +200
+D. Prescott | 45+ | +550
+J. Love | 25+ | -3500
+J. Love | 30+ | -450
+J. Love | 35+ | -110
+J. Love | 40+ | +300
+Market: Total Pass Completions
+D. Prescott | 18+ | -1800
+D. Prescott | 20+ | -650
+D. Prescott | 23+ | -200
+D. Prescott | 25+ | +100
+D. Prescott | 28+ | +275
+D. Prescott | 30+ | +500
+J. Love | 15+ | -6000
+J. Love | 18+ | -800
+J. Love | 20+ | -325
+J. Love | 23+ | -110
+J. Love | 25+ | +185
+J. Love | 28+ | +500
+Market: Total Interceptions Thrown
+D. Prescott | 1+ | -105
+D. Prescott | 2+ | +425
+D. Prescott | 3+ | +1400
+J. Love | 1+ | +120
+J. Love | 2+ | +550
+J. Love | 3+ | +1800
+Market: Total Passing + Rushing Yards
+D. Prescott | 175+ | -6000
+D. Prescott | 200+ | -1800
+D. Prescott | 225+ | -700
+D. Prescott | 250+ | -325
+D. Prescott | 275+ | -160
+D. Prescott | 300+ | +115
+D. Prescott | 325+ | +200
+D. Prescott | 350+ | +360
+D. Prescott | 400+ | +1200
+J. Love | 150+ | -20000
+J. Love | 175+ | -5000
+J. Love | 200+ | -1400
+J. Love | 225+ | -600
+J. Love | 250+ | -275
+J. Love | 275+ | -145
+J. Love | 300+ | +120
+J. Love | 325+ | +210
+J. Love | 350+ | +375
+Market: Total Passing Yards (O/U)
+D. Prescott | OVER | 274.5 | -120
+D. Prescott | UNDER | 274.5 | -110
+J. Love | OVER | 279.5 | -110
+J. Love | UNDER | 279.5 | -120
+Market: Total Passing Touchdowns (O/U)
+J. Love | OVER | 1.5 | -200
+J. Love | UNDER | 1.5 | +150
+Market: Total Passing Attempts (O/U)
+D. Prescott | OVER | 35.5 | -125
+D. Prescott | UNDER | 35.5 | -105
+J. Love | OVER | 34.5 | -105
+J. Love | UNDER | 34.5 | -125
+Market: Total Passing Completions (O/U)
+D. Prescott | OVER | 24.5 | +100
+D. Prescott | UNDER | 24.5 | -130
+J. Love | OVER | 22.5 | -105
+J. Love | UNDER | 22.5 | -125
+Market: Total Interceptions Thrown (O/U)
+D. Prescott | OVER | 0.5 | -110
+D. Prescott | UNDER | 0.5 | -120
+J. Love | OVER | 0.5 | +120
+J. Love | UNDER | 0.5 | -155
+Market: Total Passing + Rushing Yards (O/U)
+D. Prescott | OVER | 288.5 | -110
+D. Prescott | UNDER | 288.5 | -120
+J. Love | OVER | 289.5 | -105
+J. Love | UNDER | 289.5 | -125
+THESCORE_NFL_DEBUG: {"event":"Dallas Cowboys @ Green Bay Packers","hash":"passing","tabs":["popular","passing","receiving","rushing"],"drawers":["Total Passing Yards","Total Passing Touchdowns","Total Passing Attempts","Total Pass Completions","Total Interceptions Thrown","1st Half Total Passing Yards","1st Quarter Total Passing Yards","Total Passing + Rushing Yards","Longest Pass Completion","Total Passing Yards (O/U)","Total Passing Touchdowns (O/U)","Total Passing Attempts (O/U)","Total Passing Completions (O/U)","Total Interceptions Thrown (O/U)","1st Half Total Passing Yards (O/U)","1st Quarter Total Passing Yards (O/U)","Total Passing + Rushing Yards (O/U)","Longest Pass Completion (O/U)"],"rows":95,"drawerClicks":12,"expanded":0,"emptyDrawers":[]}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Yards","open":true,"rows":19,"text":"Total Passing Yards\nDallas Cowboys @ Green Bay Packers\n\t150+\t175+\t200+\t225+\t250+\t275+\t300+\t325+\t350+\t375+\nD. Prescott\t\n-15000\n-15000\n\t\n-3000\n-3000\n\t\n-1100\n-1100\n\t\n-450\n-450\n\t\n-225\n-225\n\t\n-120\n-120\n\t\n+155\n+155\n\t\n+275\n+275\n\t\n+450\n+450\n\t\n+800\n+800\n\nJ. Love\t\n-8000\n-8000\n\t\n-2500\n-2500\n\t\n-1000\n-1000\n\t\n-450\n-450\n\t\n-225\n-225\n\t\n-125\n-125\n\t\n+145\n+145\n\t\n+225\n+225\n\t\n+400\n+400\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Touchdowns","open":true,"rows":10,"text":"Total Passing Touchdowns\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\t4+\t5+\nJ. Love\t\n-1500\n-1500\n\t\n-200\n-200\n\t\n+185\n+185\n\t\n+700\n+700\n\t\n+1800\n+1800\n\nD. Prescott\t\n-1400\n-1400\n\t\n-185\n-185\n\t\n+210\n+210\n\t\n+750\n+750\n\t\n+2000\n+2000"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Attempts","open":true,"rows":8,"text":"Total Passing Attempts\nDallas Cowboys @ Green Bay Packers\n\t25+\t30+\t35+\t40+\t45+\nD. Prescott\t\n--\n\t\n-650\n-650\n\t\n-155\n-155\n\t\n+200\n+200\n\t\n+550\n+550\n\nJ. Love\t\n-3500\n-3500\n\t\n-450\n-450\n\t\n-110\n-110\n\t\n+300\n+300\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Pass Completions","open":true,"rows":12,"text":"Total Pass Completions\nDallas Cowboys @ Green Bay Packers\n\t15+\t18+\t20+\t23+\t25+\t28+\t30+\nD. Prescott\t\n--\n\t\n-1800\n-1800\n\t\n-650\n-650\n\t\n-200\n-200\n\t\nEven\nEven\n\t\n+275\n+275\n\t\n+500\n+500\n\nJ. Love\t\n-6000\n-6000\n\t\n-800\n-800\n\t\n-325\n-325\n\t\n-110\n-110\n\t\n+185\n+185\n\t\n+500\n+500\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Interceptions Thrown","open":true,"rows":6,"text":"Total Interceptions Thrown\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\nD. Prescott\t\n-105\n-105\n\t\n+425\n+425\n\t\n+1400\n+1400\n\nJ. Love\t\n+120\n+120\n\t\n+550\n+550\n\t\n+1800\n+1800"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing + Rushing Yards","open":true,"rows":18,"text":"Total Passing + Rushing Yards\nDallas Cowboys @ Green Bay Packers\n\t150+\t175+\t200+\t225+\t250+\t275+\t300+\t325+\t350+\t400+\nD. Prescott\t\n--\n\t\n-6000\n-6000\n\t\n-1800\n-1800\n\t\n-700\n-700\n\t\n-325\n-325\n\t\n-160\n-160\n\t\n+115\n+115\n\t\n+200\n+200\n\t\n+360\n+360\n\t\n+1200\n+1200\n\nJ. Love\t\n-20000\n-20000\n\t\n-5000\n-5000\n\t\n-1400\n-1400\n\t\n-600\n-600\n\t\n-275\n-275\n\t\n-145\n-145\n\t\n+120\n+120\n\t\n+210\n+210\n\t\n+375\n+375\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Yards (O/U)","open":true,"rows":4,"text":"Total Passing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 274.5\n-120\n-120\nU 274.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 279.5\n-110\n-110\nU 279.5\n-120\n-120"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Touchdowns (O/U)","open":true,"rows":2,"text":"Total Passing Touchdowns (O/U)\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 1.5\n-200\n-200\nU 1.5\n+150\n+150\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 1.5\n-180\n-190\nU 1.5\n+135\n+140"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Attempts (O/U)","open":true,"rows":4,"text":"Total Passing Attempts (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 35.5\n-125\n-125\nU 35.5\n-105\n-105\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 34.5\n-105\n-105\nU 34.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing Completions (O/U)","open":true,"rows":4,"text":"Total Passing Completions (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 24.5\nEven\nEven\nU 24.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 22.5\n-105\n-105\nU 22.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Interceptions Thrown (O/U)","open":true,"rows":4,"text":"Total Interceptions Thrown (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 0.5\n-110\n-110\nU 0.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 0.5\n+120\n+120\nU 0.5\n-155\n-155"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing + Rushing Yards (O/U)","open":true,"rows":4,"text":"Total Passing + Rushing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 288.5\n-110\n-110\nU 288.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 289.5\n-105\n-105\nU 289.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Passing Yards","text":"1st Half Total Passing Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Passing Yards","text":"1st Quarter Total Passing Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Pass Completion","text":"Longest Pass Completion"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Passing Yards (O/U)","text":"1st Half Total Passing Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Passing Yards (O/U)","text":"1st Quarter Total Passing Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Pass Completion (O/U)","text":"Longest Pass Completion (O/U)"}
+THESCORE_NFL_DEBUG: Requested tab receiving
+
+THESCORE_STRUCTURED_EXPORT
+THESCORE_NFL_PROPS_VERSION: 20261011_1
+Sport: NFL
+Event: Dallas Cowboys @ Green Bay Packers
+Period: full_game
+Market: Total Receiving Yards
+C. Lamb | 20+ | -5000
+C. Lamb | 30+ | -1800
+C. Lamb | 40+ | -1000
+C. Lamb | 50+ | -500
+C. Lamb | 60+ | -325
+C. Lamb | 70+ | -200
+C. Lamb | 80+ | -130
+C. Lamb | 90+ | +110
+C. Lamb | 100+ | +155
+C. Lamb | 110+ | +225
+C. Lamb | 120+ | +300
+C. Lamb | 130+ | +425
+C. Lamb | 140+ | +600
+C. Watson | 20+ | -2250
+C. Watson | 30+ | -1100
+C. Watson | 40+ | -550
+C. Watson | 50+ | -325
+C. Watson | 60+ | -220
+C. Watson | 70+ | -140
+C. Watson | 80+ | +100
+C. Watson | 90+ | +145
+C. Watson | 100+ | +200
+C. Watson | 110+ | +275
+C. Watson | 120+ | +400
+C. Watson | 130+ | +550
+C. Watson | 140+ | +750
+G. Pickens | 20+ | -2000
+G. Pickens | 30+ | -900
+G. Pickens | 40+ | -475
+G. Pickens | 50+ | -275
+G. Pickens | 60+ | -170
+G. Pickens | 70+ | -110
+G. Pickens | 80+ | +135
+G. Pickens | 90+ | +200
+G. Pickens | 100+ | +275
+G. Pickens | 110+ | +400
+G. Pickens | 120+ | +550
+M. Golden | 10+ | -6000
+M. Golden | 20+ | -1800
+M. Golden | 30+ | -900
+M. Golden | 40+ | -450
+M. Golden | 50+ | -250
+M. Golden | 60+ | -145
+M. Golden | 70+ | +100
+M. Golden | 80+ | +145
+M. Golden | 90+ | +210
+M. Golden | 100+ | +300
+M. Golden | 110+ | +425
+M. Golden | 120+ | +600
+M. Golden | 130+ | +850
+T. Kraft | 10+ | -2250
+T. Kraft | 20+ | -900
+T. Kraft | 30+ | -375
+T. Kraft | 40+ | -200
+T. Kraft | 50+ | -120
+T. Kraft | 60+ | +135
+T. Kraft | 70+ | +210
+T. Kraft | 80+ | +300
+T. Kraft | 90+ | +450
+T. Kraft | 100+ | +650
+T. Kraft | 110+ | +1000
+R. Flournoy | 10+ | -900
+R. Flournoy | 20+ | -300
+R. Flournoy | 30+ | -135
+R. Flournoy | 40+ | +135
+R. Flournoy | 50+ | +225
+R. Flournoy | 60+ | +375
+R. Flournoy | 70+ | +600
+R. Flournoy | 80+ | +900
+J. Ferguson | 10+ | -500
+J. Ferguson | 20+ | -160
+J. Ferguson | 30+ | +130
+J. Ferguson | 40+ | +260
+J. Ferguson | 50+ | +450
+J. Ferguson | 60+ | +700
+J. Ferguson | 70+ | +1100
+J. Ferguson | 80+ | +1800
+Jav. Williams | 10+ | -185
+Jav. Williams | 20+ | +175
+Jav. Williams | 30+ | +400
+Jav. Williams | 40+ | +750
+Jav. Williams | 50+ | +1200
+M. Lloyd | 10+ | -130
+M. Lloyd | 20+ | +210
+M. Lloyd | 30+ | +450
+M. Lloyd | 40+ | +900
+M. Lloyd | 50+ | +1500
+B. Melton | 10+ | -105
+B. Melton | 20+ | +175
+B. Melton | 30+ | +275
+B. Melton | 40+ | +425
+B. Melton | 50+ | +650
+B. Melton | 60+ | +1000
+K. Turpin | 10+ | +120
+K. Turpin | 20+ | +275
+K. Turpin | 30+ | +550
+K. Turpin | 40+ | +1000
+K. Turpin | 50+ | +1800
+Jon. Smith | 10+ | +140
+Jon. Smith | 20+ | +375
+Jon. Smith | 30+ | +750
+Jon. Smith | 40+ | +1500
+Market: Total Receptions
+C. Lamb | 4+ | -1200
+C. Lamb | 5+ | -450
+C. Lamb | 6+ | -210
+C. Lamb | 7+ | -110
+C. Lamb | 8+ | +160
+C. Lamb | 9+ | +275
+G. Pickens | 3+ | -1200
+G. Pickens | 4+ | -400
+G. Pickens | 5+ | -170
+G. Pickens | 6+ | +120
+G. Pickens | 7+ | +225
+M. Golden | 3+ | -1100
+M. Golden | 4+ | -350
+M. Golden | 5+ | -145
+M. Golden | 6+ | +135
+M. Golden | 7+ | +260
+C. Watson | 3+ | -1000
+C. Watson | 4+ | -325
+C. Watson | 5+ | -140
+C. Watson | 6+ | +140
+C. Watson | 7+ | +275
+C. Watson | 8+ | +500
+C. Watson | 9+ | +1000
+T. Kraft | 2+ | -2500
+T. Kraft | 3+ | -525
+T. Kraft | 4+ | -200
+T. Kraft | 5+ | +110
+T. Kraft | 6+ | +225
+T. Kraft | 7+ | +450
+J. Ferguson | 2+ | -700
+J. Ferguson | 3+ | -210
+J. Ferguson | 4+ | +115
+J. Ferguson | 5+ | +250
+J. Ferguson | 6+ | +550
+R. Flournoy | 2+ | -700
+R. Flournoy | 3+ | -210
+R. Flournoy | 4+ | +120
+R. Flournoy | 5+ | +260
+R. Flournoy | 6+ | +550
+Jav. Williams | 2+ | -450
+Jav. Williams | 3+ | -130
+Jav. Williams | 4+ | +185
+Jav. Williams | 5+ | +425
+M. Lloyd | 1+ | -800
+M. Lloyd | 2+ | -145
+M. Lloyd | 3+ | +165
+M. Lloyd | 4+ | +375
+Jon. Smith | 1+ | -220
+Jon. Smith | 2+ | +210
+Jon. Smith | 3+ | +750
+K. Turpin | 1+ | -185
+K. Turpin | 2+ | +300
+K. Turpin | 3+ | +1000
+B. Melton | 1+ | -155
+B. Melton | 2+ | +225
+B. Melton | 3+ | +650
+B. Spann-Ford | 1+ | -145
+B. Spann-Ford | 2+ | +275
+B. Spann-Ford | 3+ | +800
+Market: Total Rushing + Receiving Yards
+Jav. Williams | 35+ | -3000
+Jav. Williams | 40+ | -2000
+Jav. Williams | 45+ | -1300
+Jav. Williams | 50+ | -900
+Jav. Williams | 60+ | -450
+Jav. Williams | 70+ | -240
+Jav. Williams | 75+ | -185
+Jav. Williams | 80+ | -140
+Jav. Williams | 90+ | +105
+Jav. Williams | 100+ | +155
+Jav. Williams | 125+ | +400
+Jav. Williams | 150+ | +1000
+M. Lloyd | 20+ | -2250
+M. Lloyd | 25+ | -1400
+M. Lloyd | 30+ | -800
+M. Lloyd | 35+ | -500
+M. Lloyd | 40+ | -350
+M. Lloyd | 45+ | -250
+M. Lloyd | 50+ | -185
+M. Lloyd | 60+ | -105
+M. Lloyd | 70+ | +150
+M. Lloyd | 75+ | +185
+M. Lloyd | 80+ | +225
+M. Lloyd | 90+ | +350
+M. Lloyd | 100+ | +550
+M. Lloyd | 125+ | +1400
+Market: Total Receiving Yards (O/U)
+C. Watson | OVER | 74.5 | -120
+C. Watson | UNDER | 74.5 | -110
+C. Lamb | OVER | 84.5 | -110
+C. Lamb | UNDER | 84.5 | -120
+M. Golden | OVER | 64.5 | -125
+M. Golden | UNDER | 64.5 | -105
+G. Pickens | OVER | 69.5 | -110
+G. Pickens | UNDER | 69.5 | -120
+T. Kraft | OVER | 49.5 | -120
+T. Kraft | UNDER | 49.5 | -110
+J. Ferguson | OVER | 24.5 | -105
+J. Ferguson | UNDER | 24.5 | -125
+R. Flournoy | OVER | 31.5 | -120
+R. Flournoy | UNDER | 31.5 | -110
+B. Melton | OVER | 9.5 | -105
+B. Melton | UNDER | 9.5 | -125
+M. Lloyd | OVER | 10.5 | -115
+M. Lloyd | UNDER | 10.5 | -115
+Jav. Williams | OVER | 14.5 | +110
+Jav. Williams | UNDER | 14.5 | -140
+K. Turpin | OVER | 4.5 | -140
+K. Turpin | UNDER | 4.5 | +110
+Jon. Smith | OVER | 6.5 | -105
+Jon. Smith | UNDER | 6.5 | -125
+Market: Total Receptions (O/U)
+C. Lamb | OVER | 6.5 | -110
+C. Lamb | UNDER | 6.5 | -120
+C. Watson | OVER | 4.5 | -140
+C. Watson | UNDER | 4.5 | +110
+T. Kraft | OVER | 4.5 | +115
+T. Kraft | UNDER | 4.5 | -150
+G. Pickens | OVER | 5.5 | +120
+G. Pickens | UNDER | 5.5 | -155
+M. Golden | OVER | 4.5 | -150
+M. Golden | UNDER | 4.5 | +115
+J. Ferguson | OVER | 3.5 | +115
+J. Ferguson | UNDER | 3.5 | -150
+R. Flournoy | OVER | 3.5 | +120
+R. Flournoy | UNDER | 3.5 | -155
+Jav. Williams | OVER | 2.5 | -130
+Jav. Williams | UNDER | 2.5 | +100
+M. Lloyd | OVER | 1.5 | -150
+M. Lloyd | UNDER | 1.5 | +115
+K. Turpin | OVER | 0.5 | -180
+K. Turpin | UNDER | 0.5 | +135
+B. Melton | OVER | 0.5 | -155
+B. Melton | UNDER | 0.5 | +120
+Jon. Smith | OVER | 0.5 | -220
+Jon. Smith | UNDER | 0.5 | +160
+B. Spann-Ford | OVER | 0.5 | -150
+B. Spann-Ford | UNDER | 0.5 | +115
+Market: Total Rushing + Receiving Yards (O/U)
+Jav. Williams | OVER | 84.5 | -120
+Jav. Williams | UNDER | 84.5 | -110
+M. Lloyd | OVER | 59.5 | -105
+M. Lloyd | UNDER | 59.5 | -125
+THESCORE_NFL_DEBUG: {"event":"Dallas Cowboys @ Green Bay Packers","hash":"receiving","tabs":["popular","passing","receiving","rushing"],"drawers":["Total Receiving Yards","Total Receptions","1st Half Total Receiving Yards","1st Quarter Total Receiving Yards","Total Rushing + Receiving Yards","Longest Reception","Total Receiving Yards (O/U)","Total Receptions (O/U)","1st Half Total Receiving Yards (O/U)","1st Quarter Total Receiving Yards (O/U)","Total Rushing + Receiving Yards (O/U)","Longest Reception (O/U)"],"rows":241,"drawerClicks":6,"expanded":0,"emptyDrawers":[]}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receiving Yards","open":true,"rows":102,"text":"Total Receiving Yards\nDallas Cowboys @ Green Bay Packers\n\t10+\t20+\t30+\t40+\t50+\t60+\t70+\t80+\t90+\t100+\t110+\t120+\t130+\t140+\nC. Lamb\t\n--\n\t\n-5000\n-5000\n\t\n-1800\n-1800\n\t\n-1000\n-1000\n\t\n-500\n-500\n\t\n-325\n-325\n\t\n-200\n-200\n\t\n-130\n-130\n\t\n+110\n+110\n\t\n+155\n+155\n\t\n+225\n+225\n\t\n+300\n+300\n\t\n+425\n+425\n\t\n+600\n+600\n\nC. Watson\t\n--\n\t\n-2250\n-2250\n\t\n-1100\n-1100\n\t\n-550\n-550\n\t\n-325\n-325\n\t\n-220\n-220\n\t\n-140\n-140\n\t\nEven\nEven\n\t\n+145\n+145\n\t\n+200\n+200\n\t\n+275\n+275\n\t\n+400\n+400\n\t\n+550\n+550\n\t\n+750\n+750\n\nG. Pickens\t\n--\n\t\n-2000\n-2000\n\t\n-900\n-900\n\t\n-475\n-475\n\t\n-275\n-275\n\t\n-170\n-170\n\t\n-110\n-110\n\t\n+135\n+135\n\t\n+200\n+200\n\t\n+275\n+275\n\t\n+400\n+400\n\t\n+550\n+550\n\t\n--\n\t\n--\n\nM. Golden\t\n-6000\n-6000\n\t\n-1800\n-1800\n\t\n-900\n-900\n\t\n-450\n-450\n\t\n-250\n-250\n\t\n-145\n-145\n\t\nEven\nEven\n\t\n+145\n+145\n\t\n+210\n+210\n\t\n+300\n+300\n\t\n+425\n+425\n\t\n+600\n+600\n\t\n+850\n+850\n\t\n--\n\nT. Kraft\t\n-2250\n-2250\n\t\n-900\n-900\n\t\n-375\n-375\n\t\n-200\n-200\n\t\n-120\n-120\n\t\n+135\n+135\n\t\n+210\n+210\n\t\n+300\n+300\n\t\n+450\n+450\n\t\n+650\n+650\n\t\n+1000\n+1000\n\t\n--\n\t\n--\n\t\n--\n\nR. Flournoy\t\n-900\n-900\n\t\n-300\n-300\n\t\n-135\n-135\n\t\n+135\n+135\n\t\n+225\n+225\n\t\n+375\n+375\n\t\n+600\n+600\n\t\n+900\n+900\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJ. Ferguson\t\n-500\n-500\n\t\n-160\n-160\n\t\n+130\n+130\n\t\n+260\n+260\n\t\n+450\n+450\n\t\n+700\n+700\n\t\n+1100\n+1100\n\t\n+1800\n+1800\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJav. Williams\t\n-185\n-185\n\t\n+175\n+175\n\t\n+400\n+400\n\t\n+750\n+750\n\t\n+1200\n+1200\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nM. Lloyd\t\n-130\n-130\n\t\n+210\n+210\n\t\n+450\n+450\n\t\n+900\n+900\n\t\n+1500\n+1500\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Melton\t\n-105\n-105\n\t\n+175\n+175\n\t\n+275\n+275\n\t\n+425\n+425\n\t\n+650\n+650\n\t\n+1000\n+1000\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nK. Turpin\t\n+120\n+120\n\t\n+275\n+275\n\t\n+550\n+550\n\t\n+1000\n+1000\n\t\n+1800\n+1800\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJon. Smith\t\n+140\n+140\n\t\n+375\n+375\n\t\n+750\n+750\n\t\n+1500\n+1500\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receptions","open":true,"rows":59,"text":"Total Receptions\nDallas Cowboys @ Green Bay Packers\n\t1+\t2+\t3+\t4+\t5+\t6+\t7+\t8+\t9+\nC. Lamb\t\n--\n\t\n--\n\t\n--\n\t\n-1200\n-1200\n\t\n-450\n-450\n\t\n-210\n-210\n\t\n-110\n-110\n\t\n+160\n+160\n\t\n+275\n+275\n\nG. Pickens\t\n--\n\t\n--\n\t\n-1200\n-1200\n\t\n-400\n-400\n\t\n-170\n-170\n\t\n+120\n+120\n\t\n+225\n+225\n\t\n--\n\t\n--\n\nM. Golden\t\n--\n\t\n--\n\t\n-1100\n-1100\n\t\n-350\n-350\n\t\n-145\n-145\n\t\n+135\n+135\n\t\n+260\n+260\n\t\n--\n\t\n--\n\nC. Watson\t\n--\n\t\n--\n\t\n-1000\n-1000\n\t\n-325\n-325\n\t\n-140\n-140\n\t\n+140\n+140\n\t\n+275\n+275\n\t\n+500\n+500\n\t\n+1000\n+1000\n\nT. Kraft\t\n--\n\t\n-2500\n-2500\n\t\n-525\n-525\n\t\n-200\n-200\n\t\n+110\n+110\n\t\n+225\n+225\n\t\n+450\n+450\n\t\n--\n\t\n--\n\nJ. Ferguson\t\n--\n\t\n-700\n-700\n\t\n-210\n-210\n\t\n+115\n+115\n\t\n+250\n+250\n\t\n+550\n+550\n\t\n--\n\t\n--\n\t\n--\n\nR. Flournoy\t\n--\n\t\n-700\n-700\n\t\n-210\n-210\n\t\n+120\n+120\n\t\n+260\n+260\n\t\n+550\n+550\n\t\n--\n\t\n--\n\t\n--\n\nJav. Williams\t\n--\n\t\n-450\n-450\n\t\n-130\n-130\n\t\n+185\n+185\n\t\n+425\n+425\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nM. Lloyd\t\n-800\n-800\n\t\n-145\n-145\n\t\n+165\n+165\n\t\n+375\n+375\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJon. Smith\t\n-220\n-220\n\t\n+210\n+210\n\t\n+750\n+750\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nK. Turpin\t\n-185\n-185\n\t\n+300\n+300\n\t\n+1000\n+1000\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Melton\t\n-155\n-155\n\t\n+225\n+225\n\t\n+650\n+650\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nB. Spann-Ford\t\n-145\n-145\n\t\n+275\n+275\n\t\n+800\n+800\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards","open":true,"rows":26,"text":"Total Rushing + Receiving Yards\nDallas Cowboys @ Green Bay Packers\n\t20+\t25+\t30+\t35+\t40+\t45+\t50+\t60+\t70+\t75+\t80+\t90+\t100+\t125+\t150+\nJav. Williams\t\n--\n\t\n--\n\t\n--\n\t\n-3000\n-3000\n\t\n-2000\n-2000\n\t\n-1300\n-1300\n\t\n-900\n-900\n\t\n-450\n-450\n\t\n-240\n-240\n\t\n-185\n-185\n\t\n-140\n-140\n\t\n+105\n+105\n\t\n+155\n+155\n\t\n+400\n+400\n\t\n+1000\n+1000\n\nM. Lloyd\t\n-2250\n-2250\n\t\n-1400\n-1400\n\t\n-800\n-800\n\t\n-500\n-500\n\t\n-350\n-350\n\t\n-250\n-250\n\t\n-185\n-185\n\t\n-105\n-105\n\t\n+150\n+150\n\t\n+185\n+185\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+550\n+550\n\t\n+1400\n+1400\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receiving Yards (O/U)","open":true,"rows":24,"text":"Total Receiving Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nC. Watson\nO 74.5\n-120\n-120\nU 74.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nC. Lamb\nO 84.5\n-110\n-110\nU 84.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nM. Golden\nO 64.5\n-125\n-125\nU 64.5\n-105\n-105\nDallas Cowboys @ Green Bay Packers\nG. Pickens\nO 69.5\n-110\n-110\nU 69.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nT. Kraft\nO 49.5\n-120\n-120\nU 49.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nJ. Ferguson\nO 24.5\n-105\n-105\nU 24.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nR. Flournoy\nO 31.5\n-120\n-120\nU 31.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nB. Melton\nO 9.5\n-105\n-105\nU 9.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 10.5\n-115\n-115\nU 10.5\n-115\n-115\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 14.5\n+110\n+110\nU 14.5\n-140\n-140\nDallas Cowboys @ Green Bay Packers\nK. Turpin\nO 4.5\n-140\n-140\nU 4.5\n+110\n+110\nDallas Cowboys @ Green Bay Packers\nJon. Smith\nO 6.5\n-105\n-105\nU 6.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Receptions (O/U)","open":true,"rows":26,"text":"Total Receptions (O/U)\nDallas Cowboys @ Green Bay Packers\nC. Lamb\nO 6.5\n-110\n-110\nU 6.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nC. Watson\nO 4.5\n-140\n-140\nU 4.5\n+110\n+110\nDallas Cowboys @ Green Bay Packers\nT. Kraft\nO 4.5\n+115\n+115\nU 4.5\n-150\n-150\nDallas Cowboys @ Green Bay Packers\nG. Pickens\nO 5.5\n+120\n+120\nU 5.5\n-155\n-155\nDallas Cowboys @ Green Bay Packers\nM. Golden\nO 4.5\n-150\n-150\nU 4.5\n+115\n+115\nDallas Cowboys @ Green Bay Packers\nJ. Ferguson\nO 3.5\n+115\n+115\nU 3.5\n-150\n-150\nDallas Cowboys @ Green Bay Packers\nR. Flournoy\nO 3.5\n+120\n+120\nU 3.5\n-155\n-155\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 2.5\n-130\n-130\nU 2.5\nEven\nEven\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 1.5\n-150\n-150\nU 1.5\n+115\n+115\nDallas Cowboys @ Green Bay Packers\nK. Turpin\nO 0.5\n-180\n-180\nU 0.5\n+135\n+135\nDallas Cowboys @ Green Bay Packers\nB. Melton\nO 0.5\n-155\n-155\nU 0.5\n+120\n+120\nDallas Cowboys @ Green Bay Packers\nJon. Smith\nO 0.5\n-220\n-220\nU 0.5\n+160\n+160\nDallas Cowboys @ Green Bay Packers\nB. Spann-Ford\nO 0.5\n-150\n-150\nU 0.5\n+115\n+115"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards (O/U)","open":true,"rows":4,"text":"Total Rushing + Receiving Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 84.5\n-120\n-120\nU 84.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 59.5\n-105\n-105\nU 59.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Receiving Yards","text":"1st Half Total Receiving Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Receiving Yards","text":"1st Quarter Total Receiving Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Reception","text":"Longest Reception"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Receiving Yards (O/U)","text":"1st Half Total Receiving Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Receiving Yards (O/U)","text":"1st Quarter Total Receiving Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Reception (O/U)","text":"Longest Reception (O/U)"}
+THESCORE_NFL_DEBUG: Requested tab rushing
+
+THESCORE_STRUCTURED_EXPORT
+THESCORE_NFL_PROPS_VERSION: 20261011_1
+Sport: NFL
+Event: Dallas Cowboys @ Green Bay Packers
+Period: full_game
+Market: Total Rushing Yards
+Jav. Williams | 25+ | -2500
+Jav. Williams | 30+ | -1600
+Jav. Williams | 35+ | -1000
+Jav. Williams | 40+ | -650
+Jav. Williams | 45+ | -450
+Jav. Williams | 50+ | -325
+Jav. Williams | 60+ | -170
+Jav. Williams | 70+ | -105
+Jav. Williams | 75+ | +125
+Jav. Williams | 80+ | +155
+Jav. Williams | 90+ | +225
+Jav. Williams | 100+ | +350
+Jav. Williams | 125+ | +900
+M. Lloyd | 20+ | -800
+M. Lloyd | 25+ | -450
+M. Lloyd | 30+ | -275
+M. Lloyd | 35+ | -190
+M. Lloyd | 40+ | -135
+M. Lloyd | 45+ | +100
+M. Lloyd | 50+ | +130
+M. Lloyd | 60+ | +210
+M. Lloyd | 70+ | +325
+M. Lloyd | 75+ | +425
+M. Lloyd | 80+ | +550
+M. Lloyd | 90+ | +800
+M. Lloyd | 100+ | +1300
+T. Goodson | 20+ | +210
+T. Goodson | 25+ | +325
+T. Goodson | 30+ | +450
+T. Goodson | 35+ | +650
+T. Goodson | 40+ | +900
+T. Goodson | 45+ | +1200
+T. Goodson | 50+ | +1600
+T. Goodson | 60+ | +2500
+D. Prescott | 20+ | +300
+D. Prescott | 25+ | +500
+D. Prescott | 30+ | +800
+D. Prescott | 35+ | +1200
+J. Love | 20+ | +375
+J. Love | 25+ | +600
+J. Love | 30+ | +900
+J. Love | 35+ | +1400
+J. Love | 40+ | +2000
+J. Love | 45+ | +3000
+Market: Total Rushing Attempts
+Jav. Williams | 12+ | -1000
+Jav. Williams | 15+ | -275
+Jav. Williams | 17+ | -140
+M. Lloyd | 7+ | -1300
+M. Lloyd | 12+ | -110
+M. Lloyd | 15+ | +300
+M. Lloyd | 17+ | +650
+D. Prescott | 3+ | -130
+D. Prescott | 5+ | +350
+J. Love | 3+ | -110
+J. Love | 5+ | +425
+J. Love | 7+ | +1800
+Market: Total Passing + Rushing Yards
+D. Prescott | 175+ | -6000
+D. Prescott | 200+ | -1600
+D. Prescott | 225+ | -700
+D. Prescott | 250+ | -325
+D. Prescott | 275+ | -160
+D. Prescott | 300+ | +115
+D. Prescott | 325+ | +210
+D. Prescott | 350+ | +360
+D. Prescott | 400+ | +1200
+J. Love | 150+ | -20000
+J. Love | 175+ | -4000
+J. Love | 200+ | -1300
+J. Love | 225+ | -550
+J. Love | 250+ | -275
+J. Love | 275+ | -145
+J. Love | 300+ | +125
+J. Love | 325+ | +225
+J. Love | 350+ | +375
+Market: Total Rushing + Receiving Yards
+Jav. Williams | 35+ | -3000
+Jav. Williams | 40+ | -2000
+Jav. Williams | 45+ | -1300
+Jav. Williams | 50+ | -900
+Jav. Williams | 60+ | -450
+Jav. Williams | 70+ | -240
+Jav. Williams | 75+ | -185
+Jav. Williams | 80+ | -140
+Jav. Williams | 90+ | +105
+Jav. Williams | 100+ | +155
+Jav. Williams | 125+ | +400
+Jav. Williams | 150+ | +1000
+M. Lloyd | 20+ | -2250
+M. Lloyd | 25+ | -1400
+M. Lloyd | 30+ | -800
+M. Lloyd | 35+ | -500
+M. Lloyd | 40+ | -350
+M. Lloyd | 45+ | -250
+M. Lloyd | 50+ | -185
+M. Lloyd | 60+ | -105
+M. Lloyd | 70+ | +150
+M. Lloyd | 75+ | +185
+M. Lloyd | 80+ | +225
+M. Lloyd | 90+ | +350
+M. Lloyd | 100+ | +550
+M. Lloyd | 125+ | +1400
+Market: Total Rushing Yards (O/U)
+Jav. Williams | OVER | 69.5 | -105
+Jav. Williams | UNDER | 69.5 | -125
+M. Lloyd | OVER | 44.5 | +100
+M. Lloyd | UNDER | 44.5 | -130
+T. Goodson | OVER | 9.5 | -135
+T. Goodson | UNDER | 9.5 | +105
+J. Love | OVER | 6.5 | +100
+J. Love | UNDER | 6.5 | -130
+D. Prescott | OVER | 10.5 | +100
+D. Prescott | UNDER | 10.5 | -130
+Market: Total Rushing Attempts (O/U)
+Jav. Williams | OVER | 17.5 | -105
+Jav. Williams | UNDER | 17.5 | -125
+M. Lloyd | OVER | 11.5 | -105
+M. Lloyd | UNDER | 11.5 | -125
+J. Love | OVER | 2.5 | -110
+J. Love | UNDER | 2.5 | -120
+D. Prescott | OVER | 2.5 | -130
+D. Prescott | UNDER | 2.5 | +100
+Market: Total Passing + Rushing Yards (O/U)
+D. Prescott | OVER | 288.5 | -110
+D. Prescott | UNDER | 288.5 | -120
+J. Love | OVER | 289.5 | -105
+J. Love | UNDER | 289.5 | -125
+Market: Total Rushing + Receiving Yards (O/U)
+Jav. Williams | OVER | 84.5 | -120
+Jav. Williams | UNDER | 84.5 | -110
+M. Lloyd | OVER | 59.5 | -105
+M. Lloyd | UNDER | 59.5 | -125
+THESCORE_NFL_DEBUG: {"event":"Dallas Cowboys @ Green Bay Packers","hash":"rushing","tabs":["popular","passing","receiving","rushing"],"drawers":["Total Rushing Yards","Total Rushing Attempts","1st Half Total Rushing Yards","1st Quarter Total Rushing Yards","Total Passing + Rushing Yards","Total Rushing + Receiving Yards","Longest Rush","Total Rushing Yards (O/U)","Total Rushing Attempts (O/U)","1st Half Total Rushing Yards (O/U)","1st Quarter Total Rushing Yards (O/U)","Total Passing + Rushing Yards (O/U)","Total Rushing + Receiving Yards (O/U)","Longest Rush (O/U)"],"rows":126,"drawerClicks":8,"expanded":0,"emptyDrawers":[]}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Yards","open":true,"rows":44,"text":"Total Rushing Yards\nDallas Cowboys @ Green Bay Packers\n\t20+\t25+\t30+\t35+\t40+\t45+\t50+\t60+\t70+\t75+\t80+\t90+\t100+\t125+\nJav. Williams\t\n--\n\t\n-2500\n-2500\n\t\n-1600\n-1600\n\t\n-1000\n-1000\n\t\n-650\n-650\n\t\n-450\n-450\n\t\n-325\n-325\n\t\n-170\n-170\n\t\n-105\n-105\n\t\n+125\n+125\n\t\n+155\n+155\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+900\n+900\n\nM. Lloyd\t\n-800\n-800\n\t\n-450\n-450\n\t\n-275\n-275\n\t\n-190\n-190\n\t\n-135\n-135\n\t\nEven\nEven\n\t\n+130\n+130\n\t\n+210\n+210\n\t\n+325\n+325\n\t\n+425\n+425\n\t\n+550\n+550\n\t\n+800\n+800\n\t\n+1300\n+1300\n\t\n--\n\nT. Goodson\t\n+210\n+210\n\t\n+325\n+325\n\t\n+450\n+450\n\t\n+650\n+650\n\t\n+900\n+900\n\t\n+1200\n+1200\n\t\n+1600\n+1600\n\t\n+2500\n+2500\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nD. Prescott\t\n+300\n+300\n\t\n+500\n+500\n\t\n+800\n+800\n\t\n+1200\n+1200\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJ. Love\t\n+375\n+375\n\t\n+600\n+600\n\t\n+900\n+900\n\t\n+1400\n+1400\n\t\n+2000\n+2000\n\t\n+3000\n+3000\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Attempts","open":true,"rows":12,"text":"Total Rushing Attempts\nDallas Cowboys @ Green Bay Packers\n\t3+\t5+\t7+\t12+\t15+\t17+\nJav. Williams\t\n--\n\t\n--\n\t\n--\n\t\n-1000\n-1000\n\t\n-275\n-275\n\t\n-140\n-140\n\nM. Lloyd\t\n--\n\t\n--\n\t\n-1300\n-1300\n\t\n-110\n-110\n\t\n+300\n+300\n\t\n+650\n+650\n\nD. Prescott\t\n-130\n-130\n\t\n+350\n+350\n\t\n--\n\t\n--\n\t\n--\n\t\n--\n\nJ. Love\t\n-110\n-110\n\t\n+425\n+425\n\t\n+1800\n+1800\n\t\n--\n\t\n--\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing + Rushing Yards","open":true,"rows":18,"text":"Total Passing + Rushing Yards\nDallas Cowboys @ Green Bay Packers\n\t150+\t175+\t200+\t225+\t250+\t275+\t300+\t325+\t350+\t400+\nD. Prescott\t\n--\n\t\n-6000\n-6000\n\t\n-1600\n-1600\n\t\n-700\n-700\n\t\n-325\n-325\n\t\n-160\n-160\n\t\n+115\n+115\n\t\n+210\n+210\n\t\n+360\n+360\n\t\n+1200\n+1200\n\nJ. Love\t\n-20000\n-20000\n\t\n-4000\n-4000\n\t\n-1300\n-1300\n\t\n-550\n-550\n\t\n-275\n-275\n\t\n-145\n-145\n\t\n+125\n+125\n\t\n+225\n+225\n\t\n+375\n+375\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards","open":true,"rows":26,"text":"Total Rushing + Receiving Yards\nDallas Cowboys @ Green Bay Packers\n\t20+\t25+\t30+\t35+\t40+\t45+\t50+\t60+\t70+\t75+\t80+\t90+\t100+\t125+\t150+\nJav. Williams\t\n--\n\t\n--\n\t\n--\n\t\n-3000\n-3000\n\t\n-2000\n-2000\n\t\n-1300\n-1300\n\t\n-900\n-900\n\t\n-450\n-450\n\t\n-240\n-240\n\t\n-185\n-185\n\t\n-140\n-140\n\t\n+105\n+105\n\t\n+155\n+155\n\t\n+400\n+400\n\t\n+1000\n+1000\n\nM. Lloyd\t\n-2250\n-2250\n\t\n-1400\n-1400\n\t\n-800\n-800\n\t\n-500\n-500\n\t\n-350\n-350\n\t\n-250\n-250\n\t\n-185\n-185\n\t\n-105\n-105\n\t\n+150\n+150\n\t\n+185\n+185\n\t\n+225\n+225\n\t\n+350\n+350\n\t\n+550\n+550\n\t\n+1400\n+1400\n\t\n--"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Yards (O/U)","open":true,"rows":10,"text":"Total Rushing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 69.5\n-105\n-105\nU 69.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 44.5\nEven\nEven\nU 44.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nT. Goodson\nO 9.5\n-135\n-135\nU 9.5\n+105\n+105\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 6.5\nEven\nEven\nU 6.5\n-130\n-130\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 10.5\nEven\nEven\nU 10.5\n-130\n-130"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing Attempts (O/U)","open":true,"rows":8,"text":"Total Rushing Attempts (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 17.5\n-105\n-105\nU 17.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 11.5\n-105\n-105\nU 11.5\n-125\n-125\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 2.5\n-110\n-110\nU 2.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 2.5\n-130\n-130\nU 2.5\nEven\nEven"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Passing + Rushing Yards (O/U)","open":true,"rows":4,"text":"Total Passing + Rushing Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nD. Prescott\nO 288.5\n-110\n-110\nU 288.5\n-120\n-120\nDallas Cowboys @ Green Bay Packers\nJ. Love\nO 289.5\n-105\n-105\nU 289.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Total Rushing + Receiving Yards (O/U)","open":true,"rows":4,"text":"Total Rushing + Receiving Yards (O/U)\nDallas Cowboys @ Green Bay Packers\nJav. Williams\nO 84.5\n-120\n-120\nU 84.5\n-110\n-110\nDallas Cowboys @ Green Bay Packers\nM. Lloyd\nO 59.5\n-105\n-105\nU 59.5\n-125\n-125"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Rushing Yards","text":"1st Half Total Rushing Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Rushing Yards","text":"1st Quarter Total Rushing Yards"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Rush","text":"Longest Rush"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Half Total Rushing Yards (O/U)","text":"1st Half Total Rushing Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"1st Quarter Total Rushing Yards (O/U)","text":"1st Quarter Total Rushing Yards (O/U)"}
+THESCORE_NFL_RAW_DRAWER: {"title":"Longest Rush (O/U)","text":"Longest Rush (O/U)"}

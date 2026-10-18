@@ -497,8 +497,9 @@ function createNflCaptureCore() {
     return out;
   }
   let draftKingsTabsCache=null;
+  const approvedTabs=book==='BetMGM'?['Players','Spreads','Totals','All']:core.tabLabels[book];
   const tabCandidates=()=>book==='DraftKings'?(draftKingsTabsCache||(draftKingsTabsCache=draftKingsTabCandidates())):list(root(),'[role="tab"], [role="tablist"] a, [role="tablist"] button, a, button, [role="button"]').filter(el=>
-    safeControl(el)&&safeLink(el)&&!(book==='BetMGM'&&/^All$/i.test(text(el))&&el.getAttribute('role')!=='tab'&&!el.closest('[role="tablist"]'))&&!el.closest('details')&&!el.hasAttribute('aria-expanded')&&core.tabLabels[book].some(l=>l.toLowerCase()===text(el).toLowerCase()));
+    safeControl(el)&&safeLink(el)&&!(book==='BetMGM'&&/^All$/i.test(text(el))&&el.getAttribute('role')!=='tab'&&!el.closest('[role="tablist"]')&&!el.matches('button.ds-pill'))&&!el.closest('details')&&!el.hasAttribute('aria-expanded')&&approvedTabs.some(l=>l.toLowerCase()===text(el).toLowerCase()));
   function findTab(label){
     const candidates=tabCandidates().filter(el=>text(el).toLowerCase()===label.toLowerCase());
     if(book==='FanDuel') {
@@ -557,7 +558,7 @@ function createNflCaptureCore() {
   const activeTab=()=>tabsNow().find(l=>tabActive(l,findTab(l)))||'';
   if(request.mode==='probe')return result({path:startUrl.pathname,origin:startUrl.origin,href:startUrl.href,tabs:tabsNow(),activeTab:activeTab()});
   if(['tab-state','plan-tab','activate-tab'].includes(request.mode)) {
-    const wanted=core.tabLabels[book].find(l=>l.toLowerCase()===String(request.tab||'').toLowerCase());
+    const wanted=approvedTabs.find(l=>l.toLowerCase()===String(request.tab||'').toLowerCase());
     if(!wanted)return result({stopped:'Unapproved tab label',records:[]});
     const info=tabInfo(wanted);
     const state={path:startUrl.pathname,origin:startUrl.origin,href:startUrl.href,tabs:tabsNow(),activeTab:activeTab(),navigation:info,ready:info.active&&!partialTab()};
@@ -581,7 +582,7 @@ function createNflCaptureCore() {
   if(request.captureOnly&&request.tab&&!tabInfo(request.tab).active)
     return result({records:[],retryable:true,diagnostics:{...diagnostics,notes:['Requested tab is not active yet']}});
   if(request.tab&&!request.captureOnly) {
-    const wanted=core.tabLabels[book].find(l=>l.toLowerCase()===request.tab.toLowerCase());
+    const wanted=approvedTabs.find(l=>l.toLowerCase()===request.tab.toLowerCase());
     if(!wanted)return result({stopped:'Unapproved tab label',records:[]});
     let control=findTab(wanted);
     if(!control){diagnostics.unavailableTabs.push(wanted);return result({records:[]});}
@@ -603,11 +604,13 @@ function createNflCaptureCore() {
   }
   if(partialTab())return result({stopped:'Selected half/quarter/live tab; not a full-game capture',records:[]});
   function headerTitle(el) {
+    if(book==='BetMGM'&&el.matches('button[dsaccordiontoggle]'))return text(el.querySelector('[slot="title"]'));
     if(el.tagName==='SUMMARY')return text(el.querySelector('h2,h3'))||text(el);
     return text(el.querySelector('h2,h3,[data-testid="market-name"],.sportsbook-market-accordion__title'))||text(el);
   }
   const headerSelector='summary, button[aria-expanded], [role="button"][aria-expanded], [aria-controls][aria-expanded], .sportsbook-market-accordion__header, [class*="accordion-header" i], [data-testid="market-header"]';
   function headers(){
+    if(book==='BetMGM')return list(root(),'button[dsaccordiontoggle][aria-controls][aria-expanded]').filter(el=>safeControl(el)&&core.describe(headerTitle(el)));
     const regular=list(root(),headerSelector).filter(el=>safeControl(el)&&safeLink(el)&&core.describe(headerTitle(el)));
     if(book!=='DraftKings')return regular;
     const extra=list(root(),'.sportsbook-market-accordion__title, .sportsbook-event-accordion__title, h2, h3, [role="heading"]');
@@ -768,14 +771,14 @@ function createNflCaptureCore() {
     }
     if(!targetTypes)return true;
     return d.type==='main'?[...targetTypes].some(t=>['spread','total','moneyline_2way'].includes(t)):targetTypes.has(d.type);
-  }).slice(0,80);
+  });
   const wanted=boundedBook?pending.slice(0,4):pending;
   const processedLabels=[];
   if(!wanted.length)diagnostics.notes.push('No safely identifiable market headings on this tab');
   for(const label of wanted) {
     if(Date.now()>marketDeadline){diagnostics.notes.push('Per-tab time limit reached; capture is partial');break;}
     if(!sameContext()||partialTab())return result({stopped:'Context changed while loading markets',records:[]});
-    let h=findHeader(label);if(!h){if(boundedBook)processedLabels.push(label);continue;}
+    let h=findHeader(label);if(!h){diagnostics.unpricedDrawers.push(label);if(boundedBook)processedLabels.push(label);continue;}
     const d=h.closest('details'),open=d?d.open:h.getAttribute('aria-expanded')==='true';
     if(!open) {
       if(!safeControl(h)||!safeLink(h))continue;
@@ -791,8 +794,10 @@ function createNflCaptureCore() {
       if(readable(containerFor(findHeader(label)))===before)break;
     }
     const block=containerFor(findHeader(label));
-    if(!qs.length) {
+    const morePending=list(block,'button,[role="button"],a').some(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+    if(!qs.length||morePending) {
       diagnostics.unpricedDrawers.push(label);
+      if(morePending)diagnostics.notes.push(`Expansion limit or unchanged content: ${label}; drawer remains incomplete`);
       // Keep only the scoped market/control, not the account or page shell.
       if(book==='BetMGM') {
         diagnostics.unpricedSamples ||= [];
@@ -823,7 +828,8 @@ function createNflCaptureCore() {
 // NFL navigation uses the existing multipass architecture: the extension worker
 // owns progress/waits; every capture runs in a fresh document injection.
 const NFL_NAVIGATION_VERSION='20261018_2';
-const NFL_NAV_CHECKPOINT_TTL=15*60*1000;
+// Progress contains drawer identities, not prices. Retain it for this exact event
+// until an explicit refresh, rather than dropping unfinished work after 15 minutes.
 function nflNavCheckpoint(action,base,value) {
   if(location.origin!==base.origin||location.pathname!==base.path)return null;
   const key=`EV_NFL_CAPTURE_PROGRESS_V4::${base.book}::${base.path}`;
@@ -859,10 +865,9 @@ function nflSafeDestination(href,base,book,label) {
   return true;
 }
 function nflCheckpointMatches(saved,base,targets,now=Date.now()) {
-  return saved&&saved.version===NFL_NAVIGATION_VERSION&&saved.incomplete===true&&saved.returnedPartial===true&&saved.event===base.event&&
+  return saved&&saved.version===NFL_NAVIGATION_VERSION&&typeof saved.incomplete==='boolean'&&saved.returnedPartial===true&&saved.event===base.event&&
     saved.origin===base.origin&&saved.path===base.path&&saved.book===base.book&&
-    Number.isFinite(saved.updatedAt)&&saved.updatedAt<=now&&now-saved.updatedAt<NFL_NAV_CHECKPOINT_TTL&&
-    JSON.stringify([...(saved.targets||[])].sort())===JSON.stringify([...targets].sort());
+    Number.isFinite(saved.updatedAt)&&saved.updatedAt<=now;
 }
 async function nflNavInject(tabId,func,args) {
   try {
@@ -901,23 +906,30 @@ async function tryNflNavigationCapture(tabId,book) {
     const base={book,event:probe.event,origin:probe.origin,path:probe.path,href:probe.href};
     if(!nflSameEventUrl(base.href,base)){diag({stopped:'Unsupported event URL'});return response();}
     const snapshot=await readCoverageSnapshotFromAppTab();
-    const targets=nflMissingTypes(snapshot,book,base.event);
-    const tabs=nflTabsForTypes(book,targets);
+    const external=typeof captureDemandFor==='function'?captureDemandFor(tabId):null;
+    const demand=typeof resolveCaptureDemand==='function'?resolveCaptureDemand(snapshot,{book,sport:'NFL',event:base.event},{refresh:external?.mode==='refresh'}):{mode:'initial',targets:nflMissingTypes(snapshot,book,base.event)};
     const stored=await nflNavInject(tabId,nflNavCheckpoint,['read',base]);
     const saved=stored.ok?stored.value:null;
-    const resume=nflCheckpointMatches(saved,base,targets);
-    const completed=new Set(resume?(saved.completed||[]).filter(t=>tabs.includes(t)):[]);
+    const resume=demand.mode!=='refresh'&&nflCheckpointMatches(saved,base,demand.targets);
+    const completed=new Set(resume?saved.completed||[]:[]);
+    const priorTabs=resume?(saved.tabs||nflTabsForTypes(book,saved.targets||[])):[];
+    const unfinished=priorTabs.filter(t=>!completed.has(t));
+    const targets=demand.mode==='refresh'?[]:resume&&unfinished.length?([...new Set([...(saved.targets||[]),...demand.targets])]):demand.targets;
+    const requested=demand.mode==='missing'?nflTabsForTypes(book,demand.targets):demand.mode==='initial'&&!resume||demand.mode==='refresh'?nflTabsForTypes(book,[]):[];
+    const tabs=[...new Set([...requested,...unfinished])];
+    // App demand is authoritative for newly missing markets, even if an older
+    // run marked that category complete. Keep priced drawers only on unfinished tabs.
+    for(const t of requested)completed.delete(t);
     const processedByTab=resume&&saved.processedByTab&&typeof saved.processedByTab==='object'?saved.processedByTab:{};
-    // A manually initiated new capture starts with fresh prices after a completed
-    // run. Only an interrupted/partial run with matching scope resumes.
-    const checkpoint={version:NFL_NAVIGATION_VERSION,...base,targets,completed:[...completed],processedByTab,
+    for(const t of requested)if(!unfinished.includes(t))delete processedByTab[t];
+    const checkpoint={version:NFL_NAVIGATION_VERSION,...base,targets,tabs,completed:[...completed],processedByTab,
       incomplete:true,returnedPartial:false,updatedAt:Date.now()};
     async function saveProgress() {
       checkpoint.completed=[...completed];checkpoint.updatedAt=Date.now();
       const r=await nflNavInject(tabId,nflNavCheckpoint,['write',base,checkpoint]);
       if(!r.ok||r.value!==true)diag({phase:'checkpoint',note:'Progress could not be saved; current capture remains in memory'});
     }
-    chunks.push('NFL_CAPTURE_RUN: '+JSON.stringify({book,event:base.event,mode:resume?'resume-incomplete':targets.length?'missing-markets':'full-core-markets',targets,completedTabs:[...completed]}));
+    chunks.push('NFL_CAPTURE_RUN: '+JSON.stringify({book,event:base.event,mode:!tabs.length?'nothing-missing':resume&&unfinished.length?'resume-incomplete':demand.mode==='refresh'?'refresh':targets.length?'missing-markets':tabs.length?'full-core-markets':'nothing-missing',targets,completedTabs:[...completed]}));
     const todo=tabs.filter(t=>!completed.has(t));
     let fatal=false;
     const incomplete=[];
@@ -973,9 +985,9 @@ async function tryNflNavigationCapture(tabId,book) {
       }
       checkpoint.pendingTab=label;await saveProgress();
       if(!nav.active) {
-        diag({phase:'navigation-requested',tab:label,control:nav.control,method:nav.href&&book!=='DraftKings'?'same-event-link':'scheduled-exact-control'});
+        diag({phase:'navigation-requested',tab:label,control:nav.control,method:nav.href&&book==='FanDuel'?'same-event-link':'scheduled-exact-control'});
         if(nav.href&&!nflSafeDestination(nav.href,base,book,label)){diag({stopped:'Rejected tab destination',tab:label});incomplete.push(label);continue;}
-        if(nav.href&&book!=='DraftKings') {
+        if(nav.href&&book==='FanDuel') {
           if(!nflSafeDestination(nav.href,base,book,label)){diag({stopped:'Rejected tab destination',tab:label});incomplete.push(label);continue;}
           const g=await currentTabGuard();if(g.error){diag({stopped:g.error,tab:label});fatal=true;break;}
           // URL came from the live same-event anchor, not a guessed route.
@@ -998,7 +1010,7 @@ async function tryNflNavigationCapture(tabId,book) {
       for(let batch=0;batch<24;batch++) {
         let capture;
         for(let attempt=0;attempt<3;attempt++) {
-          capture=await nflNavInject(tabId,nflDetailPageStep,[book,{...base,tab:label,captureOnly:true,targetTypes:targets,processedLabels:[...processed]}]);
+          capture=await nflNavInject(tabId,nflDetailPageStep,[book,{...base,tab:label,captureOnly:true,targetTypes:resume&&unfinished.includes(label)&&!(saved.targets||[]).length?[]:targets,processedLabels:[...processed]}]);
           if(capture.ok&&!capture.value?.retryable)break;
           diag({phase:'capture-retry',tab:label,attempt:attempt+1,error:capture.error||'Tab not ready'});
           state=await waitForTab(label);if(!state.ready)break;
@@ -1019,7 +1031,7 @@ async function tryNflNavigationCapture(tabId,book) {
         // Store only completed priced drawers, so unpriced drawers may retry on
         // another user-initiated run. In-run processed set still advances.
         const priorGood=new Set(processedByTab[label]||[]);
-        for(const record of r.records||[])if(record.quotes?.length)priorGood.add(record.title);
+        for(const record of r.records||[])if(record.quotes?.length&&!unpricedDrawers.has(record.title))priorGood.add(record.title);
         processedByTab[label]=[...priorGood];await saveProgress();
         if(!r.remaining) {
           const unpriced=unpricedDrawers.size>0;
@@ -1031,7 +1043,7 @@ async function tryNflNavigationCapture(tabId,book) {
       else if(!incomplete.includes(label))incomplete.push(label);
       await saveProgress();
     }
-    checkpoint.incomplete=fatal||completed.size<tabs.length;
+    checkpoint.incomplete=fatal||tabs.some(t=>!completed.has(t));
     checkpoint.returnedPartial=true;
     checkpoint.pendingTab=todo.find(t=>!completed.has(t))||'';
     await saveProgress();
@@ -1067,9 +1079,9 @@ function nflMissingTypes(snapshot,book,event) {
   return [...new Set(missing)];
 }
 function nflTabsForTypes(book,types) {
-  const all={DraftKings:['POPULAR','GAME LINES','TD SCORERS','PASSING','RECEIVING','RUSHING'],FanDuel:['Popular','Passing Props','Receiving Props','Rushing Props','TD Scorer Props'],BetMGM:['Players','All']};
+  const all={DraftKings:['POPULAR','GAME LINES','TD SCORERS','PASSING','RECEIVING','RUSHING'],FanDuel:['Popular','Passing Props','Receiving Props','Rushing Props','TD Scorer Props'],BetMGM:['Players','Spreads','Totals','All']};
   if(!types?.length)return all[book]||[];
-  if(book==='BetMGM')return ['Players','All'];
+  if(book==='BetMGM')return [...new Set(types.map(t=>t==='spread'?'Spreads':t==='total'?'Totals':t==='moneyline_2way'?'All':'Players'))];
   const tabs=new Set();
   for(const t of types) {
     const dk=book==='DraftKings';
@@ -1088,7 +1100,7 @@ async function tryNflCaptureV2(tabId,book) {
     const listing = await safeExecuteScript({tabId, func: captureNflListingOnly, args: [book]});
     if (listing?.[0]?.result) return listing[0].result;
   }
-  if(book==='FanDuel'||book==='DraftKings')return tryNflNavigationCapture(tabId,book);
+  if(book==='FanDuel'||book==='DraftKings'||book==='BetMGM')return tryNflNavigationCapture(tabId,book);
   const first=await safeExecuteScript({tabId,func:nflDetailPageStep,args:[book,{mode:'probe'}]});
   const probe=first?.[0]?.result;
   if(!probe?.recognized) {
@@ -1109,10 +1121,14 @@ async function tryNflCaptureV2(tabId,book) {
     }
     if(book==='FanDuel')chunks.push('NFL_HEADER_DIAGNOSTICS: '+JSON.stringify(probe.headerDiagnostics||{}));
     const snapshot=await readCoverageSnapshotFromAppTab();
-    let targets=nflMissingTypes(snapshot,book,probe.event);
+    const external=typeof captureDemandFor==='function'?captureDemandFor(tabId):null;
+    const demand=typeof resolveCaptureDemand==='function'?resolveCaptureDemand(snapshot,{book,sport:'NFL',event:probe.event},{refresh:external?.mode==='refresh'}):null;
+    if(demand&&external?.mode==='missing'&&external.event===probe.event){demand.targets=[...new Set([...demand.targets,...external.targets])];demand.mode='missing';}
+    if(demand?.mode==='complete')return {source:book,text:'',message:'No missing markets for this event.'};
+    let targets=demand?demand.targets:nflMissingTypes(snapshot,book,probe.event);
     const tsMainOnly=book==='TheScore'&&targets.length>0&&targets.every(t=>['spread','total','moneyline_2way'].includes(t));
     // The existing TS prop collector is preserved. Prop-specific targeting is not claimed here.
-    if(book==='TheScore'&&!tsMainOnly)targets=[];
+    // Preserve prop demand instead of resetting a targeted run to all markets.
     chunks.push('NFL_CAPTURE_RUN: '+JSON.stringify({book,event:probe.event,mode:targets.length?'missing-markets':'full-core-markets',targets}));
     const base={event:probe.event,path:probe.path,origin:probe.origin,targetTypes:book==='TheScore'?['spread','total','moneyline_2way']:targets};
     let stopped=false;
@@ -1137,19 +1153,20 @@ async function tryNflCaptureV2(tabId,book) {
       }
     }
     if(book==='BetMGM')await batchedStep('');
-    else if(book!=='FanDuel')await step('');
+    else if(book!=='FanDuel'&&(!targets.length||tsMainOnly))await step('');
     if(book==='TheScore') {
-      if(!stopped&&probe.tabs?.some(t=>/^Popular$/i.test(t)))await step('Popular');
+      if(!stopped&&(!targets.length||tsMainOnly)&&probe.tabs?.some(t=>/^Popular$/i.test(t)))await step('Popular');
       if(!stopped&&!tsMainOnly) {
         let visited=[],event=probe.event;
         for(let pass=0;pass<18;pass++) {
           const tab=await chrome.tabs.get(tabId),url=new URL(tab.url||'');
           if(url.pathname!==probe.path)break;
           await safeShowToast(tabId,'Extracting theScore NFL…',`NFL player props section ${pass+1}.`,{loading:true,pulse:false});
-          const rs=await safeExecuteScript({tabId,func:captureTheScoreNflPropsStep,args:[visited,event,probe.path]});
+          const rs=await safeExecuteScript({tabId,func:captureTheScoreNflPropsStep,args:[visited,event,probe.path,{targetTypes:targets,targetLabels:typeof captureTargetLabels==='function'?captureTargetLabels('NFL',targets):[]}]});
           const r=rs?.[0]?.result;
           if(!r){chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,stopped:'Prop capture injection failed'}));break;}
           if(r.text)chunks.push(r.text);
+          if(typeof updateCapturePending==='function')await safeExecuteScript({tabId,func:updateCapturePending,args:[probe.origin+probe.path,nflTypesForTitles(r.pricedMarkets||[]),nflTypesForTitles(r.pendingMarkets||[])]});
           visited=r.visited||visited;event=r.event||event;
           if(r.done)break;await sleepBackground(1400);
         }

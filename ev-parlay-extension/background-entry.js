@@ -1,5 +1,6 @@
 // Classic service-worker entry: preserve the existing multi-book implementation.
 importScripts("background.js", "theScoreNflCapture.js");
+importScripts("captureDemand.js");
 const extractWithoutNflProps = extractSinglePayloadFromTab;
 const nflRuns = new Set();
 extractSinglePayloadFromTab = async function extractWithNflProps(tabId) {
