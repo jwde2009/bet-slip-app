@@ -1,0 +1,8 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: BetMGM
+Sport: NFL
+
+
+NFL_CAPTURE_RUN: {"book":"BetMGM","event":"Dallas Cowboys @ Green Bay Packers","mode":"full-core-markets","targets":[]}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":["Per-tab time limit reached; capture is partial"],"openedDrawers":["Game lines","Anytime TD scorer","Passing TDs"],"tab":"","unavailableTabs":[],"unpricedDrawers":["Game lines","Anytime TD scorer","Passing TDs"],"version":"20261012_1","stopped":"Context changed before capture completed"}

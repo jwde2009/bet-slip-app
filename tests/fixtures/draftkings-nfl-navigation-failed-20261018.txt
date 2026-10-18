@@ -1,0 +1,26 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: DraftKings
+Sport: NFL
+NFL_NAVIGATION_VERSION: 20261012_4
+
+DRAFTKINGS_NFL_TABS_VERSION: 20261013_1
+
+NFL_CAPTURE_RUN: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","mode":"full-core-markets","targets":[],"completedTabs":[]}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":102,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-122,"side":"Home","subject":"Green Bay Packers"},{"line":null,"marketType":"moneyline_2way","odds":-112,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":-108,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-112,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-108,"side":"Under","subject":""}],"title":"Game Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":[],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":["No safely identifiable market headings on this tab"],"openedDrawers":[],"quotedRows":6,"tab":"","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"},"unavailableTabs":[],"unpricedDrawers":[],"version":"20261012_nav4","phase":"visible-main-fallback"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"POPULAR","unavailableTabs":["POPULAR"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"GAME LINES","unavailableTabs":["GAME LINES"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"TD SCORERS","unavailableTabs":["TD SCORERS"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"PASSING","unavailableTabs":["PASSING"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"RECEIVING","unavailableTabs":["RECEIVING"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","tab":"RUSHING","unavailableTabs":["RUSHING"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group","tabDiscovery":{"acceptedTabs":[],"matchedAnchors":19,"openShadowRoots":0,"rejected":{"hidden-disabled-or-excluded":19},"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1"}}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"run-finished","event":"Dallas Cowboys @ Green Bay Packers","complete":false,"completedTabs":[],"remainingTabs":["POPULAR","GAME LINES","TD SCORERS","PASSING","RECEIVING","RUSHING"]}

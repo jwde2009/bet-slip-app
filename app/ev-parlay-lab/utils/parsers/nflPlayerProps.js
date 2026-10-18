@@ -1,5 +1,6 @@
 import { resolveNflMainLineTeam } from "./nflMainLines";
 import { getNflPropType } from "./nflPropTypes";
+import { decimalToAmerican } from "../odds";
 
 const clean = value => String(value || "").replace(/\u2212|âˆ’/g, "-").replace(/\s+/g, " ").trim();
 function eventName(value) {
@@ -23,7 +24,7 @@ function playerName(value, market) {
   if (resolveNflMainLineTeam(text) || /\b(over|under|total|yards|touchdowns|receptions|passing|rushing|receiving|player|scorer|none|neither|field)\b/i.test(text)) return "";
   return text.length <= 80 && /^[\p{L}][\p{L}.'’\-]*(?:\s+[\p{L}][\p{L}.'’\-]*){1,5}$/u.test(text) ? text : "";
 }
-function makeRow(book, event, marketType, player, side, lineValue, oddsAmerican) {
+function makeRow(book, event, marketType, player, side, lineValue, oddsAmerican, oddsDecimal) {
   const selection = `${player} ${side}`;
   const identity = [book, event, marketType, player, side, lineValue].join("|");
   let hash = 2166136261;
@@ -33,7 +34,7 @@ function makeRow(book, event, marketType, player, side, lineValue, oddsAmerican)
     sport: "NFL", league: "NFL", eventLabelRaw: event, marketType,
     selectionRaw: selection, selectionNormalized: selection, playerName: player,
     lineValue, oddsAmerican,
-    oddsDecimal: oddsAmerican > 0 ? 1 + oddsAmerican / 100 : 1 + 100 / Math.abs(oddsAmerican),
+    oddsDecimal: oddsDecimal ?? (oddsAmerican > 0 ? 1 + oddsAmerican / 100 : 1 + 100 / Math.abs(oddsAmerican)),
     period: "full_game", confidence: "high",
     parseWarnings: Number.isInteger(lineValue) ? ["Integer prop line: a push is possible."] : [],
     isSharpSource: book === "Pinnacle", isTargetBook: book !== "Pinnacle",
@@ -43,8 +44,17 @@ function makeRow(book, event, marketType, player, side, lineValue, oddsAmerican)
 function pair(rows, book, event, type, player, over, under) {
   if (!event || !type || !player || !over || !under || over.line !== under.line || !Number.isFinite(over.line) || over.line < 0) return;
   if (over.odds === null || under.odds === null) return;
-  rows.push(makeRow(book, event, type, player, "Over", over.line, over.odds),
-    makeRow(book, event, type, player, "Under", under.line, under.odds));
+  rows.push(makeRow(book, event, type, player, "Over", over.line, over.odds, over.decimal),
+    makeRow(book, event, type, player, "Under", under.line, under.odds, under.decimal));
+}
+function pinnaclePrice(value) {
+  const text = clean(value);
+  // Only the Pinnacle adapter accepts its observed decimal cells. Keep the
+  // original decimal price; rounding through American odds changes fair odds.
+  const decimal = /^\d+\.\d+$/.test(text) ? Number(text) : null;
+  if (decimal !== null && Number.isFinite(decimal) && decimal > 1 && decimal <= 10000)
+    return { odds: decimalToAmerican(decimal), decimal };
+  return { odds: price(text) };
 }
 function parsePinnacle(lines) {
   if (!lines.some(line => /^(?:NFL|NFL_CAPTURE_LEAGUE: NFL)$/i.test(line))) return [];
@@ -52,7 +62,7 @@ function parsePinnacle(lines) {
   let event = "";
   for (let i = 0; i < lines.length; i += 1) {
     if (/\s@\s/.test(lines[i])) { event = eventName(lines[i]); continue; }
-    if (/^(?:Live|NCAAF|CFL|UFL|NBA|WNBA|NHL|MLB|SOCCER|BACK TO TOP)$/i.test(lines[i])) { event = ""; continue; }
+    if (/^(?:Live|NCAAF|CFL|UFL|NBA|WNBA|NHL|MLB|SOCCER|BACK TO TOP|FAVOU?RITES|TOP SPORTS|A-Z SPORTS|BET SLIP|MY BETS)$/i.test(lines[i])) { event = ""; continue; }
     const header = lines[i].match(/^(.+?) Total (.+)$/i);
     if (!header || !event) continue;
     const type = getNflPropType(header[2]), player = playerName(header[1], type);
@@ -62,8 +72,8 @@ function parsePinnacle(lines) {
     // Four adjacent cells only; missing prices must never borrow from the next player.
     if (!over || !under || getNflPropType(over[2]) !== type || getNflPropType(under[2]) !== type) continue;
     pair(rows, "Pinnacle", event, type, player,
-      { line: Number(over[1]), odds: price(lines[i + 2]) },
-      { line: Number(under[1]), odds: price(lines[i + 4]) });
+      { line: Number(over[1]), ...pinnaclePrice(lines[i + 2]) },
+      { line: Number(under[1]), ...pinnaclePrice(lines[i + 4]) });
   }
   return rows;
 }

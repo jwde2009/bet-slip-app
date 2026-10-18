@@ -43,6 +43,8 @@ Do not merge, deploy, or copy this test checkout over the original repair direct
 
 ## October 18: update the clean Windows test worktree
 
+Latest NFL follow-up adds `DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1` while retaining manifest 1.4.0. Once this update is checked out, reload the extension and refresh the sportsbook tab. Rebuild/restart a production app server for the Pinnacle decimal parser fix; dependencies are unchanged from dc6ef39. The existing Pinnacle TXT should now import 136 rows. FanDuel's supplied capture has 68 rows and is incomplete; theScore's supplied capture has 449 rows. BetMGM's old diagnostics-only capture has no recoverable prices. Updated FanDuel/BetMGM captures include more precise context-stop diagnostics; live completion is still pending. See the audit's October 18 batch section before another test.
+
 Use this only in the detached **test** checkout, not the original modified repository. Logs saved there can remain untracked. Stop if tracked files have changed; do not reset or discard them.
 
 ```powershell

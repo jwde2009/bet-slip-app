@@ -281,8 +281,30 @@ function createNflCaptureCore() {
   const wait = ms=>new Promise(r=>setTimeout(r,ms));
   const list = (el,s)=>Array.from(el?.querySelectorAll(s)||[]);
   const text = el=>clean(el?.innerText||el?.textContent||'');
+  // Match the basketball workflow's rendered exact-label control mechanism.
+  // A semantic tab may have no own box (display:contents), while its label does.
+  function dkTabVisual(el) {
+    if(!el?.isConnected)return {reason:'detached'};
+    for(let p=el;p;p=p.parentElement||p.getRootNode?.().host||null) {
+      const css=getComputedStyle(p);
+      if(p.matches(excluded))return {reason:'excluded-region',node:p.tagName};
+      if(p.hidden||p.getAttribute('aria-hidden')==='true')return {reason:'hidden-ancestor',node:p.tagName};
+      if(css.display==='none'||css.visibility==='hidden'||css.visibility==='collapse'||css.contentVisibility==='hidden'||parseFloat(css.opacity)===0)
+        return {reason:'css-hidden-ancestor',node:p.tagName,display:css.display,visibility:css.visibility,opacity:css.opacity};
+    }
+    const candidates=[el,...list(el,'span,div')];
+    for(const candidate of candidates) {
+      if(text(candidate)!==text(el))continue;
+      const r=candidate.getBoundingClientRect(),css=getComputedStyle(candidate);
+      if(r.width>0&&r.height>0&&r.width<=520&&r.height<=140&&css.display!=='none'&&css.visibility!=='hidden'&&parseFloat(css.opacity)!==0)
+        return {node:candidate,reason:''};
+    }
+    const r=el.getBoundingClientRect();
+    return {reason:'no-rendered-label',width:r.width,height:r.height,display:getComputedStyle(el).display};
+  }
   const visible = el=>{
     if(!el||!el.isConnected)return false;
+    if(book==='DraftKings'&&el.matches('a[role="tab"][data-testid="tab-switcher-tab-inner"]'))return !dkTabVisual(el).reason;
     if(el.checkVisibility&&!el.checkVisibility({opacityProperty:true,visibilityProperty:true}))return false;
     const r=el.getBoundingClientRect(),s=getComputedStyle(el);
     return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!el.closest('[hidden], [aria-hidden="true"]');
@@ -321,8 +343,17 @@ function createNflCaptureCore() {
   if(request.event&&event!==request.event)return result({stopped:'Selected event changed',records:[]});
   function sameContext() {
     const u=url();
-    if(u.origin!==startUrl.origin||u.pathname!==startUrl.pathname||request.path&&u.pathname!==request.path)return false;
-    const p=probe();return p&&p.event===event&&p.pregame;
+    if(u.origin!==startUrl.origin||u.pathname!==startUrl.pathname||request.path&&u.pathname!==request.path) {
+      diagnostics.contextFailure={reason:'Source event URL changed',originChanged:u.origin!==startUrl.origin,pathChanged:u.pathname!==startUrl.pathname};
+      return false;
+    }
+    const p=probe();
+    if(!p||p.event!==event||!p.pregame) {
+      diagnostics.contextFailure={reason:!p?'Selected-game header unavailable':p.event!==event?'Selected event changed':p.reason||'Pregame status unavailable',
+        event:p?.event||'',pregame:!!p?.pregame,...(book==='FanDuel'?{header:p?.headerDiagnostics||null}:{})};
+      return false;
+    }
+    return true;
   }
   function safeControl(el) {
     if(!visible(el)||el.disabled||el.getAttribute('aria-disabled')==='true'||el.closest(excluded))return false;
@@ -353,18 +384,9 @@ function createNflCaptureCore() {
     const selector = 'a[role="tab"][data-testid="tab-switcher-tab-inner"][href]';
     const slugs = {'popular':'popular','td scorers':'td-scorers','passing':'passing',
       'receiving':'receiving','rushing':'rushing','game lines':'game-lines'};
-    const report = {version:'20261013_1',strategy:'observed-event-tablist',
-      matchedAnchors:0,acceptedTabs:[],rejected:{},openShadowRoots:0,scanLimited:false};
+    const report = {version:'20261013_1',strategy:'observed-event-tablist',visibilityStrategy:'legacy-rendered-exact-label',
+      headerNavigationVersion:'20261018_1',matchedAnchors:0,acceptedTabs:[],rejected:{},rejectionSamples:[],openShadowRoots:0,scanLimited:false};
     const reject = reason => {report.rejected[reason]=(report.rejected[reason]||0)+1;};
-    function composedParent(el) {return el.parentElement || el.getRootNode?.().host || null;}
-    function composedSafe(el) {
-      for(let p=el;p;p=composedParent(p)) {
-        if(p.matches(excluded)||p.hidden||p.getAttribute('aria-hidden')==='true')return false;
-        const css=getComputedStyle(p);
-        if(css.display==='none'||css.visibility==='hidden'||css.visibility==='collapse'||Number(css.opacity)===0)return false;
-      }
-      return visible(el);
-    }
     // Include open component roots, but never cross frames or closed roots.
     // Limits keep the discovery bounded on pages with long social/market feeds.
     const roots=[document];let scanned=0;
@@ -382,7 +404,16 @@ function createNflCaptureCore() {
       report.matchedAnchors++;
       const group=el.closest('.tab-switcher-tabs[role="tablist"]');
       if(!group){reject('outside-observed-tablist');continue;}
-      if(!composedSafe(el)||!safeControl(el)){reject('hidden-disabled-or-excluded');continue;}
+      const visual=dkTabVisual(el);
+      const reason=visual.reason || (el.closest(excluded)?'excluded-region':el.disabled||el.getAttribute('aria-disabled')==='true'?'disabled-control':!safeControl(el)?'unsafe-control':'');
+      if(reason){
+        reject(reason);
+        if(report.rejectionSamples.length<8) {
+          const {node,...details}=visual;
+          report.rejectionSamples.push({label:text(el).slice(0,80),...details,reason,...(typeof node==='string'?{ancestor:node}:{})});
+        }
+        continue;
+      }
       let dest;
       try{dest=new URL(el.getAttribute('href'),location.href);}catch{reject('invalid-link');continue;}
       if(!safeLink(el)||dest.protocol!=='https:'){reject('different-event-or-fixed-query');continue;}
@@ -470,8 +501,10 @@ function createNflCaptureCore() {
       tabCandidates();
       if(dkSelectedNonCoreTab)return true;
     }
-    return list(root(),book==='FanDuel'?'nav [aria-selected="true"], [aria-current="page"], [data-state="active"]':'[role="tab"][aria-selected="true"], [aria-current="page"], [data-state="active"]').filter(visible)
-      .some(el=>/^(?:1st|2nd|3rd|4th|First|Second|Third|Fourth) (?:Half|Quarter)(?: Props)?$|^(?:Halves|Quarters|Live)$/i.test(text(el)));
+    const partial=list(root(),book==='FanDuel'?'nav [aria-selected="true"], [aria-current="page"], [data-state="active"]':'[role="tab"][aria-selected="true"], [aria-current="page"], [data-state="active"]').filter(visible)
+      .find(el=>/^(?:1st|2nd|3rd|4th|First|Second|Third|Fourth) (?:Half|Quarter)(?: Props)?$|^(?:Halves|Quarters|Live)$/i.test(text(el)));
+    if(partial)diagnostics.contextFailure={reason:'Selected partial-period or live tab',label:text(partial)};
+    return !!partial;
   }
   function controlSelected(control) {
     if(!control)return false;
@@ -526,7 +559,8 @@ function createNflCaptureCore() {
         draftKingsTabsCache=null;
         const fresh=findTab(wanted);
         if(fresh&&sameContext()&&safeControl(fresh)&&safeLink(fresh)&&!tabActive(wanted,fresh)) {
-          fresh.scrollIntoView({block:'center',inline:'nearest'});
+          const visual=book==='DraftKings'?dkTabVisual(fresh).node:null;
+          (visual?.scrollIntoView?visual:fresh).scrollIntoView({block:'center',inline:'nearest'});
           fresh.click(); // One activation; never also dispatch a synthetic click.
         }
       } catch(error) { console.warn('NFL scheduled tab activation failed:',error); }
@@ -704,7 +738,7 @@ function createNflCaptureCore() {
     return qs;
   }
   const records=[];
-  const boundedBook=book==='FanDuel'||book==='DraftKings';
+  const boundedBook=book==='FanDuel'||book==='DraftKings'||book==='BetMGM';
   const marketDeadline=Date.now()+(boundedBook?10000:35000);
   const targetTypes=request.targetTypes?.length?new Set(request.targetTypes):null;
   const already=new Set(boundedBook&&Array.isArray(request.processedLabels)?request.processedLabels:[]);
@@ -745,8 +779,16 @@ function createNflCaptureCore() {
       const before=readable(block);more.click();await wait(450);qs=await settled(label);
       if(readable(containerFor(findHeader(label)))===before)break;
     }
-    if(!qs.length)diagnostics.unpricedDrawers.push(label);
     const block=containerFor(findHeader(label));
+    if(!qs.length) {
+      diagnostics.unpricedDrawers.push(label);
+      // Keep only the scoped market/control, not the account or page shell.
+      if(book==='BetMGM') {
+        diagnostics.unpricedSamples ||= [];
+        if(diagnostics.unpricedSamples.length<4)diagnostics.unpricedSamples.push({title:label,
+          containerFound:!!block,control:findHeader(label)?.outerHTML?.slice(0,1200)||'',rawSample:readable(block).slice(0,2500)});
+      }
+    }
     records.push({book,event,period:'full_game',title:label,quotes:qs,rawSample:readable(block).slice(0,2500)});
     if(boundedBook)processedLabels.push(label);
   }
@@ -825,7 +867,7 @@ async function tryNflNavigationCapture(tabId,book) {
   nflV2ActiveRuns.add(tabId);
   const chunks=[`NFL_CAPTURE_VERSION: 20261012_1\nNFL_CAPTURE_BOOK: ${book}\nSport: NFL\nNFL_NAVIGATION_VERSION: ${NFL_NAVIGATION_VERSION}`];
   if(book==='FanDuel')chunks.push('FANDUEL_NFL_LAYOUT_VERSION: 20261012_2\nFANDUEL_NFL_HEADER_VERSION: 20261012_3');
-  if(book==='DraftKings')chunks.push('DRAFTKINGS_NFL_TABS_VERSION: 20261013_1');
+  if(book==='DraftKings')chunks.push('DRAFTKINGS_NFL_TABS_VERSION: 20261013_1\nDRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1');
   const diag=details=>chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,...details}));
   const response=()=>({source:book,text:chunks.join('\n\n')});
   try {
@@ -920,8 +962,9 @@ async function tryNflNavigationCapture(tabId,book) {
       }
       checkpoint.pendingTab=label;await saveProgress();
       if(!nav.active) {
-        diag({phase:'navigation-requested',tab:label,control:nav.control,method:nav.href?'same-event-link':'scheduled-exact-control'});
-        if(nav.href) {
+        diag({phase:'navigation-requested',tab:label,control:nav.control,method:nav.href&&book!=='DraftKings'?'same-event-link':'scheduled-exact-control'});
+        if(nav.href&&!nflSafeDestination(nav.href,base,book,label)){diag({stopped:'Rejected tab destination',tab:label});incomplete.push(label);continue;}
+        if(nav.href&&book!=='DraftKings') {
           if(!nflSafeDestination(nav.href,base,book,label)){diag({stopped:'Rejected tab destination',tab:label});incomplete.push(label);continue;}
           const g=await currentTabGuard();if(g.error){diag({stopped:g.error,tab:label});fatal=true;break;}
           // URL came from the live same-event anchor, not a guessed route.
@@ -1072,7 +1115,18 @@ async function tryNflCaptureV2(tabId,book) {
       if(r.stopped||!r.recognized)stopped=true;
       return r;
     }
-    if(book!=='FanDuel')await step('');
+    async function batchedStep(tab) {
+      const processed=new Set();
+      for(let batch=0;batch<20&&!stopped;batch++) {
+        const r=await step(tab,[...processed]);
+        if(!r||!r.remaining)break;
+        const before=processed.size;for(const label of r.processedLabels||[])processed.add(label);
+        if(processed.size===before){chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,tab,stopped:'No progress in bounded drawer batch'}));break;}
+        if(batch===19)chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,tab,stopped:'Drawer batch cap reached; capture is partial'}));
+      }
+    }
+    if(book==='BetMGM')await batchedStep('');
+    else if(book!=='FanDuel')await step('');
     if(book==='TheScore') {
       if(!stopped&&probe.tabs?.some(t=>/^Popular$/i.test(t)))await step('Popular');
       if(!stopped&&!tsMainOnly) {
@@ -1092,15 +1146,7 @@ async function tryNflCaptureV2(tabId,book) {
     } else {
       for(const tab of nflTabsForTypes(book,targets)){
         if(stopped)break;
-        if(book!=='FanDuel'){await step(tab);continue;}
-        const processed=new Set();
-        for(let batch=0;batch<20&&!stopped;batch++) {
-          const r=await step(tab,[...processed]);
-          if(!r||!r.remaining)break;
-          const before=processed.size;for(const label of r.processedLabels||[])processed.add(label);
-          if(processed.size===before){chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,tab,stopped:'No progress in bounded drawer batch'}));break;}
-          if(batch===19)chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,tab,stopped:'Drawer batch cap reached; capture is partial'}));
-        }
+        await batchedStep(tab);
       }
     }
     return {source:book,text:chunks.join('\n\n')};
