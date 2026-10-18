@@ -287,7 +287,7 @@ function createNflCaptureCore() {
     if(!el?.isConnected)return {reason:'detached'};
     for(let p=el;p;p=p.parentElement||p.getRootNode?.().host||null) {
       const css=getComputedStyle(p);
-      if(p.matches(excluded))return {reason:'excluded-region',node:p.tagName};
+      if(p.matches(excluded))return {reason:'excluded-region',node:p.tagName,className:String(p.className||'').slice(0,200),testId:(p.getAttribute('data-testid')||'').slice(0,120)};
       if(p.hidden||p.getAttribute('aria-hidden')==='true')return {reason:'hidden-ancestor',node:p.tagName};
       if(css.display==='none'||css.visibility==='hidden'||css.visibility==='collapse'||css.contentVisibility==='hidden'||parseFloat(css.opacity)===0)
         return {reason:'css-hidden-ancestor',node:p.tagName,display:css.display,visibility:css.visibility,opacity:css.opacity};
@@ -309,7 +309,18 @@ function createNflCaptureCore() {
     const r=el.getBoundingClientRect(),s=getComputedStyle(el);
     return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!el.closest('[hidden], [aria-hidden="true"]');
   };
-  const excluded='aside, footer, [data-testid*="betslip" i], [data-testid*="bet-slip" i], [class*="betslip" i], [class*="bet-slip" i], [data-testid*="social" i], [class*="social-feed" i], #ev-parlay-extension-toast';
+  // DK's event SECTION can carry layout modifiers mentioning a betslip/social
+  // feature. Substring matching classifies that entire event as a betslip.
+  // Match component names at token boundaries, not arbitrary ancestor substrings.
+  const dkExcludedComponents=['betslip','bet-slip','sportsbook-betslip','social-feed'];
+  const dkExcluded=dkExcludedComponents.flatMap(name=>[
+    `[data-testid="${name}" i]`, `[data-testid^="${name}-" i]`, `[data-testid^="${name}__" i]`,
+    `[class~="${name}" i]`, `[class^="${name}-" i]`, `[class*=" ${name}-" i]`,
+    `[class^="${name}__" i]`, `[class*=" ${name}__" i]`
+  ]).join(', ');
+  const excluded=book==='DraftKings'
+    ? `aside, footer, [role="dialog"], ${dkExcluded}, #ev-parlay-extension-toast`
+    : 'aside, footer, [data-testid*="betslip" i], [data-testid*="bet-slip" i], [class*="betslip" i], [class*="bet-slip" i], [data-testid*="social" i], [class*="social-feed" i], #ev-parlay-extension-toast';
   const raw = ()=>String((document.querySelector('main')||document.body)?.innerText||'');
   const url=()=>new URL(location.href);
   const startUrl=url();
@@ -385,7 +396,7 @@ function createNflCaptureCore() {
     const slugs = {'popular':'popular','td scorers':'td-scorers','passing':'passing',
       'receiving':'receiving','rushing':'rushing','game lines':'game-lines'};
     const report = {version:'20261013_1',strategy:'observed-event-tablist',visibilityStrategy:'legacy-rendered-exact-label',
-      headerNavigationVersion:'20261018_1',matchedAnchors:0,acceptedTabs:[],rejected:{},rejectionSamples:[],openShadowRoots:0,scanLimited:false};
+      headerNavigationVersion:'20261018_2',matchedAnchors:0,acceptedTabs:[],rejected:{},rejectionSamples:[],openShadowRoots:0,scanLimited:false};
     const reject = reason => {report.rejected[reason]=(report.rejected[reason]||0)+1;};
     // Include open component roots, but never cross frames or closed roots.
     // Limits keep the discovery bounded on pages with long social/market feeds.
@@ -811,7 +822,7 @@ function createNflCaptureCore() {
 
 // NFL navigation uses the existing multipass architecture: the extension worker
 // owns progress/waits; every capture runs in a fresh document injection.
-const NFL_NAVIGATION_VERSION='20261012_4';
+const NFL_NAVIGATION_VERSION='20261018_2';
 const NFL_NAV_CHECKPOINT_TTL=15*60*1000;
 function nflNavCheckpoint(action,base,value) {
   if(location.origin!==base.origin||location.pathname!==base.path)return null;
@@ -867,7 +878,7 @@ async function tryNflNavigationCapture(tabId,book) {
   nflV2ActiveRuns.add(tabId);
   const chunks=[`NFL_CAPTURE_VERSION: 20261012_1\nNFL_CAPTURE_BOOK: ${book}\nSport: NFL\nNFL_NAVIGATION_VERSION: ${NFL_NAVIGATION_VERSION}`];
   if(book==='FanDuel')chunks.push('FANDUEL_NFL_LAYOUT_VERSION: 20261012_2\nFANDUEL_NFL_HEADER_VERSION: 20261012_3');
-  if(book==='DraftKings')chunks.push('DRAFTKINGS_NFL_TABS_VERSION: 20261013_1\nDRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1');
+  if(book==='DraftKings')chunks.push('DRAFTKINGS_NFL_TABS_VERSION: 20261013_1\nDRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_2');
   const diag=details=>chunks.push('NFL_CAPTURE_DIAGNOSTICS: '+JSON.stringify({book,...details}));
   const response=()=>({source:book,text:chunks.join('\n\n')});
   try {

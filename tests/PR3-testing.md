@@ -1,6 +1,21 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.0** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.1** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## Extension-only follow-up after 5a831b2
+
+If the clean test checkout already ran the 5a831b2 app build, do **not** reinstall dependencies, rebuild or restart the app for this follow-up. In that test checkout only:
+
+```powershell
+$trackedChanges = git status --porcelain --untracked-files=no
+if ($trackedChanges) { throw 'Preserve tracked test-checkout edits before updating.' }
+git fetch origin codex/multisport-darkhorse-import
+if ($LASTEXITCODE -ne 0) { throw 'Fetch failed.' }
+git switch --detach origin/codex/multisport-darkhorse-import
+if ($LASTEXITCODE -ne 0) { throw 'Checkout failed.' }
+```
+
+Reload the test copy in chrome://extensions and confirm **1.4.1**, then refresh the DraftKings event tab and capture once. New text identifies `DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_2`. Old incomplete checkpoints are ignored automatically; do not clear browser/app storage. If it still fails, the new Download TXT includes the rejected ancestor's bounded class/test-id diagnostics. The existing header screenshot and earlier captures are already recorded.
 
 ## Separate checkout
 
@@ -27,7 +42,7 @@ If port 3000 is occupied, resolve which app is running; do not accept another po
 
 ## Separate browser profile
 
-Create a separate Chrome or Edge profile for this test. In that profile only, open `chrome://extensions` or `edge://extensions`, enable Developer mode, choose **Load unpacked**, and select the new worktree's `ev-parlay-extension` directory. Confirm **EV Parlay Extractor 1.4.0**. Keep only this copy enabled in the test profile. Leave the original profile's extension and app storage intact.
+Create a separate Chrome or Edge profile for this test. In that profile only, open `chrome://extensions` or `edge://extensions`, enable Developer mode, choose **Load unpacked**, and select the new worktree's `ev-parlay-extension` directory. Confirm **EV Parlay Extractor 1.4.1**. Keep only this copy enabled in the test profile. Leave the original profile's extension and app storage intact.
 
 Open the test app URL above in that profile. Confirm its import controls include **Odds table**. If sportsbook access is needed, sign in yourself in the test profile; do not share credentials or copy account cookies into tooling. Using the extractor only reads visible markets and navigates market controls; do not click odds selections or place bets during validation.
 
@@ -43,7 +58,7 @@ Do not merge, deploy, or copy this test checkout over the original repair direct
 
 ## October 18: update the clean Windows test worktree
 
-Latest NFL follow-up adds `DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1` while retaining manifest 1.4.0. Once this update is checked out, reload the extension and refresh the sportsbook tab. Rebuild/restart a production app server for the Pinnacle decimal parser fix; dependencies are unchanged from dc6ef39. The existing Pinnacle TXT should now import 136 rows. FanDuel's supplied capture has 68 rows and is incomplete; theScore's supplied capture has 449 rows. BetMGM's old diagnostics-only capture has no recoverable prices. Updated FanDuel/BetMGM captures include more precise context-stop diagnostics; live completion is still pending. See the audit's October 18 batch section before another test.
+The earlier 5a831b2 app/parser update added `DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1` while retaining manifest 1.4.0. Once this update is checked out, reload the extension and refresh the sportsbook tab. Rebuild/restart a production app server for the Pinnacle decimal parser fix; dependencies are unchanged from dc6ef39. The existing Pinnacle TXT should now import 136 rows. FanDuel's supplied capture has 68 rows and is incomplete; theScore's supplied capture has 449 rows. BetMGM's old diagnostics-only capture has no recoverable prices. Updated FanDuel/BetMGM captures include more precise context-stop diagnostics; live completion is still pending. See the audit's October 18 batch section before another test.
 
 Use this only in the detached **test** checkout, not the original modified repository. Logs saved there can remain untracked. Stop if tracked files have changed; do not reset or discard them.
 
@@ -70,4 +85,4 @@ The revised lockfile uses Next.js and eslint-config-next **16.4.2**, with compat
 
 Installation deliberately skips lifecycle scripts. Do not broadly approve pending scripts for sharp, tesseract.js or unrs-resolver. Tests/build determine whether a required capability is actually missing; report any specific failure before approving a script. OCR execution and live browser capture are separate from parser/build validation.
 
-After all commands succeed, start only the isolated test app with `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`, then use the separate browser profile and extension 1.4.0 instructions above. This does not update the original dirty checkout or merge PR #3.
+After all commands succeed, start only the isolated test app with `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`, then use the separate browser profile and extension 1.4.1 instructions above. This does not update the original dirty checkout or merge PR #3.

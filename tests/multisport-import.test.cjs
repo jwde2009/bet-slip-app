@@ -364,7 +364,7 @@ test('DK NFL coordinator activates the exact control instead of reloading its an
   assert.equal(updates,0);
   assert.deepEqual(plain(activations),['GAME LINES','TD SCORERS','PASSING','RECEIVING','RUSHING']);
   assert.match(result.text,/"complete":true/);
-  assert.match(result.text,/DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1/);
+  assert.match(result.text,/DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_2/);
 });
 
 test('Live Pinnacle NFL event imports 130 decimal-priced props and six full-game lines', async () => {
@@ -454,4 +454,49 @@ test('FanDuel and BetMGM context stops report the failing header instead of the 
     assert.equal(result.records.length,0);
     dom.window.close();
   }
+});
+
+test('DK SECTION layout modifiers do not exclude event tabs, while betslips and outcomes remain excluded', async () => {
+  const {JSDOM}=require('jsdom');
+  // Capture proves SECTION exclusion, not its exact attributes. These are
+  // synthetic component/layout names exercising the overbroad substring rule.
+  const labels=['POPULAR','TD SCORERS','PASSING','RECEIVING','RUSHING','GAME LINES'];
+  const dom=new JSDOM(`<main><pre>Sportsbook / Football Odds / NFL Odds / ATL Falcons @ NO Saints Odds\nATL Falcons\nStarts In:\n01:00:00\nNO Saints\nOdds</pre><section class="sportsbook-layout--with-betslip" data-testid="event-social-layout"><div role="tablist" class="tab-switcher-tabs">${labels.map(l=>`<a role="tab" data-testid="tab-switcher-tab-inner" aria-controls="panel" aria-selected="${l==='POPULAR'}" href="?category=odds&subcategory=${l.toLowerCase().replaceAll(' ','-')}">${l}</a>`).join('')}</div><div id="panel"></div></section></main>`,{url:'https://sportsbook.draftkings.com/event/atl-no/123?category=odds&subcategory=popular'});
+  const w=dom.window;
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});
+  w.HTMLElement.prototype.scrollIntoView=()=>{};
+  const section=w.document.querySelector('section');
+  const anchors=[...section.querySelectorAll('a')];let clicks=0;
+  for(const a of anchors)a.onclick=e=>{e.preventDefault();clicks++;anchors.forEach(t=>t.setAttribute('aria-selected',String(t===a)));w.history.replaceState({},'',a.href);};
+  const ctx=extensionContext({window:w,document:w.document,location:w.location,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})});
+  assert.deepEqual(plain((await ctx.nflDetailPageStep('DraftKings',{mode:'probe'})).tabs),labels);
+  await ctx.nflDetailPageStep('DraftKings',{mode:'activate-tab',tab:'PASSING'});
+  await new Promise(r=>setTimeout(r,150));assert.equal(clicks,1);
+  assert.equal((await ctx.nflDetailPageStep('DraftKings',{mode:'tab-state',tab:'PASSING'})).ready,true);
+  for(const className of ['betslip','layout betslip-container','bet-slip__content','sportsbook-betslip__body','social-feed']) {
+    section.className=className;
+    const result=await ctx.nflDetailPageStep('DraftKings',{mode:'probe'});
+    assert.equal(result.tabs.length,0,className);
+    assert.equal(result.diagnostics.tabDiscovery.rejected['excluded-region'],6);
+    assert.equal(result.diagnostics.tabDiscovery.rejectionSamples[0].className,className);
+  }
+  section.className='sportsbook-layout--with-betslip';section.dataset.testid='betslip-container';
+  assert.equal((await ctx.nflDetailPageStep('DraftKings',{mode:'probe'})).tabs.length,0);
+  section.dataset.testid='event-social-layout';
+  anchors.forEach(a=>a.className='outcome-selection');
+  assert.equal((await ctx.nflDetailPageStep('DraftKings',{mode:'probe'})).tabs.length,0);
+  assert.equal(clicks,1);dom.window.close();
+});
+
+test('DK latest failed capture proves SECTION exclusion and old resume checkpoints are invalidated', () => {
+  const raw=read('tests/fixtures/draftkings-nfl-excluded-section-20261018.txt');
+  const diagnostics=raw.split(/\r?\n/).filter(l=>l.startsWith('NFL_CAPTURE_DIAGNOSTICS:')).map(l=>JSON.parse(l.slice(25)));
+  assert.equal(diagnostics[0].tabDiscovery.rejected['excluded-region'],19);
+  assert.ok(diagnostics[0].tabDiscovery.rejectionSamples.every(s=>s.ancestor==='SECTION'));
+  const ctx=extensionContext(),base={book:'DraftKings',event:nflEvent,origin:'https://sportsbook.draftkings.com',path:'/event/123'};
+  const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
+  assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
+  assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.1');
 });

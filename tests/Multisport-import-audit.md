@@ -31,7 +31,7 @@ The normalized CSV/TSV fallback is tested for all **six books × three leagues**
 - NFL stream tests cover DK/FD/BetMGM/theScore, incomplete/conflicting prices, wrong book/event/period, malformed records, latest snapshots and theScore mixed legacy props.
 - NHL puck-line matching now retains each selection's signed line, following the already-tested NFL/MLB handling. Canonical markets distinguish periods and optional explicit event starts.
 - `npm run test:parsers` now runs every regression test; it previously omitted the NFL player-prop suite locally. CI also checks both new extension modules.
-- Extension version is 1.4.0; recovered repair markers remain intact.
+- Extension version is 1.4.1; recovered repair markers remain intact.
 
 ## Manual odds-table import
 
@@ -59,9 +59,9 @@ Minimum next input: a provider-supported export/API or confirmation of permissio
 
 ## Validation and remaining work
 
-Baseline: 102 passing tests. This branch: 175 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
+Baseline: 102 passing tests. This branch: 177 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
 
-No live browser session for these books was available in the saved coding environment, ; live evidence is supplied by John from his separate test checkout. Completing the goal requires current extension TXT captures or an authorized live browser session for the uncovered matrix cells, starting with Caesars MLB/NHL/NFL, FanDuel/BetMGM MLB and NHL, and a DraftKings NFL 1.4.0 diagnostic run. Existing supplied tab HTML and the Oct 13 failed capture were already used; do not request them again. No bets or account/payment changes were made. Nothing has been merged or deployed.
+No live browser session for these books was available in the saved coding environment; live evidence is supplied by John from his separate test checkout. Completing the goal requires current extension TXT captures or an authorized live browser session for the uncovered matrix cells, starting with Caesars MLB/NHL/NFL, FanDuel/BetMGM MLB and NHL, and a DraftKings NFL 1.4.1 diagnostic run. Existing supplied tab HTML and the Oct 13 failed capture were already used; do not request them again. No bets or account/payment changes were made. Nothing has been merged or deployed.
 
 
 ## Conservative parser review follow-up
@@ -84,7 +84,7 @@ Tests replay the actual Andrew Vaughn bases (1.645/2.230) and Robert Gasser stri
 
 Remaining browser gaps from the supplied navigation notes: FanDuel MLB, BetMGM MLB, Caesars NFL props and optional DraftKings NFL diagnostics returned “Site Unavailable / Unable to access this site” after one reload. Cause is undetermined; do not label these as login, geography or bot restrictions. No additional attempts were made here. An accessible authorized browser session or representative permitted captures are still needed for those paths. Pinnacle's implemented collector needs one live extension run to confirm full-page coverage and latency beyond these representative panels. Dark Horse retains its separately documented provider-permission/sample blocker.
 
-[Safe PR #3 setup](PR3-testing.md) remains extension 1.4.0 in a separate detached worktree and browser profile, using port 3000 and preserving local October 13 repairs.
+[Safe PR #3 setup](PR3-testing.md) uses extension 1.4.1 in a separate detached worktree and browser profile, using port 3000 and preserving local October 13 repairs.
 
 Focused follow-up: tracking query strings now preserve the same MLB event and original source URL. Event-path/ID changes still abort capture. CSS-only hidden outcomes, ancestors and price spans are excluded using computed display/visibility, alongside hidden/aria-hidden checks. Regressions cover query-only navigation, a changed event ID, stylesheet hiding and a hidden stale price span. The setup still fetches the latest remote draft before creating a separate worktree. Live validation remains pending.
 
@@ -99,7 +99,7 @@ Compared the existing NBA/WNBA `getDraftKingsClickableByExactText`, `isElementVi
 
 The old `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` marker is retained; new captures also contain `DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_1`. Regression tests retain the failed live capture, exercise rendered-label/boxless anchors and hidden ancestors, and verify the full NFL coordinator visits approved controls without URL reloads. These tests do not establish that the revised extension has succeeded in John's live browser.
 
-After fetching the updated branch into the clean test worktree, reload EV Parlay Extractor at chrome://extensions and refresh the sportsbook tab. Extension manifest remains 1.4.0; use the new capture marker to distinguish this repair. The combined follow-up also changes the Pinnacle app parser, so rebuild/restart a production server (or let the dev server reload). Dependencies are unchanged from dc6ef39; no new install is needed. Preserve the original modified checkout.
+After fetching the updated branch into the clean test worktree, reload EV Parlay Extractor at chrome://extensions and refresh the sportsbook tab. At 5a831b2 the manifest remained 1.4.0; the later extension-only follow-up below bumps it to 1.4.1. The combined follow-up also changes the Pinnacle app parser, so rebuild/restart a production server (or let the dev server reload). Dependencies are unchanged from dc6ef39; no new install is needed. Preserve the original modified checkout.
 
 ## October 18 live NFL batch: Pinnacle, FanDuel, BetMGM, theScore
 
@@ -113,3 +113,12 @@ All five supplied text captures are stored in `tests/fixtures/*20261018.txt`, in
 | theScore NFL | Replays to 449 unique rows / 15 markets, matching screenshot total; all four prop tabs visited. | Add fixture assertions for deduplication, latest prices, full-game identity and ladder thresholds. Collector/parser behavior unchanged. This does not verify every quoted cell against the live website or resolve abbreviated player-name matching across books. |
 
 Tests cover exact live text replays, LF/CRLF Pinnacle data, invalid decimal/locked cells, wrong units/lines, footer/event boundaries, safe context stops and BetMGM batch continuation. Basketball code and the shared embedded NFL parsing core are unchanged. FanDuel/BetMGM capture completion remains unverified; do not label all six books fully working. Dark Horse remains blocked on a permitted export/sample as documented above.
+
+
+## DraftKings SECTION exclusion follow-up — extension 1.4.1
+
+Full 23-line capture `libfile_1e3ba5274b8081918e9ee0bc2b2490ae` (fixture `draftkings-nfl-excluded-section-20261018.txt`) proves revision 20261018_1 loaded: all 19 anchors were excluded because an ancestor SECTION matched the region filter. It resumed an incomplete run with no completed tabs. The exact class/test-id was not recorded, so synthetic layout-modifier tests do not claim to reconstruct those unknown attributes. The supplied header screenshot's Library extraction confirms TD Scorers, Passing, Receiving, Rushing, Game Lines and 1st Quarter Props; no new labels are needed.
+
+DraftKings-only region exclusions now match named betslip/social-feed components at token boundaries rather than arbitrary substring mentions on layout ancestors. Aside/footer/dialog regions, hidden ancestors, outcome/selection controls, exact event-tab peer groups, allowed categories and same-event destinations remain guarded. New rejection samples include bounded class/test-id attributes. Regression tests activate a passing tab inside a SECTION with betslip/social layout modifiers and reject real named betslip containers and outcome controls. Live browser success is still pending.
+
+Visible manifest is 1.4.1; header/navigation revision is 20261018_2. Old navigation checkpoints fail the revision check and are replaced by fresh progress without deleting app data or browser storage. For an app already running 5a831b2, update only the clean checkout, reload the extension and refresh the sportsbook tab: no dependency install, app rebuild or server restart. See the extension-only commands at the top of PR3-testing.md.
