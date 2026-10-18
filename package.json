@@ -10,7 +10,7 @@
     "test:parsers": "node --experimental-vm-modules --test tests/*.test.cjs"
   },
   "dependencies": {
-    "next": "16.2.2",
+    "next": "16.4.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tesseract.js": "^7.0.0"
@@ -18,7 +18,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
-    "eslint-config-next": "16.2.2",
+    "eslint-config-next": "16.4.2",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4"
   }

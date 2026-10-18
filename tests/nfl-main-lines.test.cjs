@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
-const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+// Canonicalize test text before LF-based mutations; production inputs are tested below in both encodings.
+const read = file => fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n?/g, '\n');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 async function moduleExports(relative) {
@@ -660,3 +661,26 @@ test('All four supplied NFL slates normalize and calculate together with FanDuel
   assert.ok(result.parlays.length > 0);
   assert.ok(result.parlays.every(parlay => parlay.legs.every(leg => Number.isFinite(leg.oddsDecimal))));
 });
+
+
+for (const [book, fixture, header] of [
+  ['Pinnacle', pinSlate, 'SPREAD\nMONEYLINE\nTOTAL'],
+  ['BetMGM', detail, 'Game lines\nGame lines\n1st half\n1st quarter'],
+  ['FanDuel', fdSlate, 'SPREAD\nMONEY\nTOTAL'],
+  ['DraftKings', dkSlate, 'Spread\n\nTotal\n\nMoneyline'],
+]) {
+  test(`${book} LF and CRLF inputs preserve full-game prices and reject actual partial-period mutations`, async () => {
+    const parse = await parser(book);
+    const full = parse(fixture);
+    assert.ok(full.length > 0);
+    // Guard the setup itself: a no-op replacement must fail before parsing.
+    const partial = book === 'Pinnacle'
+      ? fixture.replace('NFL\n', 'NFL\n1st Half\n')
+      : fixture.replaceAll(header, book === 'BetMGM' ? '1st half' : `1st Half\n${header}`);
+    assert.notEqual(partial, fixture, 'partial-period mutation must change the fixture');
+    for (const encode of [text => text, text => text.replace(/\n/g, '\r\n')]) {
+      assert.deepEqual(parse(encode(fixture)), full);
+      assert.deepEqual(parse(encode(partial)), []);
+    }
+  });
+}

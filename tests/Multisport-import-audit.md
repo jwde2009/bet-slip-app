@@ -59,7 +59,7 @@ Minimum next input: a provider-supported export/API or confirmation of permissio
 
 ## Validation and remaining work
 
-Baseline: 102 passing tests. This branch: 161 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
+Baseline: 102 passing tests. This branch: 165 passing tests; all extension JS syntax checks and targeted lint pass. The ordinary production build cannot download Geist/Geist Mono from Google Fonts in this environment. A production build with **only font responses mocked** succeeds; that verifies application compilation/static generation but not external font retrieval. CI retains the normal unmocked build.
 
 No live browser session for these books was available in the saved coding environment, and the Surface is offline. Completing the goal requires current extension TXT captures or an authorized live browser session for the uncovered matrix cells, starting with Caesars MLB/NHL/NFL, FanDuel/BetMGM MLB and NHL, and a DraftKings NFL 1.4.0 diagnostic run. Existing supplied tab HTML and the Oct 13 failed capture were already used; do not request them again. No bets or account/payment changes were made. Nothing has been merged or deployed.
 
@@ -87,3 +87,5 @@ Remaining browser gaps from the supplied navigation notes: FanDuel MLB, BetMGM M
 [Safe PR #3 setup](PR3-testing.md) remains extension 1.4.0 in a separate detached worktree and browser profile, using port 3000 and preserving local October 13 repairs.
 
 Focused follow-up: tracking query strings now preserve the same MLB event and original source URL. Event-path/ID changes still abort capture. CSS-only hidden outcomes, ancestors and price spans are excluded using computed display/visibility, alongside hidden/aria-hidden checks. Regressions cover query-only navigation, a changed event ID, stylesheet hiding and a hidden stale price span. The setup still fetches the latest remote draft before creating a separate worktree. Live validation remains pending.
+
+October 18: the complete Windows log revealed 11 CRLF-sensitive test-fixture mutation failures. All were reproduced and fixed without changing production parser guards. Direct LF/CRLF parser regressions and native Windows CI were added. Next.js/eslint-config-next are now 16.4.2; production audit is zero, full audit retains five high development-only braces-chain findings. See [Windows/security review](Windows-test-security-review.md) and the updated safe worktree commands.

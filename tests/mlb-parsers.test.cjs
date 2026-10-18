@@ -5,7 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
-const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+// Fixture mutations use canonical LF on every checkout; do not let CRLF make them no-ops.
+const read = file => fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n?/g, '\n');
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const plain = value => JSON.parse(JSON.stringify(value));
 

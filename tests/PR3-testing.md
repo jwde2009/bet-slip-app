@@ -11,7 +11,7 @@ git status --short
 git fetch origin codex/multisport-darkhorse-import
 git worktree add --detach ../bet-slip-app-pr3-test origin/codex/multisport-darkhorse-import
 cd ../bet-slip-app-pr3-test
-npm.cmd ci
+npm.cmd ci --ignore-scripts
 npm.cmd run test:parsers
 ```
 
@@ -40,3 +40,32 @@ Open the test app URL above in that profile. Confirm its import controls include
 - Dark Horse is not an installed capture integration. The manual CSV/TSV importer requires the documented schema and a permitted data source; it is not proof of compatibility with a provider export.
 
 Do not merge, deploy, or copy this test checkout over the original repair directory as part of this test.
+
+## October 18: update the clean Windows test worktree
+
+Use this only in the detached **test** checkout, not the original modified repository. Logs saved there can remain untracked. Stop if tracked files have changed; do not reset or discard them.
+
+```powershell
+Set-Location C:\Users\jwde2\Documents\bet-slip-app-import-test
+$trackedChanges = git status --porcelain --untracked-files=no
+if ($trackedChanges) { throw 'Tracked test-worktree edits exist; preserve them before updating.' }
+git fetch origin codex/multisport-darkhorse-import
+if ($LASTEXITCODE -ne 0) { throw 'Fetch failed.' }
+git switch --detach origin/codex/multisport-darkhorse-import
+if ($LASTEXITCODE -ne 0) { throw 'Checkout failed.' }
+npm.cmd ci --ignore-scripts
+if ($LASTEXITCODE -ne 0) { throw 'Install failed.' }
+npm.cmd run test:parsers *> parser-test-results.txt
+if ($LASTEXITCODE -ne 0) { Get-Content parser-test-results.txt -Tail 80; throw 'Tests failed; keep the complete log.' }
+Get-Content parser-test-results.txt -Tail 15
+npm.cmd audit --omit=dev
+if ($LASTEXITCODE -ne 0) { throw 'Production dependency audit needs review.' }
+npm.cmd run build -- --webpack
+if ($LASTEXITCODE -ne 0) { throw 'Build failed; keep the output before starting the app.' }
+```
+
+The revised lockfile uses Next.js and eslint-config-next **16.4.2**, with compatible patched transitive dependencies. Do not run `audit fix --force`: its suggested eslint-config-next 14 downgrade is not this repair. Full `npm audit` still reports five high findings in the same development-only, unpatched braces dependency chain; the production-only audit is clean as of October 18. See [the investigation and advisory links](Windows-test-security-review.md).
+
+Installation deliberately skips lifecycle scripts. Do not broadly approve pending scripts for sharp, tesseract.js or unrs-resolver. Tests/build determine whether a required capability is actually missing; report any specific failure before approving a script. OCR execution and live browser capture are separate from parser/build validation.
+
+After all commands succeed, start only the isolated test app with `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`, then use the separate browser profile and extension 1.4.0 instructions above. This does not update the original dirty checkout or merge PR #3.
