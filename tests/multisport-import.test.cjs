@@ -587,7 +587,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.4');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.5');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -640,6 +640,49 @@ function dkSuppliedDrawer() {
   result.w.history.replaceState({},'','/event/sf-was/test-fixture?category=odds&subcategory=passing');
   return result;
 }
+
+test('DK demand uses verified canonical NFL identity despite abbreviated page, stale marker and no NFL URL/title',async()=>{
+  const {w,ctx}=dkSuppliedDrawer();
+  w.document.title='49ers vs Commanders - DraftKings';
+  ctx.sessionStorage=w.sessionStorage;
+  vm.runInContext(read('ev-parlay-extension/captureDemand.js'),ctx);
+  ctx.safeExecuteScript=async({func,args})=>[{result:await func(...args)}];
+  const event='San Francisco 49ers @ Washington Commanders';
+  const snapshot={books:[{bookmaker:'DraftKings',sports:[{sport:'NFL',events:[
+    {eventName:event,missingExpectedMarkets:[{marketType:'player_passing_yards'}]},
+    {eventName:'Dallas Cowboys @ Green Bay Packers',missingExpectedMarkets:[{marketType:'player_receptions'}]}
+  ]}]}]};
+  const generic=ctx.captureDemandProbe('DraftKings',snapshot);
+  assert.equal(generic.scope,null); // Old path creates initial marker, then blocks.
+  const second=ctx.captureDemandProbe('DraftKings',snapshot);assert.equal(second.prior.initial,true);
+  let plan=await ctx.prepareCaptureDemand(1,'DraftKings',snapshot);
+  assert.equal(plan.mode,'missing');assert.equal(plan.event,event);
+  assert.deepEqual(plain(plan.targets),['player_passing_yards']);
+  // A different old page marker never supplies the chosen event identity.
+  w.sessionStorage.setItem('EV_CAPTURE_DEMAND::'+generic.identity,JSON.stringify({book:'DraftKings',sport:'NFL',event:'Dallas Cowboys @ Green Bay Packers'}));
+  plan=await ctx.prepareCaptureDemand(1,'DraftKings',snapshot);
+  assert.equal(plan.event,event);assert.equal(plan.mode,'missing');
+  snapshot.books[0].sports[0].events[0].missingExpectedMarkets=[];
+  assert.equal((await ctx.prepareCaptureDemand(1,'DraftKings',snapshot)).mode,'complete');
+  assert.equal((await ctx.prepareCaptureDemand(1,'DraftKings',snapshot,{refresh:true})).mode,'refresh');
+});
+
+test('Demand rejects failed/native-changing identity and genuinely ambiguous generic pages without broad retry',async()=>{
+  let selected={recognized:true,event:'',pregame:false,reason:'Conflicting selected-game headers'};
+  const generic={scope:null,ambiguous:true,prior:{initial:true},identity:'https://sports.example/event/1'};
+  const ctx=targetingContext({safeExecuteScript:async({func})=>[{result:func.name==='captureDemandProbe'?{...generic}:selected}]});
+  let plan=await ctx.prepareCaptureDemand(1,'DraftKings',null);
+  assert.equal(plan.mode,'unresolved');assert.match(plan.reason,/Conflicting/);
+  selected={recognized:true,event:nflEvent,pregame:true,origin:'https://sports.example',path:'/event/2'};
+  assert.equal((await ctx.prepareCaptureDemand(1,'DraftKings',null)).mode,'unresolved');
+  selected={recognized:false};
+  assert.equal((await ctx.prepareCaptureDemand(1,'DraftKings',null)).mode,'unresolved');
+  assert.equal((await ctx.prepareCaptureDemand(1,'DraftKings',null,{refresh:true})).mode,'refresh');
+  const source=read('ev-parlay-extension/background.js');
+  assert.match(source,/if\(demand\?\.mode==='unresolved'\|\|/);
+  assert.match(source,/title:'Refresh all markets for this event',contexts:\['action'\]/);
+  assert.match(source,/info\.menuItemId==='ev-refresh-all'\)runOddsCapture\(tab,\{refresh:true\}\)/);
+});
 
 test('Supplied DK CMS market extracts exact four passing quotes without animated stats or inherited event',async()=>{
   const {w,ctx}=dkSuppliedDrawer();let clicks=0;

@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.4** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.5** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## Targeted event matching (1.4.5)
+
+The generic preflight searched page text for the complete coverage event label. DK abbreviated team labels do not equal canonical imported names. A prior attempt leaves a sportsbook sessionStorage marker, so subsequent normal attempts could refuse even on the correct event page; restarting the app cannot remove that marker. A URL/title NFL fallback also failed when neither contained NFL. Version 1.4.5 uses the existing read-only NFL collector's verified breadcrumb/hero identity before matching coverage, without relying on title keywords or old session state. Genuine unresolved/changed events stop; no broad retry is substituted. The app snapshot contains all coverage events, not a separately selected event control, and its schema is unchanged.
+
+This is extension-only from app build 95b26d6: update only the clean test checkout and reload extension **1.4.5**. No app rebuild, storage clearing or install is required. Normal click should resume the correct event's missing work. If refusal persists, provide only the active sportsbook event URL, the page's displayed matchup, and the corresponding app coverage event label (plus installed extension version); no new market HTML is needed.
+
+For an intentional full capture, activate the sportsbook event tab, **right-click the EV Parlay Extractor toolbar icon → Refresh all markets for this event**. This is the extension action context menu, not an app control or popup. Pin the icon from the browser Extensions menu if needed. If the item is absent, reload the extension at chrome://extensions or edge://extensions. It does not clear imported rows. This option remains explicit and is not the normal targeted retry.
 
 ## October 19: supplied CMS drawer repair (1.4.4)
 

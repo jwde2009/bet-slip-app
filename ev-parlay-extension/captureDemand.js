@@ -38,6 +38,19 @@ async function prepareCaptureDemand(tabId,book,snapshot,options={}) {
   const probe=result?.[0]?.result;
   if(probe?.outOfScope)return null;
   if(!probe)return {book,mode:'unresolved',targets:[],reason:'Could not establish the selected event for targeting.'};
+  // NFL collectors already resolve the selected breadcrumb/hero and canonical
+  // teams. Use that same read-only identity before the generic literal match.
+  // DK renders "SF 49ers @ WAS Commanders", while imported coverage uses full
+  // names; event URLs/titles also need not contain the word NFL.
+  if(typeof nflDetailPageStep==='function'&&['DraftKings','FanDuel','BetMGM','TheScore'].includes(book)) {
+    const response=await safeExecuteScript({tabId,func:nflDetailPageStep,args:[book,{mode:'probe'}]});
+    const selected=response?.[0]?.result;
+    if(selected?.recognized) {
+      if(!selected.event||!selected.pregame||selected.origin+selected.path!==probe.identity)
+        return {book,sport:'NFL',mode:'unresolved',targets:[],reason:selected.reason||selected.stopped||'Selected NFL event changed or could not be verified.'};
+      probe.scope={book,sport:'NFL',event:selected.event};probe.ambiguous=false;
+    }
+  }
   if(!options.refresh&&(probe.ambiguous||!probe.scope&&probe.prior))return {book,mode:'unresolved',targets:[],reason:'Selected event could not be matched uniquely. Open its event page, or explicitly refresh; no broad retry was started.'};
   const plan=probe.scope?resolveCaptureDemand(snapshot,probe.scope,options):{book,mode:options.refresh?'refresh':'initial',targets:[]};
   if(plan.loaded&&!plan.markedComplete&&!options.refresh&&Array.isArray(probe.pending)&&probe.pending.length) {
