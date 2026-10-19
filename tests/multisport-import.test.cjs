@@ -27,6 +27,64 @@ const coreFile = 'app/ev-parlay-lab/utils/parsers/nflCaptureCore.js';
 const routerFile = 'app/ev-parlay-lab/utils/parseOddsText.js';
 const tableFile = 'app/ev-parlay-lab/utils/parsers/parseOddsTable.js';
 
+test('BetMGM manual Players export currently reaches legacy parser with zero recoverable rows',async()=>{
+  const {parseOddsText}=await loadModule(routerFile);
+  const raw=read('tests/fixtures/betmgm-nfl-players-legacy-20261019.txt');
+  assert.match(raw,/BETMGM_AUTOPASS_1/);assert.doesNotMatch(raw,/NFL_CAPTURE_VERSION/);
+  const rows=plain(parseOddsText(raw,{sportsbook:'BetMGM'}));
+  assert.equal(rows.length,0);
+});
+
+test('BetMGM compact selected-game hero is recognized without URL/title NFL hints and rejects unsafe variants',async()=>{
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  const raw=read('tests/fixtures/betmgm-nfl-players-legacy-20261019.txt');
+  assert.equal(core.inspect(raw,'BetMGM').event,'Washington Commanders @ San Francisco 49ers');
+  assert.equal(core.inspect(raw,'BetMGM').pregame,true);
+  const hero='NFL (14)\nTomorrow\n7:15 PM\nESPN\nCommanders\n49ers\nPlayers';
+  for(const unsafe of [hero.replace('Tomorrow','Live'),hero.replace('Tomorrow','Final'),hero.replace('Tomorrow',''),hero.replace('49ers','Unknown Team'),hero.replace('Players','Some league listing'),hero.replace('Tomorrow','NBA\nTomorrow')])assert.notEqual(core.inspect(unsafe,'BetMGM')?.pregame,true,unsafe);
+});
+
+test('BetMGM actual anytime prices survive averages; first/multiple TD and defenses stay excluded',async()=>{
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  const raw=read('tests/fixtures/betmgm-nfl-players-legacy-20261019.txt');
+  const section=raw.slice(raw.indexOf('Anytime TD scorer'),raw.indexOf('Show Less'));
+  const qs=plain(core.parsePropText('Anytime TD scorer',section));
+  const expected=[['Christian McCaffrey',-275],['Mike Evans',-120],['George Kittle',100],['Rachaad White',110],['Stefon Diggs',225],['Jayden Daniels',230],['Terry McLaurin',230],['Brandin Cooks',260],['Austin Ekeler',290],['Brock Purdy',320],['Chig Okonkwo',320],['Jacob Cowing',320],['Kaelon Black',380],['Antonio Williams',425],['Treylon Burks',525],['Luke Farrell',900],['Jordan Watkins',1050],['Dyami Brown',1200],['John Bates',1300],['Ben Sinnott',1400],['Jordan James',2000],['Luke McCaffrey',2800]];
+  assert.deepEqual(qs.map(q=>[q.subject,q.odds]),expected);
+  assert.ok(qs.every(q=>q.marketType==='player_touchdowns'&&q.side==='Over'&&q.line===0.5&&q.single===true));
+  assert.equal(core.parsePropText('First TD scorer',section).length,0);
+  assert.equal(core.parsePropText('Player to score 2+ TDs',section).length,0);
+  const {parseOddsText}=await loadModule(routerFile);
+  const packet={book:'BetMGM',event:'Washington Commanders @ San Francisco 49ers',period:'full_game',title:'Anytime TD scorer',quotes:qs};
+  const rows=plain(parseOddsText('NFL_MARKET_V2: '+JSON.stringify(packet),{sportsbook:'BetMGM'}));
+  assert.equal(rows.length,22);assert.deepEqual(rows.map(r=>[r.playerName,r.oddsAmerican]),expected);
+});
+
+test('BetMGM compact hero reaches NFL probe and existing Players/ds-accordion capture without outcome clicks',async()=>{
+  const {JSDOM}=require('jsdom'),raw=read('tests/fixtures/betmgm-nfl-players-legacy-20261019.txt');
+  const section=raw.slice(raw.indexOf('Anytime TD scorer'),raw.indexOf('Show Less'));
+  // Actual supplied text and previously observed ds control shape; panel
+  // placement/layout is a harness, not newly supplied price-panel outerHTML.
+  const dom=new JSDOM('<main><pre id="hero"></pre><button role="tab" aria-selected="true">Players</button><button dsaccordiontoggle aria-expanded="false" aria-controls="prices"><span slot="title">Anytime TD scorer</span></button><div id="prices" hidden><pre></pre></div></main>',{url:'https://sports.betmgm.com/en/sports/events/commanders-49ers-123'});
+  const w=dom.window;w.document.title='Commanders vs 49ers';
+  w.document.getElementById('hero').textContent='NFL (14)\nTomorrow\n7:15 PM\nESPN\nCommanders\n49ers\nPlayers\n';
+  w.document.querySelector('#prices pre').textContent=section;
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});w.HTMLElement.prototype.scrollIntoView=()=>{};
+  let toggles=0,legacyCalls=0;const toggle=w.document.querySelector('[dsaccordiontoggle]');
+  toggle.onclick=()=>{toggles++;toggle.setAttribute('aria-expanded','true');w.document.getElementById('prices').hidden=false;};
+  const ctx=extensionContext({document:w.document,location:w.location,Node:w.Node,sessionStorage:w.sessionStorage,setTimeout:fn=>{fn();return 0;},getComputedStyle:e=>({display:e.hidden?'none':'block',visibility:'visible'}),
+    extractBetMgmMultiPassPayload:async()=>{legacyCalls++;return {text:'LEGACY'};},sleepBackground:async()=>{},safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>({books:[]}),
+    chrome:{tabs:{get:async()=>({url:w.location.href,title:w.document.title})},scripting:{executeScript:async({func,args})=>[{result:await func(...args)}]}}});
+  const probe=await ctx.nflDetailPageStep('BetMGM',{mode:'probe'});
+  assert.equal(probe.recognized,true);assert.equal(probe.pregame,true);assert.ok(probe.tabs.includes('Players'));
+  const result=await ctx.nflDetailPageStep('BetMGM',{captureOnly:true,tab:'Players',targetTypes:['player_touchdowns']});
+  assert.equal(result.records[0].quotes.length,22);assert.equal(toggles,1);
+  assert.equal(result.event,'Washington Commanders @ San Francisco 49ers');
+  const dispatched=await ctx.extractBetMgmMultiPassPayload(1);
+  assert.match(dispatched.text,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(dispatched.text,/BETMGM_AUTOPASS|LEGACY/);assert.equal(legacyCalls,0);
+});
+
 test('Live DK refresh retains 86 unique quotes in 14 markets and every captured prop tuple matches its player text',async()=>{
   const raw=read('tests/fixtures/draftkings-nfl-refresh-live-20261019.txt');
   const {parseOddsText}=await loadModule(routerFile);
@@ -783,7 +841,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.7');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.8');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{

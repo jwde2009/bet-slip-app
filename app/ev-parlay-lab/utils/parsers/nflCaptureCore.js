@@ -79,15 +79,23 @@ export function createNflCaptureCore() {
       return {recognized:true,event,pregame,reason,headerDiagnostics};
     }
     if(book==='BetMGM') {
-      const start=ls.findIndex(x=>/^(?:USA|United States)\s*\|\s*NFL$/i.test(x));
+      const start=ls.findIndex(x=>/^(?:(?:USA|United States)\s*\|\s*NFL|NFL\s*\(\d+\))$/i.test(x));
       if(start<0)return null;
+      const compact=/^NFL\s*\(/i.test(ls[start]);
+      if(compact&&ls.slice(start+1,start+16).some(s=>/^(?:NBA|WNBA|NHL|MLB|NCAAF|CFL)(?:\s*\(\d+\))?$/i.test(s)))return null;
       for(let i=start+1;i<Math.min(ls.length-1,start+16);i++) {
         const a=team(ls[i]),h=team(ls[i+1]);
         if(!a||!h||a===h)continue;
+        // The supplied compact hero has schedule, two adjacent team labels,
+        // then its event category. A league-count/sidebar label alone is not
+        // enough to identify a selected event or authorize player navigation.
+        if(compact&&!/^(?:Players|All|Spreads|Totals|Game lines)$/i.test(ls[i+2]||''))continue;
         const status=ls.slice(start+1,i);
-        const pregame=status.some(s=>upcoming.test(s)) && !status.some(s=>live.test(s));
+        const pregame=status.some(s=>upcoming.test(s)) && !status.some(s=>live.test(s)||/^(?:NBA|WNBA|NHL|MLB|NCAAF|CFL)(?:\s*\(\d+\))?$/i.test(s));
         return {recognized:true,event:`${a} @ ${h}`,pregame,reason:pregame?'':'No selected-game pregame header'};
       }
+      // A compact league-count label may also occur in global navigation.
+      if(compact)return null;
       return {recognized:true,event:'',pregame:false,reason:'No selected NFL matchup'};
     }
     return null;
@@ -242,6 +250,9 @@ export function createNflCaptureCore() {
       if(ls[i].toLowerCase()===clean(title).toLowerCase())continue;
       if(!d.name&&player(ls[i])) {active=player(ls[i]);continue;}
       if(!active)continue;
+      // BetMGM's observed anytime list places a numeric average between the
+      // player and Yes/price. It is metadata, never a threshold or an odd.
+      if(d.type==='player_touchdowns'&&/^Avg:$/i.test(ls[i])&&/^\d+(?:\.\d+)?$/.test(ls[i+1]||'')){i++;continue;}
       if(d.type==='player_touchdowns' && /^anytime/i.test(clean(title)) && /^Yes$/i.test(ls[i])) {
         const p=odds(ls[i+1]);if(p!==null)qs.push({...quote(d.type,active,'Over',0.5,p),single:true});i++;active=d.name;continue;
       }

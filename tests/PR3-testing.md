@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.7** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.8** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## BetMGM compact NFL header (1.4.8)
+
+Update straight to **1.4.8** if 1.4.7 has not yet been installed; it includes the deletion and normal-retry fixes below. Use only the clean test checkout's guarded fetch/switch steps, reload the extension, confirm1.4.8 and refresh the sportsbook tab. No app rebuild, install or storage clearing is required from95b26d6 for future NFL V2 imports.
+
+The supplied manual Players TXT ran through the legacy collector because its NFL (14) hero was not recognized by the old USA | NFL detector. The new detector handles the observed bounded event header; exact anytime text now yields22 player prices while excluding D/ST and first/multiple-TD selections. Other drawers in that file contain headings only. The original legacy TXT still parses to zero; the change applies to future structured captures, and live panel behavior remains unverified.
+
+One normal capture on the intended BetMGM pregame event with1.4.8 is the useful next test. Its export should start with NFL_CAPTURE_VERSION, not BETMGM_AUTOPASS. Keep that export if the corrected route still yields missing prices. Do not repeat the old version's broad run or resend the supplied header.
 
 ## Deletion and normal retry (1.4.7)
 
