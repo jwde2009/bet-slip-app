@@ -659,7 +659,8 @@ async function runOddsCapture(tab, options = {}) {
   const nativeNfl=(demand?.sport==='NFL'||/\bNFL\b|\/nfl(?:\/|-|$)/i.test(String(tab.title||'')+' '+String(tab.url||'')))&&['DraftKings','FanDuel','BetMGM','TheScore'].includes(demand?.book);
   if(demand?.mode==='unresolved'||demand?.mode==='complete'&&(!nativeNfl||demand.markedComplete)) {
     await setExtensionWorkingBadge(false);
-    await safeShowToast(sourceTabId,'No missing-market capture started',demand.reason||'No outstanding market demand. Use Refresh all markets for an intentional fresh-price run.',{loading:false,complete:true});
+    const title=demand.mode==='unresolved'?'Capture could not be verified':demand.markedComplete?'Event marked complete':'No missing markets requested';
+    await safeShowToast(sourceTabId,title,demand.reason||(demand.markedComplete?'This event is marked complete in the app. Unmark it or explicitly refresh.':'No outstanding market demand for this event. Use Refresh all markets for an intentional fresh-price run.'),{loading:false,complete:true});
     return;
   }
   const missingMarketsForBook = demand?.mode==='missing'
@@ -1077,7 +1078,7 @@ function showImportToast(title, message, details = {}) {
 function readEvLoadedCoverageSnapshotFromApp() {
   try {
     const parsed = JSON.parse(localStorage.getItem("EV_LOADED_COVERAGE_SNAPSHOT") || "null");
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.books)) return null;
     return parsed;
   } catch (err) {
     return null;

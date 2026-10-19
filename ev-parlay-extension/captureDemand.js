@@ -3,9 +3,11 @@ function resolveCaptureDemand(snapshot, scope, {refresh=false}={}) {
   const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
   const book=(snapshot?.books||[]).find(b=>key(b.bookmaker)===key(scope.book));
   const sport=(book?.sports||[]).find(s=>key(s.sport)===key(scope.sport));
-  const event=(sport?.events||[]).find(e=>key(e.eventName)===key(scope.event));
+  const found=(sport?.events||[]).find(e=>key(e.eventName)===key(scope.event));
+  const event=found?.rowCount===0?null:found;
+  const coverageKnown=Array.isArray(snapshot?.books);
   const targets=[...new Set([...(event?.missingExpectedMarkets||[]),...(event?.missingSharpMarkets||[])].map(m=>m.marketType==='moneyline'?'moneyline_2way':m.marketType).filter(Boolean))];
-  return {...scope,loaded:!!event,markedComplete:event?.coverageMarkedComplete===true,targets:refresh?[]:targets,
+  return {...scope,loaded:!!event,coverageKnown,resetProgress:coverageKnown&&!event,markedComplete:event?.coverageMarkedComplete===true,targets:refresh?[]:targets,
     mode:refresh?'refresh':!event?'initial':event.coverageMarkedComplete?'complete':targets.length?'missing':'complete'};
 }
 const captureDemandRuns=new Map();
@@ -21,16 +23,20 @@ function captureDemandProbe(book,snapshot) {
   const root=document.querySelector('main')||document.body;
   const raw=key(root?.innerText||'');
   const candidates=[];
-  for(const b of snapshot?.books||[])if(key(b.bookmaker)===key(book))for(const s of b.sports||[])if(['MLB','NHL','NFL'].includes(s.sport))for(const e of s.events||[]) {
+  for(const b of snapshot?.books||[])for(const s of b.sports||[])if(['MLB','NHL','NFL'].includes(s.sport))for(const e of s.events||[]) {
     // Require the complete event label, never city-only or substring team inference.
     if(raw.includes(key(e.eventName)))candidates.push({book,sport:s.sport,event:e.eventName});
   }
   const identity=location.origin+location.pathname;
   let prior=null;try{prior=JSON.parse(sessionStorage.getItem('EV_CAPTURE_DEMAND::'+identity)||'null');}catch{}
-  const scope=candidates.length===1?candidates[0]:null;
+  // A deleted book can still be identified by the exact visible event label
+  // retained for another book. Use that only as identity, never as its coverage.
+  if(prior?.event&&key(prior.book)===key(book)&&['MLB','NHL','NFL'].includes(prior.sport)&&raw.includes(key(prior.event)))candidates.push(prior);
+  const unique=[...new Map(candidates.map(c=>[c.sport+'|'+key(c.event),{book,sport:c.sport,event:c.event}])).values()];
+  const scope=unique.length===1?unique[0]:null;
   try{sessionStorage.setItem('EV_CAPTURE_DEMAND::'+identity,JSON.stringify(scope||prior||{book,initial:true}));}catch{}
   let pending=[];try{pending=JSON.parse(sessionStorage.getItem('EV_CAPTURE_PENDING::'+identity)||'[]');}catch{}
-  return {scope,ambiguous:candidates.length>1,prior,identity,pending};
+  return {scope,ambiguous:unique.length>1,prior,identity,pending};
 }
 async function prepareCaptureDemand(tabId,book,snapshot,options={}) {
   if(!book)return null;
@@ -43,20 +49,45 @@ async function prepareCaptureDemand(tabId,book,snapshot,options={}) {
   // DK renders "SF 49ers @ WAS Commanders", while imported coverage uses full
   // names; event URLs/titles also need not contain the word NFL.
   if(typeof nflDetailPageStep==='function'&&['DraftKings','FanDuel','BetMGM','TheScore'].includes(book)) {
-    const response=await safeExecuteScript({tabId,func:nflDetailPageStep,args:[book,{mode:'probe'}]});
-    const selected=response?.[0]?.result;
+    let selected;
+    for(let attempt=0;attempt<3;attempt++) {
+      const response=await safeExecuteScript({tabId,func:nflDetailPageStep,args:[book,{mode:'probe'}]});
+      selected=response?.[0]?.result;
+      if(selected?.event&&selected.pregame||/live|finished|changed|conflict/i.test(selected?.reason||selected?.stopped||''))break;
+      if(attempt<2&&typeof sleepBackground==='function')await sleepBackground(150);
+    }
     if(selected?.recognized) {
       if(!selected.event||!selected.pregame||selected.origin+selected.path!==probe.identity)
         return {book,sport:'NFL',mode:'unresolved',targets:[],reason:selected.reason||selected.stopped||'Selected NFL event changed or could not be verified.'};
       probe.scope={book,sport:'NFL',event:selected.event};probe.ambiguous=false;
     }
   }
+  if(!options.refresh&&!Array.isArray(snapshot?.books))return {book,mode:'unresolved',targets:[],reason:'App coverage could not be read. Open the parlay app and retry; missing data was not treated as deletion.'};
   if(!options.refresh&&(probe.ambiguous||!probe.scope&&probe.prior))return {book,mode:'unresolved',targets:[],reason:'Selected event could not be matched uniquely. Open its event page, or explicitly refresh; no broad retry was started.'};
   const plan=probe.scope?resolveCaptureDemand(snapshot,probe.scope,options):{book,mode:options.refresh?'refresh':'initial',targets:[]};
+  if(plan.resetProgress) {
+    const reset=await safeExecuteScript({tabId,func:resetEmptyCaptureProgress,args:[probe.identity,probe.scope]});
+    if(reset?.[0]?.result!==true)return {book,mode:'unresolved',targets:[],reason:'Could not reset capture progress for the verified empty event; no capture was started.'};
+  }
   if(plan.loaded&&!plan.markedComplete&&!options.refresh&&Array.isArray(probe.pending)&&probe.pending.length) {
     plan.targets=[...new Set([...plan.targets,...probe.pending])];plan.mode='missing';
   }
   return {...plan,identity:probe.identity};
+}
+function resetEmptyCaptureProgress(identity,scope) {
+  if(location.origin+location.pathname!==identity||!scope?.event)return false;
+  const path=location.pathname;
+  const keys=['EV_CAPTURE_PENDING::'+identity,'EV_CAPTURE_DEMAND::'+identity];
+  if(scope.sport==='NFL')keys.push(`EV_NFL_CAPTURE_PROGRESS_V4::${scope.book}::${path}`);
+  if(scope.book==='DraftKings'&&scope.sport==='MLB')keys.push(`EV_DK_MLB_WORKFLOW_PROGRESS::${path}`);
+  if(scope.book==='DraftKings'&&scope.sport==='NHL')keys.push(`EV_DK_WORKFLOW_PROGRESS::${path}`);
+  if(scope.book==='FanDuel'&&scope.sport==='NHL')keys.push(`EV_FD_NHL_WORKFLOW_PROGRESS::${path}`);
+  if(scope.book==='BetMGM'&&['MLB','NHL'].includes(scope.sport))keys.push(`EV_BETMGM_WORKFLOW_PROGRESS::${scope.sport}::${path}`);
+  try {
+    keys.forEach(key=>sessionStorage.removeItem(key));
+    sessionStorage.setItem('EV_CAPTURE_DEMAND::'+identity,JSON.stringify(scope));
+    return true;
+  }catch{return false;}
 }
 function captureDemandVisiblePage(book,identity) {
   if(location.origin+location.pathname!==identity)return {source:book,text:'',message:'Selected event changed.'};

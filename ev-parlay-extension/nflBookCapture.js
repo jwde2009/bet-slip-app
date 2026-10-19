@@ -972,15 +972,15 @@ async function tryNflNavigationCapture(tabId,book) {
     const demand=typeof resolveCaptureDemand==='function'?resolveCaptureDemand(snapshot,{book,sport:'NFL',event:base.event},{refresh:external?.mode==='refresh'}):{mode:'initial',targets:nflMissingTypes(snapshot,book,base.event)};
     const stored=await nflNavInject(tabId,nflNavCheckpoint,['read',base]);
     const saved=stored.ok?stored.value:null;
-    const resume=demand.mode!=='refresh'&&nflCheckpointMatches(saved,base,demand.targets);
+    const resume=demand.mode!=='refresh'&&!demand.resetProgress&&nflCheckpointMatches(saved,base,demand.targets);
     const completed=new Set(resume?saved.completed||[]:[]);
     const priorTabs=resume?(saved.tabs||nflTabsForTypes(book,saved.targets||[])):[];
     const deferredByTab=resume&&saved.deferredByTab||{};
-    const blocked=tab=>book==='FanDuel'&&demand.mode!=='refresh'&&deferredByTab[tab]?.length&&
-      demand.targets.filter(t=>nflTabsForTypes(book,[t]).includes(tab)).every(t=>deferredByTab[tab]?.includes(t));
-    const unfinished=priorTabs.filter(t=>!completed.has(t)&&!blocked(t));
+    // A previous no-match observation is not proof of permanent unavailability.
+    // A new user action rechecks requested tabs once, without in-run retry loops.
+    const unfinished=priorTabs.filter(t=>!completed.has(t));
     const targets=demand.mode==='refresh'?[]:resume&&unfinished.length?([...new Set([...(saved.targets||[]),...demand.targets])]):demand.targets;
-    const requested=(demand.mode==='missing'?nflTabsForTypes(book,demand.targets):demand.mode==='initial'&&!resume||demand.mode==='refresh'?nflTabsForTypes(book,[]):[]).filter(t=>!blocked(t));
+    const requested=demand.mode==='missing'?nflTabsForTypes(book,demand.targets):demand.mode==='initial'&&!resume||demand.mode==='refresh'?nflTabsForTypes(book,[]):[];
     for(const tab of requested)delete deferredByTab[tab];
     const tabs=[...new Set([...requested,...unfinished])];
     // App demand is authoritative for newly missing markets, even if an older
@@ -1088,7 +1088,7 @@ async function tryNflNavigationCapture(tabId,book) {
         if(book==='FanDuel'&&r.notFoundTargetTypes?.length&&!r.records?.length&&!r.remaining) {
           deferredByTab[label]=r.notFoundTargetTypes;
           diag({...r.diagnostics,phase:'targets-not-observed',tab:label,notFoundTargetTypes:r.notFoundTargetTypes,
-            note:'Unchanged unmatched targets are paused for this event; explicit Refresh all markets rechecks availability.'});
+            note:'Requested types not observed in this pass; no automatic loop. A new normal capture rechecks availability.'});
           await saveProgress();break;
         }
         for(const record of r.records||[]) {

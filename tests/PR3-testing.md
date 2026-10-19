@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.6** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.7** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## Deletion and normal retry (1.4.7)
+
+This supersedes 1.4.6's persistent unmatched-target pause. A new normal user action rechecks missing/unfinished tabs once; it does not automatically loop or declare unobserved markets available. After Delete Book/Delete Event, verified empty app coverage resets only that selected book/event's capture state. Unreadable app data is not treated as deletion, and ambiguous event matching still stops.
+
+In the **clean test checkout only**, check for tracked edits, fetch the draft branch and switch to its latest head using the guarded commands below. Reload the test extension at chrome://extensions or edge://extensions, confirm **1.4.7**, and refresh the sportsbook tab. Then use a normal click. **No app rebuild, npm install or storage clearing is required from app build 95b26d6.** Keep the original modified checkout and unrelated book/event data intact.
+
+For BetMGM, a manual Players test is already underway; retain that export rather than run it again. For the FanDuel comparison gaps, await evidence of the other four markets being offered and the expanded TD container; this update does not add guessed market navigation. If a capture still refuses, retain the exact new toast title/body, active event URL and installed version.
 
 ## Targeted event matching (1.4.5)
 

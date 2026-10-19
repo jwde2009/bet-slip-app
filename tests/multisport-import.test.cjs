@@ -96,6 +96,92 @@ function targetingContext(extra={}) {
   return ctx;
 }
 
+test('Actual Delete Book/Event handlers publish scoped empty coverage and fresh imports retain other books',async()=>{
+  const page=read('app/ev-parlay-lab/page.js'),panel=read('app/ev-parlay-lab/components/LoadCoveragePanel.js');
+  const handlers=page.slice(page.indexOf('  function handleDeleteRows('),page.indexOf('  function handleUpdateCoverageRows('));
+  const helpers=panel.slice(panel.indexOf('const EV_LOADED_COVERAGE_SNAPSHOT_KEY'),panel.indexOf('const sectionStyle'));
+  const otherEvent='Dallas Cowboys @ Green Bay Packers';
+  const {mergeCaptureImports}=await loadModule('app/ev-parlay-lab/utils/mergeCaptureImports.js');
+  for(const book of ['DraftKings','FanDuel','BetMGM'])for(const eventOnly of [false,true]) {
+    const rows=['DraftKings','FanDuel','BetMGM'].flatMap(b=>[nflEvent,otherEvent].map((e,i)=>({id:b+i,sportsbook:b,sport:'NFL',eventLabelRaw:e,marketType:'spread',selectionNormalized:'Away',lineValue:1.5,oddsAmerican:-110,coverageMarkedComplete:true})));
+    let snapshot;
+    const ctx=vm.createContext({rows,window:{},localStorage:{setItem:(k,v)=>{snapshot=JSON.parse(v);}},alert:message=>{throw Error(message);},setManualMatches:()=>{}});
+    ctx.setRows=fn=>{ctx.rows=fn(ctx.rows);};
+    vm.runInContext(handlers+helpers,ctx);
+    ctx.handleDeleteCoverageRows({bookmaker:book,...(eventOnly?{sport:'NFL',eventName:nflEvent}:{})});
+    ctx.writeEvLoadedCoverageSnapshot(ctx.buildCoverage(ctx.rows));
+    const demand=targetingContext().resolveCaptureDemand(snapshot,{book,sport:'NFL',event:nflEvent});
+    assert.equal(demand.mode,'initial');assert.equal(demand.resetProgress,true);assert.equal(demand.markedComplete,false);
+    assert.equal(ctx.rows.filter(r=>r.sportsbook!==book).length,4);
+    assert.equal(ctx.rows.filter(r=>r.sportsbook===book).length,eventOnly?1:0);
+    const fresh={...rows.find(r=>r.sportsbook===book&&r.eventLabelRaw===nflEvent),sourceType:'extension_capture',coverageMarkedComplete:false};
+    ctx.rows=plain(mergeCaptureImports(plain(ctx.rows),[fresh]));
+    assert.equal(ctx.rows.filter(r=>r.sportsbook!==book).length,4);
+    ctx.writeEvLoadedCoverageSnapshot(ctx.buildCoverage(ctx.rows));
+    assert.equal(targetingContext().resolveCaptureDemand(snapshot,{book,sport:'NFL',event:nflEvent}).resetProgress,false);
+    ctx.rows=[];ctx.writeEvLoadedCoverageSnapshot(ctx.buildCoverage(ctx.rows));assert.deepEqual(snapshot.books,[]);
+  }
+});
+
+test('Verified empty coverage resets only selected book/event keys; missing coverage and ambiguity do not',async()=>{
+  const scope={book:'DraftKings',sport:'MLB',event:'Atlanta Braves @ New York Mets'},identity='https://sportsbook.draftkings.com/event/123';
+  const data=new Map([['EV_CAPTURE_PENDING::'+identity,'["player_hits"]'],['EV_DK_MLB_WORKFLOW_PROGRESS::/event/123','3'],['EV_DK_MLB_WORKFLOW_PROGRESS::/event/999','2'],['EV_NFL_CAPTURE_PROGRESS_V4::FanDuel::/event/123','keep'],['unrelated','keep']]);
+  const ctx=targetingContext({location:{origin:'https://sportsbook.draftkings.com',pathname:'/event/123'},document:{title:'MLB',querySelector:()=>null,body:{innerText:scope.event}},sessionStorage:{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}});
+  const native=ctx.nflDetailPageStep;ctx.nflDetailPageStep=undefined;
+  ctx.safeExecuteScript=async({func,args})=>[{result:await func(...args)}];
+  data.set('EV_CAPTURE_DEMAND::'+identity,JSON.stringify(scope));
+  const plan=await ctx.prepareCaptureDemand(1,scope.book,{version:1,books:[]});
+  assert.equal(plan.mode,'initial');assert.equal(plan.resetProgress,true);assert.equal(plan.event,scope.event);
+  assert.equal(data.has('EV_CAPTURE_PENDING::'+identity),false);assert.equal(data.has('EV_DK_MLB_WORKFLOW_PROGRESS::/event/123'),false);
+  assert.equal(data.get('EV_DK_MLB_WORKFLOW_PROGRESS::/event/999'),'2');assert.equal(data.get('EV_NFL_CAPTURE_PROGRESS_V4::FanDuel::/event/123'),'keep');
+  data.set('EV_CAPTURE_PENDING::'+identity,'["player_hits"]');
+  assert.equal((await ctx.prepareCaptureDemand(1,scope.book,null)).mode,'unresolved');assert.ok(data.has('EV_CAPTURE_PENDING::'+identity));
+  assert.equal(ctx.resolveCaptureDemand(null,scope).resetProgress,false);assert.equal(ctx.resolveCaptureDemand({},scope).resetProgress,false);
+  ctx.document.body.innerText=scope.event+'\nLos Angeles Dodgers @ Chicago Cubs';
+  const snapshot={books:[{bookmaker:'Pinnacle',sports:[{sport:'MLB',events:[{eventName:scope.event},{eventName:'Los Angeles Dodgers @ Chicago Cubs'}]}]}]};
+  assert.equal((await ctx.prepareCaptureDemand(1,scope.book,snapshot)).mode,'unresolved');assert.ok(data.has('EV_CAPTURE_PENDING::'+identity));
+  ctx.document.body.innerText=scope.event;
+  assert.equal((await ctx.prepareCaptureDemand(1,scope.book,snapshot)).mode,'initial');
+  ctx.nflDetailPageStep=native;
+});
+
+test('Empty current coverage overrides stale completed, deferred and priced NFL checkpoints across books',async()=>{
+  for(const book of ['DraftKings','FanDuel','BetMGM']) {
+    const href='https://sports.example/event/123',base={book,event:nflEvent,origin:'https://sports.example',path:'/event/123',href};
+    const calls=[];let saved,snapshot={books:[]},unpriced=false;
+    const ctx=targetingContext({sleepBackground:async()=>{},safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>snapshot,
+      chrome:{tabs:{get:async()=>({url:href})},scripting:{executeScript:async({func,args})=>{
+        if(func.name==='nflNavCheckpoint'){if(args[0]==='write')saved=plain(args[2]);return [{result:args[0]==='read'?saved:true}];}
+        const r=args[1],info={...base,recognized:true,pregame:true};
+        if(r.mode==='probe')return [{result:{...info,tabs:ctx.nflTabsForTypes(book,[])}}];
+        if(['plan-tab','tab-state'].includes(r.mode))return [{result:{...info,ready:true,navigation:{found:true,active:true}}}];
+        calls.push(plain(r));return [{result:{...info,records:[{title:r.tab,quotes:unpriced?[]:[quote('Over'),quote('Under')]}],remaining:false,diagnostics:unpriced?{unpricedDrawers:[r.tab]}:{}}}];
+      }}}});
+    const tabs=plain(ctx.nflTabsForTypes(book,[]));
+    saved={...base,version:'20261018_2',incomplete:false,returnedPartial:true,updatedAt:Date.now(),targets:[],tabs,completed:tabs,processedByTab:{[tabs[0]]:['stale priced drawer']},deferredByTab:{[tabs[1]]:['player_passing_attempts']}};
+    const old=plain(saved);const result=await ctx.tryNflNavigationCapture(1,book);
+    assert.deepEqual(calls.map(r=>r.tab),tabs);assert.ok(calls.every(r=>r.processedLabels.length===0));assert.match(result.text,/full-core-markets/);
+    calls.length=0;saved=old;snapshot=null;
+    await ctx.tryNflNavigationCapture(1,book);assert.equal(calls.length,0,'unavailable app response must not authorize resetting completed state');
+    snapshot={books:[{bookmaker:book,sports:[{sport:'NFL',events:[{eventName:nflEvent,rowCount:6,missingSharpMarkets:[{marketType:'player_passing_yards'}]}]}]}]};
+    unpriced=true;
+    await ctx.tryNflNavigationCapture(1,book);await ctx.tryNflNavigationCapture(1,book);
+    assert.deepEqual(calls.map(r=>r.tab),[...ctx.nflTabsForTypes(book,['player_passing_yards']),...ctx.nflTabsForTypes(book,['player_passing_yards'])]);
+    assert.ok(calls.every(r=>r.targetTypes.includes('player_passing_yards')&&r.processedLabels.length===0));
+  }
+});
+
+test('FanDuel and BetMGM second missing-market action retries unpriced drawers and transient preflight headers',async()=>{
+  for(const book of ['FanDuel','BetMGM']) {
+    let probes=0;
+    const scope={book,sport:'NFL',event:nflEvent};
+    const snapshot={books:[{bookmaker:book,sports:[{sport:'NFL',events:[{eventName:nflEvent,rowCount:6,missingSharpMarkets:[{marketType:'player_passing_yards'}]}]}]}]};
+    const ctx=targetingContext({sleepBackground:async()=>{},safeExecuteScript:async({func})=>[{result:func.name==='captureDemandProbe'?{scope,identity:'https://sports.example/event/1',pending:[]}:(++probes%2?{recognized:true,pregame:false,reason:'No selected-game pregame header'}:{recognized:true,event:nflEvent,pregame:true,origin:'https://sports.example',path:'/event/1'})}]});
+    for(let run=0;run<2;run++){const plan=await ctx.prepareCaptureDemand(1,book,snapshot);assert.equal(plan.mode,'missing');assert.deepEqual(plain(plan.targets),['player_passing_yards']);assert.equal(plan.resetProgress,false);}
+    assert.equal(probes,4);
+  }
+});
+
 test('Latest FanDuel retry requests absent observed types, preserves zero rows and rejects game specials as a player',async()=>{
   const raw=read('tests/fixtures/fanduel-nfl-targets-absent-20261019.txt');
   const objects=p=>raw.split(/\r?\n/).filter(l=>l.startsWith(p)).map(l=>JSON.parse(l.slice(p.length)));
@@ -128,7 +214,7 @@ test('FanDuel page reports unmatched requested types instead of claiming no reco
   assert.match(result.diagnostics.notes.join(' '),/availability is unverified/);
 });
 
-test('FanDuel unchanged unmatched targets pause across repeats; new types and explicit refresh recheck',async()=>{
+test('FanDuel unmatched targets stop within a pass but a new user action rechecks them',async()=>{
   let saved=null,run=1,active='Popular';const calls=[];
   const href='https://sportsbook.fanduel.com/football/atl-no/123?tab=popular';
   const base={book:'FanDuel',recognized:true,pregame:true,event:nflEvent,origin:new URL(href).origin,path:new URL(href).pathname,href};
@@ -147,9 +233,9 @@ test('FanDuel unchanged unmatched targets pause across repeats; new types and ex
     }}}});
   const first=await ctx.tryNflNavigationCapture(1,'FanDuel');assert.match(first.text,/targets-not-observed/);
   assert.deepEqual(Object.keys(saved.deferredByTab),['Passing Props','Rushing Props']);assert.equal(saved.incomplete,true);
-  run=2;await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===2).map(c=>c.tab),['TD Scorer Props']);
+  run=2;await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===2).map(c=>c.tab),['Passing Props','Rushing Props','TD Scorer Props']);
   run=3;event.missingSharpMarkets=[{marketType:'player_passing_yards'},{marketType:'player_touchdowns'}];
-  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===3).map(c=>c.tab),['Passing Props','TD Scorer Props']);
+  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===3).map(c=>c.tab),['Passing Props','TD Scorer Props','Rushing Props']);
   run=4;vm.runInContext("captureDemandRuns.set(1,{mode:'refresh'})",ctx);
   await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===4).map(c=>c.tab),tabs);
 });
@@ -697,7 +783,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.6');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.7');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
