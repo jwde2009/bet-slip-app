@@ -512,7 +512,49 @@ function createNflCaptureCore() {
   }
   let draftKingsTabsCache=null;
   const approvedTabs=book==='BetMGM'?['Players','Spreads','Totals','All']:core.tabLabels[book];
-  const tabCandidates=()=>book==='DraftKings'?(draftKingsTabsCache||(draftKingsTabsCache=draftKingsTabCandidates())):list(root(),'[role="tab"], [role="tablist"] a, [role="tablist"] button, a, button, [role="button"]').filter(el=>
+  // Observed BetMGM category bar may sit outside <main>. Do not widen the
+  // generic selector: accept only one rendered event-details bar and exact IDs.
+  function mgmPills() {
+    const bars=list(document.body,'ul.event-details-pills-list');
+    const rendered=bars.filter(el=>visible(el)&&!el.closest(excluded));
+    if(!bars.length)return {observed:false,controls:[]};
+    if(rendered.length!==1)return {observed:true,controls:[]};
+    const ids={Players:'Players',Spread:'Spreads',Totals:'Totals','-1':'All'};
+    const buttons=list(rendered[0],'button[ds-pill][msthemedpills][data-menu-item-id]');
+    const seen=new Set(),controls=[];
+    for(const el of buttons) {
+      const id=el.getAttribute('data-menu-item-id');
+      if(!Object.hasOwn(ids,id))continue;
+      if(seen.has(id))return {observed:true,controls:[]};
+      seen.add(id);
+      let hidden=false;
+      for(let p=el;p;p=p.parentElement) {
+        const css=getComputedStyle(p);
+        if(p.hidden||p.getAttribute('aria-hidden')==='true'||css.display==='none'||css.visibility==='hidden'||css.visibility==='collapse')hidden=true;
+      }
+      if(!hidden&&safeControl(el)&&safeLink(el)&&!el.hasAttribute('aria-expanded')&&text(el.querySelector('.ds-pill-text'))===ids[id]&&text(el)===ids[id])controls.push(el);
+    }
+    return {observed:true,controls};
+  }
+  function mgmContent() {
+    // Structural labels only: odds changes, the toast and ds-pill-current on
+    // every category must never count as a category transition.
+    const ls=lines(raw());
+    const players=/\bTD scorers\s+Passing\s+Receiving\s+Rushing\b/i.test(ls.join(' '));
+    const labels=ls.filter(l=>core.describe(l)||/^(?:Game lines|Full game|Spread|Spreads|Total|Totals|Money|Moneyline)$/i.test(l));
+    return {players,signature:JSON.stringify([players,labels]),spread:ls.includes('Spread'),total:ls.includes('Total')};
+  }
+  function mgmActive(label) {
+    const now=mgmContent();
+    // This exact Players sub-navigation is present in the supplied manual
+    // Players export, but absent from the supplied starting-page export.
+    if(label==='Players')return now.players;
+    const proof=document.__evMgmCategoryTransition;
+    if(!proof||proof.event!==event||proof.path!==location.pathname||proof.tab!==label)return false;
+    const appropriate=label==='Spreads'?now.spread:label==='Totals'?now.total:label==='All'?(now.spread&&now.total):false;
+    return appropriate&&now.signature!==proof.before;
+  }
+  const tabCandidates=()=>book==='BetMGM'&&mgmPills().observed?mgmPills().controls:book==='DraftKings'?(draftKingsTabsCache||(draftKingsTabsCache=draftKingsTabCandidates())):list(root(),'[role="tab"], [role="tablist"] a, [role="tablist"] button, a, button, [role="button"]').filter(el=>
     safeControl(el)&&safeLink(el)&&!(book==='BetMGM'&&/^All$/i.test(text(el))&&el.getAttribute('role')!=='tab'&&!el.closest('[role="tablist"]')&&!el.matches('button.ds-pill'))&&!el.closest('details')&&!el.hasAttribute('aria-expanded')&&approvedTabs.some(l=>l.toLowerCase()===text(el).toLowerCase()));
   function findTab(label){
     const candidates=tabCandidates().filter(el=>text(el).toLowerCase()===label.toLowerCase());
@@ -542,6 +584,7 @@ function createNflCaptureCore() {
     return false;
   }
   function tabActive(label,control) {
+    if(book==='BetMGM'&&control?.matches('button[ds-pill][msthemedpills][data-menu-item-id]'))return mgmActive(label);
     if(book==='DraftKings'&&control?.matches('a[role="tab"][data-testid="tab-switcher-tab-inner"]')) {
       // A URL change alone can precede React rendering the new tab content.
       // Wait for the actual selected tab, and require agreement with its slug.
@@ -587,6 +630,7 @@ function createNflCaptureCore() {
         if(fresh&&sameContext()&&safeControl(fresh)&&safeLink(fresh)&&!tabActive(wanted,fresh)) {
           const visual=book==='DraftKings'?dkTabVisual(fresh).node:null;
           (visual?.scrollIntoView?visual:fresh).scrollIntoView({block:'center',inline:'nearest'});
+          if(book==='BetMGM'&&fresh.matches('button[ds-pill][msthemedpills][data-menu-item-id]'))document.__evMgmCategoryTransition={event,path:location.pathname,tab:wanted,before:mgmContent().signature};
           fresh.click(); // One activation; never also dispatch a synthetic click.
         }
       } catch(error) { console.warn('NFL scheduled tab activation failed:',error); }

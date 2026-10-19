@@ -1,6 +1,16 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.9** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.10** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## Supplied BetMGM category-bar repair (1.4.10)
+
+The requested Players/category-bar HTML is supplied and preserved; do not request it again. Update directly from 1.4.8 to **1.4.10** in the clean test checkout, reload the extension and refresh the BetMGM event tab. Skip 1.4.9. No app rebuild, npm install or storage clearing is needed from app95b26d6.
+
+Smallest next live test: one normal capture on the intended pregame BetMGM event, starting from its ordinary page. It should discover Players and verify its player-category content before opening supported drawers. The export should contain NFL_CAPTURE_VERSION and EXTENSION_CAPTURE_DIAGNOSTICS with extensionVersion1.4.10 / entryVersion20261019_mgmpills1. Check the selected event and current prices; the historical 22-price fixture is not an expected live count. If it stops, retain that export; do not repeat broad refreshes or resend the category bar. Expanded controlled price-panel HTML is only needed if navigation succeeds but drawer extraction fails.
+
+The actual pill bar is matched by its exact scoped IDs and labels. Every supplied button has ds-pill-current, which is not used as active-state proof. Players readiness uses the exact TD scorers / Passing / Receiving / Rushing sub-navigation observed in the earlier manual export. Other supported categories require a structural heading change after one requested click. No price-only change can verify navigation. The fixture does not establish where the bar sits relative to main; tests cover both placements. Live rendering and complete market coverage remain unverified.
+
+The sections below are historical investigation notes; the prior instruction to await category HTML has been satisfied. Use only the current-version test above.
 
 ## BetMGM SGP header and missing category controls (1.4.9)
 
