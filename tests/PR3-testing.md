@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.2** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.3** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## October 19: DraftKings NFL drawer reader (1.4.3)
+
+The latest 127-line export confirms all six tabs switched successfully, including Rushing. All 32 drawer records are heading-only; only six unique main lines are recoverable. This is not evidence that the tab workflow stopped early. Version 1.4.3 removes a fixed-parent shortcut that can select a heading-only wrapper and adds scoped diagnostics for unresolved drawers. Timers, tab navigation and repeat-capture checkpoint semantics are unchanged. Regression DOM is synthetic; the export contains no price-panel HTML, so this is not a live-confirmed fix.
+
+If already on 1.4.2, this is extension-only: update the clean test checkout using the existing guarded fetch/switch steps below, reload the extension and confirm **1.4.3**. No app rebuild, dependency install or storage clearing is needed for this delta. Keep the original modified checkout intact. The 1.4.2 instructions below remain applicable when upgrading from an earlier app version.
+
+Before another full capture, the smallest missing evidence is **one expanded Pass Yards O/U market container's outerHTML**, including its header/toggle and the sibling panel showing one player's Over/Under prices. In browser DevTools Elements, inspect that market, select its enclosing market container, and Copy → Copy outerHTML. If the header uses `aria-controls` to a separate panel, include that controlled element as well. Do not copy the whole page, account data or cookies. Existing tab HTML need not be repeated. This distinguishes heading-wrapper selection from hidden/aria-hidden filtering without another blind full run.
 
 ## Consolidated 1.4.2 update
 
@@ -57,7 +65,7 @@ Open the test app URL above in that profile. Confirm its import controls include
 - Supported books in this task: DraftKings, FanDuel, BetMGM, Caesars, Pinnacle and theScore. BetOnline is excluded from new work.
 - Start with a single known event. Compare event, period, participant, line and both quoted prices before relying on imported rows. Save **Download TXT** from Import Odds to retain the actual capture and diagnostics.
 - Pinnacle MLB now opens Player Props and supported collapsed drawers automatically, based on the supplied rendered DOM. Start at an English MLB event page, capture once, and compare one complete bases/strikeouts pair and the capture diagnostics. No outcome buttons should be clicked. The actual DOM sample gives four prop rows; the older expanded text gives 82 rows. These replays do not establish full live-page coverage. Guest displayed odds may be delayed.
-- DraftKings NFL live tab switching remains unverified despite recovered selectors and synthetic tests. Keep diagnostics from any new run; the old tab HTML and October 13 failed capture are already preserved.
+- DraftKings NFL live tab switching is confirmed by the October 19 export; prop extraction remains unverified. Supply the one expanded market container described above rather than repeating the tab HTML or a full capture.
 - Dark Horse is not an installed capture integration. The manual CSV/TSV importer requires the documented schema and a permitted data source; it is not proof of compatibility with a provider export.
 
 Do not merge, deploy, or copy this test checkout over the original repair directory as part of this test.

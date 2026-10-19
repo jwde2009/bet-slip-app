@@ -641,6 +641,22 @@ function createNflCaptureCore() {
     }
     const controls=el.getAttribute('aria-controls');
     if(controls) {const target=document.getElementById(controls);if(target&&root().contains(target)&&!target.closest(excluded))return target;}
+    if(book==='DraftKings') {
+      // A heading can sit several wrappers below its sibling price panel. Never
+      // stop at a fixed parent depth: it can produce heading-only raw samples.
+      // Count unsupported and nested controls too, so a missing panel cannot
+      // borrow a neighbour's prices (including a half/quarter market).
+      for(let p=el.parentElement,depth=0;p&&p!==root()&&depth<9;p=p.parentElement,depth++) {
+        if(p.closest(excluded))return null;
+        const neighbours=list(p,headerSelector).filter(x=>visible(x)&&x!==el&&!x.contains(el)&&!el.contains(x));
+        if(neighbours.length)return null;
+        if(p.matches('.sportsbook-market-accordion,.sportsbook-event-accordion'))return p;
+        const prices=list(p,'table,[data-type],[data-testid*="outcome" i],[class*="outcome" i]')
+          .some(x=>!el.contains(x));
+        if(prices)return p;
+      }
+      return null;
+    }
     const component=el.closest('.sportsbook-market-accordion,.sportsbook-event-accordion');if(component)return component;
     let p=el.parentElement;
     for(let n=0;p&&p!==root()&&n<5;n++,p=p.parentElement){
@@ -799,10 +815,20 @@ function createNflCaptureCore() {
       diagnostics.unpricedDrawers.push(label);
       if(morePending)diagnostics.notes.push(`Expansion limit or unchanged content: ${label}; drawer remains incomplete`);
       // Keep only the scoped market/control, not the account or page shell.
-      if(book==='BetMGM') {
+      if(book==='BetMGM'||book==='DraftKings') {
         diagnostics.unpricedSamples ||= [];
         if(diagnostics.unpricedSamples.length<4)diagnostics.unpricedSamples.push({title:label,
-          containerFound:!!block,control:findHeader(label)?.outerHTML?.slice(0,1200)||'',rawSample:readable(block).slice(0,2500)});
+          containerFound:!!block,control:findHeader(label)?.outerHTML?.slice(0,1200)||'',rawSample:readable(block).slice(0,2500),
+          ...(book==='DraftKings'?{readerVersion:'20261019_1',
+            // Rendered text distinguishes scope selection from walker filtering;
+            // ancestor metadata contains no page/account HTML or text.
+            renderedSample:String(block?.innerText||'').slice(0,2500),
+            ancestors:(()=>{const out=[];for(let p=findHeader(label)?.parentElement;p&&p!==root()&&out.length<9;p=p.parentElement){
+              if(p.closest(excluded))break;
+              out.push({tag:p.tagName,className:String(p.className||'').slice(0,180),id:p.id,
+                headers:list(p,headerSelector).length,tables:list(p,'table').length,selected:p===block});
+              if(p===block)break;
+            }return out;})()}: {})});
       }
     }
     records.push({book,event,period:'full_game',title:label,quotes:qs,rawSample:readable(block).slice(0,2500)});

@@ -587,5 +587,68 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.2');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.3');
+});
+
+test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
+  const raw=read('tests/fixtures/draftkings-nfl-heading-only-20261019.txt');
+  const objects=prefix=>raw.split(/\r?\n/).filter(l=>l.startsWith(prefix)).map(l=>JSON.parse(l.slice(prefix.length)));
+  const diagnostics=objects('NFL_CAPTURE_DIAGNOSTICS: '),records=objects('NFL_MARKET_V2: ');
+  assert.deepEqual(diagnostics.filter(d=>d.phase==='navigation-confirmed').map(d=>d.tab),['POPULAR','GAME LINES','TD SCORERS','PASSING','RECEIVING','RUSHING']);
+  assert.equal(diagnostics.at(-1).complete,false);
+  const empty=records.filter(r=>!r.quotes.length);
+  assert.equal(empty.length,32);
+  assert.ok(empty.every(r=>r.rawSample.trim()===r.title));
+  const {parseOddsText}=await loadModule(routerFile);
+  const rows=plain(parseOddsText(raw,{sportsbook:'DraftKings'}));
+  assert.equal(rows.length,6);assert.ok(rows.every(r=>!r.marketType.startsWith('player_')));
+});
+
+function dkDrawerContext(markup) {
+  const {JSDOM}=require('jsdom');
+  const dom=new JSDOM(`<main><pre>Sportsbook / Football Odds / NFL Odds / ATL Falcons @ NO Saints Odds\nATL Falcons\nStarts In:\n01:00:00\nNO Saints\nOdds</pre>${markup}</main>`,{url:'https://sportsbook.draftkings.com/event/atl-no/123?category=odds&subcategory=passing'});
+  const w=dom.window;
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});
+  w.HTMLElement.prototype.checkVisibility=function(){return !this.closest('[hidden]');};
+  w.HTMLElement.prototype.scrollIntoView=()=>{};
+  const ctx=extensionContext({window:w,document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{fn();return 0;},
+    getComputedStyle:el=>({display:el.hidden?'none':'block',visibility:'visible'})});
+  return {w,ctx};
+}
+const dkPrices='<div data-testid="outcome"><div>Dak Prescott</div><div>O 274.5</div><div>-110</div><div>U 274.5</div><div>-105</div></div>';
+
+test('DK drawer reader reaches sibling prices beyond heading-only wrappers with one toggle and no outcome clicks',async()=>{
+  const {w,ctx}=dkDrawerContext(`<section><div><div><div><button aria-expanded="false">Pass Yards O/U</button></div></div></div><div id="prices" hidden>${dkPrices}</div></section>`);
+  let toggles=0,outcomes=0;
+  const button=w.document.querySelector('button');
+  button.onclick=()=>{toggles++;button.setAttribute('aria-expanded','true');w.document.getElementById('prices').hidden=false;};
+  w.document.querySelector('[data-testid="outcome"]').onclick=()=>outcomes++;
+  const result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards']});
+  assert.equal(result.records.length,1);assert.equal(result.records[0].quotes.length,2);
+  assert.deepEqual(plain(result.records[0].quotes.map(q=>[q.subject,q.side,q.line,q.odds])),[['Dak Prescott','Over',274.5,-110],['Dak Prescott','Under',274.5,-105]]);
+  assert.equal(toggles,1);assert.equal(outcomes,0);assert.equal(result.diagnostics.unpricedDrawers.length,0);
+  const skip=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',processedLabels:['Pass Yards O/U']});
+  assert.equal(skip.records.length,0);assert.equal(toggles,1);
+});
+
+test('DK missing panel cannot borrow an unsupported neighbouring market; explicit panels remain supported',async()=>{
+  const {w,ctx}=dkDrawerContext(`<section><div><div><button aria-expanded="true">Pass Yards O/U</button></div></div><article><button aria-expanded="true">1st Half Pass Yards O/U</button>${dkPrices}</article></section>`);
+  let result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture'});
+  assert.equal(result.records[0].quotes.length,0);
+  assert.equal(result.diagnostics.unpricedSamples[0].containerFound,false);
+  assert.ok(result.diagnostics.unpricedSamples[0].ancestors.length>0);
+  w.document.querySelector('main').insertAdjacentHTML('beforeend',`<div id="controlled">${dkPrices}</div>`);
+  w.document.querySelector('button').setAttribute('aria-controls','controlled');
+  result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture'});
+  assert.equal(result.records[0].quotes.length,2);
+});
+
+test('DK unpriced diagnostics distinguish rendered text from filtered content without collecting page-shell HTML',async()=>{
+  const {ctx}=dkDrawerContext(`<section class="sportsbook-market-accordion"><button aria-expanded="true">Pass Yards O/U</button><div aria-hidden="true">${dkPrices}</div></section><aside>PRIVATE ACCOUNT CONTENT</aside>`);
+  const result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture'}),sample=result.diagnostics.unpricedSamples[0];
+  assert.equal(result.records[0].quotes.length,0);
+  assert.equal(sample.readerVersion,'20261019_1');assert.equal(sample.containerFound,true);
+  assert.match(sample.renderedSample,/Dak Prescott/);assert.doesNotMatch(sample.rawSample,/Dak Prescott/);
+  assert.doesNotMatch(JSON.stringify(sample),/PRIVATE ACCOUNT/);
 });
