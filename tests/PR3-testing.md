@@ -4,11 +4,13 @@ The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest 
 
 ## BetMGM compact NFL header (1.4.8)
 
-Update straight to **1.4.8** if 1.4.7 has not yet been installed; it includes the deletion and normal-retry fixes below. Use only the clean test checkout's guarded fetch/switch steps, reload the extension, confirm1.4.8 and refresh the sportsbook tab. No app rebuild, install or storage clearing is required from95b26d6 for future NFL V2 imports.
+Update straight to **1.4.8** if 1.4.7 has not yet been installed; it includes the deletion and normal-retry fixes below. Use only the clean test checkout's guarded fetch/switch steps, reload the extension, confirm 1.4.8 and refresh the sportsbook tab. No app rebuild, install or storage clearing is required from 95b26d6 for future NFL V2 imports.
 
-The supplied manual Players TXT ran through the legacy collector because its NFL (14) hero was not recognized by the old USA | NFL detector. The new detector handles the observed bounded event header; exact anytime text now yields22 player prices while excluding D/ST and first/multiple-TD selections. Other drawers in that file contain headings only. The original legacy TXT still parses to zero; the change applies to future structured captures, and live panel behavior remains unverified.
+The supplied manual Players TXT contains legacy collector markers and an NFL (14) hero that the old USA | NFL detector did not recognize. Tests reproduce this fallback when URL/title lack NFL; the export does not identify the installed version or prove the sole live cause. The new detector handles the observed bounded event header; exact anytime text now yields 22 player prices while excluding D/ST and first/multiple-TD selections. Other drawers in that file contain headings only. The original legacy TXT still parses to zero; the change applies to future structured captures, and live panel behavior remains unverified.
 
-One normal capture on the intended BetMGM pregame event with1.4.8 is the useful next test. Its export should start with NFL_CAPTURE_VERSION, not BETMGM_AUTOPASS. Keep that export if the corrected route still yields missing prices. Do not repeat the old version's broad run or resend the supplied header.
+One normal capture on the intended BetMGM pregame event with 1.4.8 is the useful next test. Its export should start with NFL_CAPTURE_VERSION, not BETMGM_AUTOPASS. Keep that export if the corrected route still yields missing prices. Do not repeat the old version's broad run or resend the supplied header.
+
+The sections below retain earlier investigation details. Use current version **1.4.8** for all new tests; do not install intermediate versions.
 
 ## Deletion and normal retry (1.4.7)
 
