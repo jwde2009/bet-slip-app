@@ -9,7 +9,7 @@ const read = name => fs.readFileSync(path.join(root,name),'utf8');
 const exported = read('tests/fixtures/betmgm-nfl-sgp-legacy-20261019.txt').replace(/\r\n/g,'\n');
 const page = exported.split('BETMGM_INITIAL_CAPTURE\n')[1].split('\nBETMGM_CURRENT_CAPTURE:')[0];
 
-async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,mutatePills=null,browserOverrides=null,diagnose=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
+async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,mutatePlayers=null,mutatePills=null,browserOverrides=null,diagnose=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
   const manifest=JSON.parse(read('ev-parlay-extension/manifest.json'));
   const dom=new JSDOM('<main></main>',{url,runScripts:'outside-only'});
   const app=new JSDOM('',{url:'http://localhost:3000/ev-parlay-lab',runScripts:'outside-only'});
@@ -30,6 +30,7 @@ async function runEntry({text=page,playersControl=false,pills=false,pillsInsideM
       main.insertAdjacentHTML('beforeend','<button dsaccordiontoggle aria-expanded="false" aria-controls="prices"><span slot="title">Anytime TD scorer</span></button><div id="prices" hidden><pre></pre></div>');
       main.querySelector('pre').textContent=section;
       const toggle=main.querySelector('[dsaccordiontoggle]');toggle.onclick=()=>{drawerClicks++;toggle.setAttribute('aria-expanded','true');main.querySelector('#prices').hidden=false;};
+      if(mutatePlayers)mutatePlayers(main);
     };
     if(manualPlayers)players();
     for(const el of w.document.querySelectorAll('button[data-menu-item-id]'))el.onclick=()=>{
@@ -91,7 +92,7 @@ test('manifest service worker routes exact SGP starting-page text into NFL, not 
   const text=r.queue[0].text;
   assert.match(text,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(text,/BETMGM_AUTOPASS|BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/);
   const diag=JSON.parse(text.split('EXTENSION_CAPTURE_DIAGNOSTICS: ')[1]);
-  assert.equal(diag.extensionVersion,'1.4.10');assert.equal(diag.entryVersion,'20261019_mgmpills1');
+  assert.equal(diag.extensionVersion,'1.4.11');assert.equal(diag.entryVersion,'20261019_mgmroot1');
   assert.equal(diag.route,'nfl-v2');assert.equal(diag.event,'Washington Commanders @ San Francisco 49ers');
   assert.equal(r.injections.some(x=>x.name==='extractOddsTextFromCurrentPage'),false);
   // Text-only evidence cannot prove the actual Players control is clickable.
@@ -181,4 +182,28 @@ test('read-only diagnostic identifies selected Players inside an open shadow roo
   }});
   assert.equal(r.playerClicks,0);assert.equal(r.discoveryDiagnostic.lightDomBarCount,0);
   assert.equal(r.discoveryDiagnostic.selectedRoot.id,'event-shadow-host');
+});
+
+
+for(const tag of ['html','body'])test('BetMGM global '+tag+' betslip status does not exclude actual event categories or drawers',async()=>{
+  const r=await runEntry({pills:true,pillsInsideMain:true,snapshot:tdDemand,mutatePills:d=>d.querySelector(tag).classList.add('betslip-bar-visi')});
+  assert.equal(r.playerClicks,1);assert.equal(r.drawerClicks,1);
+  const records=r.queue[0].text.split(/\r?\n/).filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15)));
+  assert.equal(records.flatMap(r=>r.quotes).length,22);
+});
+
+for(const attr of [['class','betslip'],['class','betslip__panel'],['class','layout-betslip-column'],['data-testid','betslip-panel']])test('real BetMGM betslip descendant categories remain excluded: '+attr.join('='),async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,mutatePills:d=>{
+    d.documentElement.classList.add('betslip-bar-visi');
+    const bar=d.querySelector('ul'),wrap=d.createElement('section');wrap.setAttribute(...attr);bar.before(wrap);wrap.append(bar);
+  }});
+  assert.equal(r.playerClicks,0);assert.equal(r.drawerClicks,0);assert.doesNotMatch(r.queue[0].text,/NFL_MARKET_V2:/);
+});
+
+test('real BetMGM betslip drawer is excluded even under global HTML status',async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,mutatePills:d=>d.documentElement.classList.add('betslip-bar-visi'),mutatePlayers:main=>{
+    const wrap=main.ownerDocument.createElement('section');wrap.className='betslip__panel';
+    const toggle=main.querySelector('[dsaccordiontoggle]'),panel=main.querySelector('#prices');toggle.before(wrap);wrap.append(toggle,panel);
+  }});
+  assert.equal(r.playerClicks,1);assert.equal(r.drawerClicks,0);assert.doesNotMatch(r.queue[0].text,/NFL_MARKET_V2:/);
 });

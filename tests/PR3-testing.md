@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.10** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.11** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## Confirmed BetMGM root-class exclusion fix (1.4.11)
+
+The diagnostic identifies the cause: the visible unique category bar was rejected because HTML carries the global status class betslip-bar-visi. No further diagnostic or category HTML is needed for this issue. Version **1.4.11** excludes real betslip descendants while ignoring class-based exclusions on the document roots. The shared fix covers category controls, drawer headers, price panels and readable text.
+
+Update the clean test checkout directly to1.4.11, reload the extension and refresh the intended BetMGM pregame event. Run **one normal capture** from its starting page. Check the selected event, current prices, and diagnostics extensionVersion1.4.11 / entryVersion20261019_mgmroot1. If it still stops, retain the export; do not repeat unchanged runs. App95b26d6 needs no rebuild, install or storage clearing. Live completeness remains unverified until this test.
+
+Earlier sections below are historical; their requests to await/run diagnostics are superseded by the confirmed result above.
 
 ## Current blocker: verified 1.4.10 still rejects all categories
 

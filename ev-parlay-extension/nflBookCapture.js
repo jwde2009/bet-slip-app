@@ -332,9 +332,15 @@ function createNflCaptureCore() {
     `[class~="${name}" i]`, `[class^="${name}-" i]`, `[class*=" ${name}-" i]`,
     `[class^="${name}__" i]`, `[class*=" ${name}__" i]`
   ]).join(', ');
+  const genericExcluded='aside, footer, [data-testid*="betslip" i], [data-testid*="bet-slip" i], [class*="betslip" i], [class*="bet-slip" i], [data-testid*="social" i], [class*="social-feed" i], #ev-parlay-extension-toast';
+  // BetMGM sets betslip-bar-visi on HTML as global layout state. Root
+  // classes are not betslip components; real descendant classes/test IDs
+  // remain excluded, as do outcome controls. This shared selector also guards
+  // drawer headers, price panels and readable price text.
+  const mgmExcluded=genericExcluded.split(', ').map(selector=>selector.startsWith('[class')?selector+':not(html):not(body)':selector).join(', ');
   const excluded=book==='DraftKings'
     ? `aside, footer, [role="dialog"], ${dkExcluded}, #ev-parlay-extension-toast`
-    : 'aside, footer, [data-testid*="betslip" i], [data-testid*="bet-slip" i], [class*="betslip" i], [class*="bet-slip" i], [data-testid*="social" i], [class*="social-feed" i], #ev-parlay-extension-toast';
+    : book==='BetMGM'?mgmExcluded:genericExcluded;
   const raw = ()=>String((document.querySelector('main')||document.body)?.innerText||'');
   const url=()=>new URL(location.href);
   const startUrl=url();
