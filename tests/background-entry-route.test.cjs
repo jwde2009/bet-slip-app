@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const {JSDOM} = require('jsdom');
 const root = path.resolve(__dirname,'..');
 const read = name => fs.readFileSync(path.join(root,name),'utf8');
-const exported = read('tests/fixtures/betmgm-nfl-sgp-legacy-20261019.txt');
+const exported = read('tests/fixtures/betmgm-nfl-sgp-legacy-20261019.txt').replace(/\r\n/g,'\n');
 const page = exported.split('BETMGM_INITIAL_CAPTURE\n')[1].split('\nBETMGM_CURRENT_CAPTURE:')[0];
 
 async function runEntry({text=page,playersControl=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
