@@ -95,6 +95,64 @@ function targetingContext(extra={}) {
   vm.runInContext(read('ev-parlay-extension/captureDemand.js'),ctx);
   return ctx;
 }
+
+test('Latest FanDuel retry requests absent observed types, preserves zero rows and rejects game specials as a player',async()=>{
+  const raw=read('tests/fixtures/fanduel-nfl-targets-absent-20261019.txt');
+  const objects=p=>raw.split(/\r?\n/).filter(l=>l.startsWith(p)).map(l=>JSON.parse(l.slice(p.length)));
+  const run=objects('NFL_CAPTURE_RUN: ')[0],ds=objects('NFL_CAPTURE_DIAGNOSTICS: ');
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  assert.equal(run.mode,'resume-incomplete');assert.deepEqual(run.completedTabs,['Popular','Receiving Props']);
+  for(const tab of ['Passing Props','Rushing Props']) {
+    const d=ds.find(d=>d.phase==='capture'&&d.tab===tab);
+    const observed=d.availableHeadings.map(h=>core.describe(h).type);
+    assert.ok(observed.every(t=>!run.targets.includes(t)));
+    assert.equal(d.quotedRows,0);assert.equal(d.unpricedDrawers.length,0);
+  }
+  assert.equal(core.describe('Game Specials - Touchdowns'),null);
+  assert.equal(core.describe('Touchdown Scorers').type,'player_touchdowns');
+  const {parseOddsText}=await loadModule(routerFile);
+  assert.equal(parseOddsText(raw,{sportsbook:'FanDuel'}).length,0);
+});
+
+test('FanDuel page reports unmatched requested types instead of claiming no recognizable headings',async()=>{
+  const {JSDOM}=require('jsdom');
+  const dom=new JSDOM('<main><a href="?tab=passing-props" aria-selected="true">Passing Props</a><details><summary>Brock Purdy - Passing Yds</summary></details><details><summary>Jayden Daniels - Passing TDs</summary></details></main>',{url:'https://sportsbook.fanduel.com/football/was-sf/1?tab=passing-props'});
+  const w=dom.window;
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return /^(MAIN|BODY)$/.test(this.tagName)?'Football / NFL Odds / Washington Commanders @ San Francisco 49ers\nPassing Props\nMon, Oct 19\nSame Game Parlay™':this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});
+  let clicks=0;w.document.querySelectorAll('summary').forEach(e=>e.onclick=()=>clicks++);
+  const ctx=extensionContext({document:w.document,location:w.location,Node:w.Node,getComputedStyle:()=>({display:'block',visibility:'visible'})});
+  const result=await ctx.nflDetailPageStep('FanDuel',{captureOnly:true,tab:'Passing Props',targetTypes:['player_passing_attempts','player_passing_completions','player_passing_interceptions','player_touchdowns']});
+  assert.deepEqual(plain(result.notFoundTargetTypes),['player_passing_attempts','player_passing_completions','player_passing_interceptions']);
+  assert.equal(result.records.length,0);assert.equal(clicks,0);assert.equal(result.remaining,false);
+  assert.match(result.diagnostics.notes.join(' '),/availability is unverified/);
+});
+
+test('FanDuel unchanged unmatched targets pause across repeats; new types and explicit refresh recheck',async()=>{
+  let saved=null,run=1,active='Popular';const calls=[];
+  const href='https://sportsbook.fanduel.com/football/atl-no/123?tab=popular';
+  const base={book:'FanDuel',recognized:true,pregame:true,event:nflEvent,origin:new URL(href).origin,path:new URL(href).pathname,href};
+  const tabs=['Popular','Passing Props','Receiving Props','Rushing Props','TD Scorer Props'];
+  const event={eventName:nflEvent,missingExpectedMarkets:[],missingSharpMarkets:['player_passing_attempts','player_rushing_attempts','player_touchdowns'].map(marketType=>({marketType}))};
+  const snapshot={books:[{bookmaker:'FanDuel',sports:[{sport:'NFL',events:[event]}]}]};
+  const ctx=targetingContext({sleepBackground:async()=>{},safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>snapshot,
+    chrome:{tabs:{get:async()=>({url:href}),update:async(id,{url})=>{active=tabs.find(t=>url.includes(t.toLowerCase().replaceAll(' ','-')))||'Popular';}},scripting:{executeScript:async({func,args})=>{
+      if(func.name==='nflNavCheckpoint'){if(args[0]==='write')saved=plain(args[2]);return [{result:args[0]==='read'?saved:true}];}
+      const r=args[1];if(r.mode==='probe')return [{result:{...base,tabs}}];
+      if(['plan-tab','tab-state'].includes(r.mode))return [{result:{...base,ready:active===r.tab,navigation:{found:true,active:active===r.tab,href:href.replace('popular',r.tab.toLowerCase().replaceAll(' ','-'))}}}];
+      calls.push({run,tab:r.tab});
+      if((r.tab==='Passing Props'&&run<3)||r.tab==='Rushing Props')return [{result:{...base,records:[],remaining:false,notFoundTargetTypes:[r.tab==='Passing Props'?'player_passing_attempts':'player_rushing_attempts'],diagnostics:{}}}];
+      if(r.tab==='TD Scorer Props')return [{result:{...base,records:[{title:'Touchdown Scorers',quotes:[]}],remaining:false,diagnostics:{unpricedDrawers:['Touchdown Scorers']}}}];
+      return [{result:{...base,records:[{title:r.tab,quotes:[quote('Over'),quote('Under')]}],remaining:false,diagnostics:{}}}];
+    }}}});
+  const first=await ctx.tryNflNavigationCapture(1,'FanDuel');assert.match(first.text,/targets-not-observed/);
+  assert.deepEqual(Object.keys(saved.deferredByTab),['Passing Props','Rushing Props']);assert.equal(saved.incomplete,true);
+  run=2;await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===2).map(c=>c.tab),['TD Scorer Props']);
+  run=3;event.missingSharpMarkets=[{marketType:'player_passing_yards'},{marketType:'player_touchdowns'}];
+  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===3).map(c=>c.tab),['Passing Props','TD Scorer Props']);
+  run=4;vm.runInContext("captureDemandRuns.set(1,{mode:'refresh'})",ctx);
+  await ctx.tryNflNavigationCapture(1,'FanDuel');assert.deepEqual(calls.filter(c=>c.run===4).map(c=>c.tab),tabs);
+});
 for(const book of ['DraftKings','FanDuel','BetMGM','Caesars','Pinnacle','TheScore'])for(const sport of ['MLB','NHL','NFL']) {
   test(`${book} ${sport} shared demand distinguishes initial, missing, complete and explicit refresh`,()=>{
     const ctx=targetingContext(),scope={book,sport,event:'Away @ Home'};
@@ -639,7 +697,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.5');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.6');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{

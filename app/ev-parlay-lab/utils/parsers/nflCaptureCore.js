@@ -107,7 +107,7 @@ export function createNflCaptureCore() {
     ['player_touchdowns',['touchdowns','touchdowns scored','anytime touchdown scorer','anytime touchdown scorers','anytime td scorer','anytime touchdowns','total touchdowns']],
   ];
   const allTypes = new Set(['spread','total','moneyline_2way',...defs.map(d=>d[0])]);
-  const badMarket = /\b(?:first|last|half|halves|quarter|1st|2nd|3rd|4th|live|season|team|longest|defensive|drive|either|alternate|alt|special|sgp|pre-built)\b/i;
+  const badMarket = /\b(?:first|last|half|halves|quarter|1st|2nd|3rd|4th|live|season|team|longest|defensive|drive|either|alternate|alt|specials?|sgp|pre-built)\b/i;
   function market(v) {
     let s=clean(v).toLowerCase();
     if(badMarket.test(s))return '';

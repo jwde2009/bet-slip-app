@@ -1,6 +1,6 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.5** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.6** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
 
 ## Targeted event matching (1.4.5)
 
@@ -116,3 +116,9 @@ The revised lockfile uses Next.js and eslint-config-next **16.4.2**, with compat
 Installation deliberately skips lifecycle scripts. Do not broadly approve pending scripts for sharp, tesseract.js or unrs-resolver. Tests/build determine whether a required capability is actually missing; report any specific failure before approving a script. OCR execution and live browser capture are separate from parser/build validation.
 
 After all commands succeed, start only the isolated test app with `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`, then use the separate browser profile and extension 1.4.2 instructions above. This does not update the original dirty checkout or merge PR #3.
+
+## FanDuel repeat-target handling (1.4.6)
+
+The user's corrected result is that FanDuel parsed successfully; screenshot extraction reports 9 markets / 60 rows. The later TXT is a targeted retry returning no new rows for five Pinnacle comparison gaps, not a lost import. Passing/Rushing target types not observed among the recognized headings now pause for unchanged demand on that event. They are reported as deferred/unverified, not marked complete or globally unavailable. New requested types or explicit refresh recheck the tab. Game Specials is excluded from individual touchdown props.
+
+This retry change is extension-only in use with app build 95b26d6: update the clean test checkout and reload **1.4.6**, without clearing imported rows or rebuilding the app. The shared app core is synchronized for the plural-specials guard but no schema changed. Do not rerun the unchanged old capture to chase these absent observed headings. The missing evidence for FanDuel TD extraction is one expanded Touchdown Scorers container with column labels and two full player rows. Prior Passing HTML and the 60-row screenshot do not need repeating.

@@ -111,7 +111,7 @@ function createNflCaptureCore() {
     ['player_touchdowns',['touchdowns','touchdowns scored','anytime touchdown scorer','anytime touchdown scorers','anytime td scorer','anytime touchdowns','total touchdowns']],
   ];
   const allTypes = new Set(['spread','total','moneyline_2way',...defs.map(d=>d[0])]);
-  const badMarket = /\b(?:first|last|half|halves|quarter|1st|2nd|3rd|4th|live|season|team|longest|defensive|drive|either|alternate|alt|special|sgp|pre-built)\b/i;
+  const badMarket = /\b(?:first|last|half|halves|quarter|1st|2nd|3rd|4th|live|season|team|longest|defensive|drive|either|alternate|alt|specials?|sgp|pre-built)\b/i;
   function market(v) {
     let s=clean(v).toLowerCase();
     if(badMarket.test(s))return '';
@@ -814,7 +814,19 @@ function createNflCaptureCore() {
   });
   const wanted=boundedBook?pending.slice(0,4):pending;
   const processedLabels=[];
-  if(!wanted.length)diagnostics.notes.push('No safely identifiable market headings on this tab');
+  let notFoundTargetTypes=[];
+  if(!wanted.length) {
+    if(book==='FanDuel'&&targetTypes&&headers().length) {
+      const observed=new Set(headers().map(h=>core.describe(headerTitle(h))?.type));
+      const onTab=t=>request.tab==='Passing Props'?t.startsWith('player_passing'):
+        request.tab==='Rushing Props'?t.startsWith('player_rushing'):
+        request.tab==='Receiving Props'?['player_receiving_yards','player_receptions','player_rushing_receiving_yards'].includes(t):
+        request.tab==='TD Scorer Props'?t==='player_touchdowns':false;
+      notFoundTargetTypes=[...targetTypes].filter(t=>onTab(t)&&!observed.has(t));
+    }
+    diagnostics.notes.push(notFoundTargetTypes.length?'Requested market types were not observed among this tab\'s recognized headings; availability is unverified.':'No unprocessed matching market headings on this tab');
+    if(notFoundTargetTypes.length)diagnostics.notFoundTargetTypes=notFoundTargetTypes;
+  }
   for(const label of wanted) {
     if(Date.now()>marketDeadline){diagnostics.notes.push('Per-tab time limit reached; capture is partial');break;}
     if(!sameContext()||partialTab())return result({stopped:'Context changed while loading markets',records:[]});
@@ -867,7 +879,7 @@ function createNflCaptureCore() {
   if(!sameContext()||partialTab())return result({stopped:'Context changed before capture completed',records:[]});
   diagnostics.quotedRows=records.reduce((s,r)=>s+r.quotes.length,0);
   diagnostics.availableHeadings=headers().map(headerTitle).slice(0,80);
-  return result({records,...(boundedBook?{processedLabels,remaining:pending.some(x=>!processedLabels.includes(x))}: {})});
+  return result({records,...(boundedBook?{processedLabels,remaining:pending.some(x=>!processedLabels.includes(x)),notFoundTargetTypes}: {})});
  } catch(error) {
     return {recognized:true,records:[],stopped:'Page capture exception',diagnostics:{book,
       errorName:String(error?.name||'Error'),errorMessage:String(error?.message||error),
@@ -963,16 +975,20 @@ async function tryNflNavigationCapture(tabId,book) {
     const resume=demand.mode!=='refresh'&&nflCheckpointMatches(saved,base,demand.targets);
     const completed=new Set(resume?saved.completed||[]:[]);
     const priorTabs=resume?(saved.tabs||nflTabsForTypes(book,saved.targets||[])):[];
-    const unfinished=priorTabs.filter(t=>!completed.has(t));
+    const deferredByTab=resume&&saved.deferredByTab||{};
+    const blocked=tab=>book==='FanDuel'&&demand.mode!=='refresh'&&deferredByTab[tab]?.length&&
+      demand.targets.filter(t=>nflTabsForTypes(book,[t]).includes(tab)).every(t=>deferredByTab[tab]?.includes(t));
+    const unfinished=priorTabs.filter(t=>!completed.has(t)&&!blocked(t));
     const targets=demand.mode==='refresh'?[]:resume&&unfinished.length?([...new Set([...(saved.targets||[]),...demand.targets])]):demand.targets;
-    const requested=demand.mode==='missing'?nflTabsForTypes(book,demand.targets):demand.mode==='initial'&&!resume||demand.mode==='refresh'?nflTabsForTypes(book,[]):[];
+    const requested=(demand.mode==='missing'?nflTabsForTypes(book,demand.targets):demand.mode==='initial'&&!resume||demand.mode==='refresh'?nflTabsForTypes(book,[]):[]).filter(t=>!blocked(t));
+    for(const tab of requested)delete deferredByTab[tab];
     const tabs=[...new Set([...requested,...unfinished])];
     // App demand is authoritative for newly missing markets, even if an older
     // run marked that category complete. Keep priced drawers only on unfinished tabs.
     for(const t of requested)completed.delete(t);
     const processedByTab=resume&&saved.processedByTab&&typeof saved.processedByTab==='object'?saved.processedByTab:{};
     for(const t of requested)if(!unfinished.includes(t))delete processedByTab[t];
-    const checkpoint={version:NFL_NAVIGATION_VERSION,...base,targets,tabs,completed:[...completed],processedByTab,
+    const checkpoint={version:NFL_NAVIGATION_VERSION,...base,targets,tabs,completed:[...completed],processedByTab,deferredByTab,
       incomplete:true,returnedPartial:false,updatedAt:Date.now()};
     async function saveProgress() {
       checkpoint.completed=[...completed];checkpoint.updatedAt=Date.now();
@@ -1069,6 +1085,12 @@ async function tryNflNavigationCapture(tabId,book) {
         const r=capture.value;
         if(fatalPage(r)||r?.stopped){diag({...r?.diagnostics,tab:label,stopped:r?.stopped||r?.reason||'Capture context changed'});fatal=true;break;}
         if(!r?.recognized){diag({stopped:'Selected NFL game no longer recognized',tab:label});fatal=true;break;}
+        if(book==='FanDuel'&&r.notFoundTargetTypes?.length&&!r.records?.length&&!r.remaining) {
+          deferredByTab[label]=r.notFoundTargetTypes;
+          diag({...r.diagnostics,phase:'targets-not-observed',tab:label,notFoundTargetTypes:r.notFoundTargetTypes,
+            note:'Unchanged unmatched targets are paused for this event; explicit Refresh all markets rechecks availability.'});
+          await saveProgress();break;
+        }
         for(const record of r.records||[]) {
           chunks.push('NFL_MARKET_V2: '+JSON.stringify(record));
           if(record.quotes?.length){hasPrices=true;unpricedDrawers.delete(record.title);}
@@ -1093,11 +1115,11 @@ async function tryNflNavigationCapture(tabId,book) {
       else if(!incomplete.includes(label))incomplete.push(label);
       await saveProgress();
     }
-    checkpoint.incomplete=fatal||tabs.some(t=>!completed.has(t));
+    checkpoint.incomplete=fatal||tabs.some(t=>!completed.has(t))||Object.keys(deferredByTab).length>0;
     checkpoint.returnedPartial=true;
     checkpoint.pendingTab=todo.find(t=>!completed.has(t))||'';
     await saveProgress();
-    diag({phase:'run-finished',event:base.event,complete:!checkpoint.incomplete,completedTabs:[...completed],remainingTabs:tabs.filter(t=>!completed.has(t))});
+    diag({phase:'run-finished',event:base.event,complete:!checkpoint.incomplete,completedTabs:[...completed],remainingTabs:tabs.filter(t=>!completed.has(t)&&!deferredByTab[t]),deferredTabs:deferredByTab});
     return response();
   } catch(error) {
     diag({stopped:'Extension workflow exception; partial data retained',error:String(error?.message||error).slice(0,500)});return response();
