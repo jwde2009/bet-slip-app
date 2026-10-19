@@ -841,7 +841,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.8');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.9');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -1013,4 +1013,21 @@ test('DK unpriced diagnostics distinguish rendered text from filtered content wi
   assert.equal(sample.readerVersion,'20261019_1');assert.equal(sample.containerFound,true);
   assert.match(sample.renderedSample,/Dak Prescott/);assert.doesNotMatch(sample.rawSample,/Dak Prescott/);
   assert.doesNotMatch(JSON.stringify(sample),/PRIVATE ACCOUNT/);
+});
+
+
+test('BetMGM manual Players capture is NFL-routed but has no quotes when category controls are absent',async()=>{
+  const raw=read('tests/fixtures/betmgm-nfl-no-category-controls-20261019.txt');
+  assert.match(raw,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(raw,/NFL_MARKET_V2:/);
+  const ds=raw.split(/\r?\n/).filter(l=>l.startsWith('NFL_CAPTURE_DIAGNOSTICS: ')).map(l=>JSON.parse(l.slice(25)));
+  assert.deepEqual(ds.filter(d=>d.tab).map(d=>[d.tab,d.availableTabs]),[['Players',[]],['Spreads',[]],['Totals',[]],['All',[]]]);
+  const {parseOddsText}=await loadModule(routerFile);
+  assert.equal(parseOddsText(raw,{sportsbook:'BetMGM'}).length,0);
+});
+
+test('BetMGM compact hero permits exactly one SGP badge followed by a known category',async()=>{
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  const hero='NFL (14)\nTomorrow\n7:15 PM\nESPN\nCommanders\n49ers\nSGP\nPlayers';
+  assert.equal(core.inspect(hero,'BetMGM').pregame,true);
+  for(const bad of [hero.replace('SGP','SGP\nSGP'),hero.replace('SGP','Promotion'),hero.replace('Players','Odds boost'),hero.replace('Tomorrow','Live'),hero.replace('Tomorrow','Final'),hero.replace('Tomorrow',''),hero.replace('Tomorrow','NBA\nTomorrow')])assert.notEqual(core.inspect(bad,'BetMGM')?.pregame,true,bad);
 });

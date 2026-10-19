@@ -89,7 +89,10 @@ export function createNflCaptureCore() {
         // The supplied compact hero has schedule, two adjacent team labels,
         // then its event category. A league-count/sidebar label alone is not
         // enough to identify a selected event or authorize player navigation.
-        if(compact&&!/^(?:Players|All|Spreads|Totals|Game lines)$/i.test(ls[i+2]||''))continue;
+        // The starting-page hero includes one SGP badge before Players.
+        // Skip only that exact observed badge, never arbitrary intervening text.
+        const categoryIndex=i+2+(/^SGP$/i.test(ls[i+2]||'')?1:0);
+        if(compact&&!/^(?:Players|All|Spreads|Totals|Game lines)$/i.test(ls[categoryIndex]||''))continue;
         const status=ls.slice(start+1,i);
         const pregame=status.some(s=>upcoming.test(s)) && !status.some(s=>live.test(s)||/^(?:NBA|WNBA|NHL|MLB|NCAAF|CFL)(?:\s*\(\d+\))?$/i.test(s));
         return {recognized:true,event:`${a} @ ${h}`,pregame,reason:pregame?'':'No selected-game pregame header'};

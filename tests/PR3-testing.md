@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.8** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.9** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## BetMGM SGP header and missing category controls (1.4.9)
+
+**Do not run another blind capture for this repair.** The user confirmed installed 1.4.8. Its starting-page export remains legacy because an observed `SGP` badge separates the teams from `Players`. A manifest-driven service-worker reproduction confirms that failure with all imports loaded. Version 1.4.9 allows exactly that one badge before a known category, with existing pregame and same-event safeguards. No category selector or timer was changed.
+
+The subsequent manual Players export correctly uses NFL_CAPTURE_VERSION but contains diagnostics only: all four categories report availableTabs: []. No app parser can import absent market records. The remaining blocker is the actual **Players control outerHTML and its immediate category-bar parent**; inspect that before recommending another live run. Previous full exports and header text are sufficient.
+
+The corrected background appends EXTENSION_CAPTURE_DIAGNOSTICS containing manifest version, entry revision, route, selected event and capture timestamp. App commit 95b26d6 was tested directly: zero rows for this diagnostics-only export and 22 rows for the corrected anytime V2 envelope, including appended version diagnostics. No app rebuild or storage clearing is needed for that format. The local test uses actual entry loading and serialized injections, but its clickable Players control is explicitly synthetic; actual category navigation remains unverified.
 
 ## BetMGM compact NFL header (1.4.8)
 
@@ -10,7 +18,7 @@ The supplied manual Players TXT contains legacy collector markers and an NFL (14
 
 One normal capture on the intended BetMGM pregame event with 1.4.8 is the useful next test. Its export should start with NFL_CAPTURE_VERSION, not BETMGM_AUTOPASS. Keep that export if the corrected route still yields missing prices. Do not repeat the old version's broad run or resend the supplied header.
 
-The sections below retain earlier investigation details. Use current version **1.4.8** for all new tests; do not install intermediate versions.
+The sections below retain earlier investigation details. Use current version **1.4.9** only when the remaining category-control evidence is resolved; do not install intermediate versions or repeat blind captures.
 
 ## Deletion and normal retry (1.4.7)
 

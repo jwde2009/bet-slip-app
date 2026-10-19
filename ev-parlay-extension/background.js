@@ -634,7 +634,7 @@ async function runOddsCapture(tab, options = {}) {
   await safeShowToast(
     sourceTabId,
     "Extracting odds…",
-    "The EV Parlay extension is running. Keep this tab open.",
+    `EV Parlay ${chrome.runtime.getManifest().version} is running. Keep this tab open.`,
     {
       loading: true,
       pulse: true,
@@ -763,7 +763,16 @@ async function runOddsCapture(tab, options = {}) {
   } else {
     payload = await extractSinglePayloadFromTab(sourceTabId);
   }
-  const captureText=String(payload?.text||'');
+  let captureText=String(payload?.text||'');
+  if(captureText && demandBook==='BetMGM') {
+    const route=/^NFL_CAPTURE_VERSION:/m.test(captureText)?'nfl-v2':/^MLB_VISIBLE_CAPTURE:/m.test(captureText)?'mlb-visible':/^BETMGM_AUTOPASS_/m.test(captureText)?'legacy-multipass':'legacy-single';
+    captureText+='\n\nEXTENSION_CAPTURE_DIAGNOSTICS: '+JSON.stringify({
+      extensionVersion:chrome.runtime.getManifest().version,
+      entryVersion:typeof EXTENSION_ENTRY_VERSION==='string'?EXTENSION_ENTRY_VERSION:'unknown',
+      nflNavigationVersion:typeof NFL_NAVIGATION_VERSION==='string'?NFL_NAVIGATION_VERSION:'unloaded',
+      book:demandBook,route,demandMode:demand?.mode||'',sport:demand?.sport||'',event:demand?.event||'',capturedAt:new Date().toISOString()
+    });
+  }
   const finalText=demand?.mode==='missing'&&captureText&&!nativeNfl
     ? 'CAPTURE_DEMAND_V1: '+JSON.stringify({book:demand.book,sport:demand.sport,event:demand.event,targets:demand.targets,diagnostic:payload?.message||'Targeted native capture',text:captureText})
     : captureText;
