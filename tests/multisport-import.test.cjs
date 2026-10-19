@@ -587,7 +587,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.3');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.4');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -610,7 +610,7 @@ function dkDrawerContext(markup) {
   const w=dom.window;
   Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
   w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});
-  w.HTMLElement.prototype.checkVisibility=function(){return !this.closest('[hidden]');};
+  w.HTMLElement.prototype.checkVisibility=function(){for(let p=this;p;p=p.parentElement)if(p.hidden||p.style.display==='none'||p.style.visibility==='hidden')return false;return true;};
   w.HTMLElement.prototype.scrollIntoView=()=>{};
   const ctx=extensionContext({window:w,document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{fn();return 0;},
     getComputedStyle:el=>({display:el.hidden?'none':'block',visibility:'visible'})});
@@ -630,6 +630,71 @@ test('DK drawer reader reaches sibling prices beyond heading-only wrappers with 
   assert.equal(toggles,1);assert.equal(outcomes,0);assert.equal(result.diagnostics.unpricedDrawers.length,0);
   const skip=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',processedLabels:['Pass Yards O/U']});
   assert.equal(skip.records.length,0);assert.equal(toggles,1);
+});
+
+function dkSuppliedDrawer() {
+  const result=dkDrawerContext(read('tests/fixtures/draftkings-nfl-pass-yards-dom-20261019.html'));
+  // The supplied market has no event header. This is an explicit test harness
+  // identity, not recovered venue/home-away metadata or the prior DAL/GB game.
+  result.w.document.querySelector('pre').textContent='Sportsbook / Football Odds / NFL Odds / SF 49ers @ WAS Commanders Odds\nSF 49ers\nStarts In:\n01:00:00\nWAS Commanders\nOdds';
+  result.w.history.replaceState({},'','/event/sf-was/test-fixture?category=odds&subcategory=passing');
+  return result;
+}
+
+test('Supplied DK CMS market extracts exact four passing quotes without animated stats or inherited event',async()=>{
+  const {w,ctx}=dkSuppliedDrawer();let clicks=0;
+  w.document.querySelectorAll('button,a').forEach(el=>el.addEventListener('click',()=>clicks++));
+  const result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards']});
+  assert.equal(result.records.length,1);
+  assert.deepEqual(plain(result.records[0].quotes.map(q=>[q.marketType,q.subject,q.side,q.line,q.odds])),[
+    ['player_passing_yards','Brock Purdy','Over',249.5,-111],['player_passing_yards','Brock Purdy','Under',249.5,-113],
+    ['player_passing_yards','Jayden Daniels','Over',206.5,-111],['player_passing_yards','Jayden Daniels','Under',206.5,-113]]);
+  assert.equal(result.event,'San Francisco 49ers @ Washington Commanders');assert.equal(clicks,0);
+  const {parseOddsText}=await loadModule(routerFile);
+  const rows=plain(parseOddsText('NFL_MARKET_V2: '+JSON.stringify(result.records[0]),{sportsbook:'DraftKings'}));
+  assert.equal(rows.length,4);assert.ok(rows.every(r=>r.eventLabelRaw===result.event&&r.marketType==='player_passing_yards'));
+});
+
+test('Supplied DK CMS excludes hidden, disabled, mismatched and neighboring prices without raw fallback',async()=>{
+  for(const mutate of [
+    w=>w.document.querySelector('[data-testid="market-template"]').hidden=true,
+    w=>w.document.querySelector('[data-testid="market-template"]').style.display='none',
+    w=>w.document.querySelector('[data-testid="market-template"]').setAttribute('aria-hidden','true'),
+    w=>w.document.querySelector('button.cb-market__button').disabled=true,
+    w=>w.document.querySelector('button.cb-market__button').setAttribute('aria-disabled','true'),
+    w=>w.document.querySelector('[data-testid="button-odds-market-board"]').hidden=true,
+    w=>w.document.querySelector('[data-testid="button-points-market-board"]').textContent='250.5',
+    w=>w.document.querySelector('[data-testid="button-odds-market-board"]').textContent='Locked'
+  ]) {
+    const {w,ctx}=dkSuppliedDrawer();mutate(w);
+    const neighbour=w.document.querySelector('.cms-expander-container').cloneNode(true);
+    neighbour.querySelector('h2').textContent='1st Half Pass Yards O/U';
+    neighbour.querySelectorAll('[data-testid="button-odds-market-board"]').forEach(el=>el.textContent='-999');
+    w.document.querySelector('main').append(neighbour);
+    const result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards']});
+    assert.equal(result.records.length,1);
+    assert.equal(result.records[0].quotes.length,2);
+    assert.ok(result.records[0].quotes.every(q=>q.subject==='Jayden Daniels'&&[-111,-113].includes(q.odds)));
+  }
+});
+
+test('Supplied DK CMS opens collapsed sibling panel once and honors missing/processed market targets',async()=>{
+  const {w,ctx}=dkSuppliedDrawer();let toggles=0,outcomes=0;
+  const header=w.document.querySelector('[data-testid="collapsible-trigger"]');
+  const panel=w.document.querySelector('.cms-expander-container').lastElementChild;
+  header.setAttribute('aria-expanded','false');panel.hidden=true;
+  header.onclick=()=>{toggles++;header.setAttribute('aria-expanded','true');panel.hidden=false;};
+  w.document.querySelectorAll('button.cb-market__button,a').forEach(el=>el.onclick=()=>outcomes++);
+  let result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_receptions']});
+  assert.equal(result.records.length,0);assert.equal(toggles,0);
+  result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards']});
+  assert.equal(result.records[0].quotes.length,4);assert.equal(toggles,1);assert.equal(outcomes,0);
+  const processed=plain(result.processedLabels);
+  result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards'],processedLabels:processed});
+  assert.equal(result.records.length,0);assert.equal(toggles,1);
+  // Explicit refresh does not supply a processed-label checkpoint.
+  result=await ctx.nflDetailPageStep('DraftKings',{mode:'capture',targetTypes:['player_passing_yards']});
+  assert.equal(result.records[0].quotes.length,4);assert.equal(toggles,1);assert.equal(outcomes,0);
 });
 
 test('DK missing panel cannot borrow an unsupported neighbouring market; explicit panels remain supported',async()=>{

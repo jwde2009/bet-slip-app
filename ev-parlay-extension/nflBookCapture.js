@@ -650,7 +650,7 @@ function createNflCaptureCore() {
         if(p.closest(excluded))return null;
         const neighbours=list(p,headerSelector).filter(x=>visible(x)&&x!==el&&!x.contains(el)&&!el.contains(x));
         if(neighbours.length)return null;
-        if(p.matches('.sportsbook-market-accordion,.sportsbook-event-accordion'))return p;
+        if(p.matches('.cms-expander-container,.sportsbook-market-accordion,.sportsbook-event-accordion'))return p;
         const prices=list(p,'table,[data-type],[data-testid*="outcome" i],[class*="outcome" i]')
           .some(x=>!el.contains(x));
         if(prices)return p;
@@ -731,6 +731,30 @@ function createNflCaptureCore() {
   }
   function readMarket(label,container) {
     const d=core.describe(label);if(!d||!container)return [];
+    if(book==='DraftKings'&&d.type!=='main'&&container.querySelector('[data-testid="market-template"]')) {
+      // Observed CMS O/U grid: each template owns one player link and its
+      // outcome buttons. Stats counters contain every animated digit, so never
+      // infer player/line/price associations from the flattened grid text.
+      const qs=[],owner=container.closest('.cms-expander-container');
+      for(const template of list(container,'[data-testid="market-template"]')) {
+        if(!visible(template)||template.closest(excluded)||template.closest('.cms-expander-container')!==owner)continue;
+        const players=list(template,'[data-testid="player-page-link"]').filter(visible);
+        if(players.length!==1)continue;
+        const name=core.player(text(players[0].querySelector('p')||players[0]));
+        if(!name||(d.name&&d.name!==name))continue;
+        for(const button of list(template,'button.cb-market__button')) {
+          if(!visible(button)||button.disabled||button.getAttribute('aria-disabled')==='true')continue;
+          const fields=['button-title-market-board','button-points-market-board','button-odds-market-board']
+            .map(id=>button.querySelector(`[data-testid="${id}"]`));
+          if(!fields.every(visible))continue;
+          const side=text(fields[0]),line=text(fields[1]),price=core.odds(text(fields[2]));
+          if(!/^(O|U|Over|Under)$/i.test(side)||!/^\d+(?:\.\d+)?$/.test(line)||price===null)continue;
+          qs.push(core.quote(d.type,name,/^u/i.test(side)?'Under':'Over',Number(line),price));
+        }
+      }
+      // Do not let a raw fallback reinterpret hidden, locked or missing cells.
+      return core.validQuotes(qs,event);
+    }
     if(d.type==='main') {
       if(book==='FanDuel')return fanDuelMain(container);
       let qs=[];for(const t of tablesIn(container))qs.push(...core.parseMainTable(event,t));

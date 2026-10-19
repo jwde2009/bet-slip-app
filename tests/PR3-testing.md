@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.3** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.4** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## October 19: supplied CMS drawer repair (1.4.4)
+
+The requested expanded market HTML is now supplied and retained as `draftkings-nfl-pass-yards-dom-20261019.html`. **Do not resend it.** The earlier 1.4.3 reader returns zero quotes from this real structure. Version 1.4.4 recognizes the enclosing cms-expander-container and reads each template's explicit player, O/U, points and odds fields. Exact replay gives Brock Purdy O/U 249.5 at -111/-113 and Jayden Daniels O/U 206.5 at -111/-113. Animated stats digits are excluded. The market fragment contains no event header; tests provide an explicitly synthetic SF/Washington event wrapper rather than reuse Dallas/Green Bay metadata.
+
+This is an extension-only delta from 1.4.2 or 1.4.3: use the guarded clean-checkout fetch/switch steps, reload the extension and confirm **1.4.4**, then refresh the sportsbook tab. No app rebuild, npm install, storage clearing or changes to the original dirty checkout are needed. If not yet on 1.4.3, skip that intermediate update.
+
+Smallest next live test: on the intended pregame NFL event, use the normal extension action to resume missing props. Check that the imported passing-yards pairs match the **current** displayed players, lines and odds and that the event label matches the selected event. Save the resulting Download TXT only if it still fails or reports incomplete markets. The supplied four prices are historical fixture values, not expected live prices. Full NFL prop coverage, other CMS market shapes and live hydration are not proven by one market's DOM replay.
 
 ## October 19: DraftKings NFL drawer reader (1.4.3)
 
@@ -8,7 +16,7 @@ The latest 127-line export confirms all six tabs switched successfully, includin
 
 If already on 1.4.2, this is extension-only: update the clean test checkout using the existing guarded fetch/switch steps below, reload the extension and confirm **1.4.3**. No app rebuild, dependency install or storage clearing is needed for this delta. Keep the original modified checkout intact. The 1.4.2 instructions below remain applicable when upgrading from an earlier app version.
 
-Before another full capture, the smallest missing evidence is **one expanded Pass Yards O/U market container's outerHTML**, including its header/toggle and the sibling panel showing one player's Over/Under prices. In browser DevTools Elements, inspect that market, select its enclosing market container, and Copy → Copy outerHTML. If the header uses `aria-controls` to a separate panel, include that controlled element as well. Do not copy the whole page, account data or cookies. Existing tab HTML need not be repeated. This distinguishes heading-wrapper selection from hidden/aria-hidden filtering without another blind full run.
+The expanded market HTML requested during this investigation has since been supplied; see the 1.4.4 result above. No further HTML is needed for this market.
 
 ## Consolidated 1.4.2 update
 
@@ -65,7 +73,7 @@ Open the test app URL above in that profile. Confirm its import controls include
 - Supported books in this task: DraftKings, FanDuel, BetMGM, Caesars, Pinnacle and theScore. BetOnline is excluded from new work.
 - Start with a single known event. Compare event, period, participant, line and both quoted prices before relying on imported rows. Save **Download TXT** from Import Odds to retain the actual capture and diagnostics.
 - Pinnacle MLB now opens Player Props and supported collapsed drawers automatically, based on the supplied rendered DOM. Start at an English MLB event page, capture once, and compare one complete bases/strikeouts pair and the capture diagnostics. No outcome buttons should be clicked. The actual DOM sample gives four prop rows; the older expanded text gives 82 rows. These replays do not establish full live-page coverage. Guest displayed odds may be delayed.
-- DraftKings NFL live tab switching is confirmed by the October 19 export; prop extraction remains unverified. Supply the one expanded market container described above rather than repeating the tab HTML or a full capture.
+- DraftKings NFL live tab switching is confirmed by the October 19 export. The supplied expanded CMS market replays to four correct prices on 1.4.4; a normal targeted live pass remains to be confirmed. Do not repeat the supplied HTML.
 - Dark Horse is not an installed capture integration. The manual CSV/TSV importer requires the documented schema and a permitted data source; it is not proof of compatibility with a provider export.
 
 Do not merge, deploy, or copy this test checkout over the original repair directory as part of this test.
