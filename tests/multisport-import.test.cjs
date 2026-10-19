@@ -26,6 +26,58 @@ async function parse(raw, context = {}) {
 const coreFile = 'app/ev-parlay-lab/utils/parsers/nflCaptureCore.js';
 const routerFile = 'app/ev-parlay-lab/utils/parseOddsText.js';
 const tableFile = 'app/ev-parlay-lab/utils/parsers/parseOddsTable.js';
+
+test('Live DK refresh retains 86 unique quotes in 14 markets and every captured prop tuple matches its player text',async()=>{
+  const raw=read('tests/fixtures/draftkings-nfl-refresh-live-20261019.txt');
+  const {parseOddsText}=await loadModule(routerFile);
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  const records=raw.split(/\r?\n/).filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15)));
+  const rows=plain(parseOddsText(raw,{sportsbook:'DraftKings'}));
+  assert.equal(rows.length,86);
+  assert.deepEqual(rows.reduce((o,r)=>(o[r.marketType]=(o[r.marketType]||0)+1,o),{}),{
+    spread:2,moneyline_2way:2,total:2,player_passing_yards:4,player_passing_touchdowns:4,
+    player_passing_interceptions:4,player_passing_attempts:4,player_passing_completions:4,
+    player_passing_rushing_yards:4,player_receiving_yards:16,player_receptions:16,
+    player_rushing_yards:12,player_rushing_attempts:8,player_rushing_receiving_yards:4});
+  assert.ok(rows.every(r=>r.eventLabelRaw==='Washington Commanders @ San Francisco 49ers'&&r.period==='full_game'&&r.sportsbook==='DraftKings'));
+  assert.equal(new Set(rows.map(r=>r.id)).size,86);
+  // Independently verify quoted fields against each player's bounded raw slice;
+  // counter digits are present in these samples but cannot change the tuples.
+  let verified=0;
+  for(const record of records.filter(r=>/O\/U$/.test(r.title))) {
+    const sample=core.clean(record.rawSample),names=[...new Set(record.quotes.map(q=>q.subject))];
+    assert.ok(record.quotes.length>0);
+    for(const q of record.quotes) {
+      assert.equal(q.marketType,core.describe(record.title).type);
+      const start=sample.indexOf(q.subject);assert.ok(start>=0);
+      const next=names.map(n=>sample.indexOf(n,start+q.subject.length)).filter(i=>i>=0);
+      const section=sample.slice(start,next.length?Math.min(...next):undefined);
+      const tuple=`${q.side==='Over'?'O':'U'} ${q.line} ${q.odds>0?'+':''}${q.odds}`;
+      assert.ok(section.includes(tuple),`${q.subject}: ${tuple}`);verified++;
+    }
+  }
+  assert.equal(verified,80);
+  assert.deepEqual(rows.filter(r=>r.marketType==='player_passing_yards').map(r=>[r.playerName,r.lineValue,r.oddsAmerican]),[
+    ['Brock Purdy',249.5,-111],['Brock Purdy',249.5,-113],['Jayden Daniels',206.5,-111],['Jayden Daniels',206.5,-113]]);
+});
+
+test('Live DK refresh diagnostics distinguish ladder exclusions from missing anytime TD; no invented fallback rows',async()=>{
+  const raw=read('tests/fixtures/draftkings-nfl-refresh-live-20261019.txt');
+  const objects=p=>raw.split(/\r?\n/).filter(l=>l.startsWith(p)).map(l=>JSON.parse(l.slice(p.length)));
+  const run=objects('NFL_CAPTURE_RUN: ')[0],ds=objects('NFL_CAPTURE_DIAGNOSTICS: '),rs=objects('NFL_MARKET_V2: ');
+  assert.equal(run.mode,'refresh');
+  assert.deepEqual(ds.filter(d=>d.phase==='navigation-confirmed').map(d=>d.tab),['POPULAR','GAME LINES','TD SCORERS','PASSING','RECEIVING','RUSHING']);
+  assert.equal(ds.at(-1).complete,false);assert.deepEqual(ds.at(-1).completedTabs,['GAME LINES']);
+  assert.deepEqual(ds.at(-1).remainingTabs,['POPULAR','TD SCORERS','PASSING','RECEIVING','RUSHING']);
+  assert.equal(ds.filter(d=>d.notes?.some(n=>n.includes('time limit'))).length,3);
+  assert.ok(ds.every(d=>!d.stopped&&!d.contextFailure&&!d.unavailableTabs?.length));
+  const empty=rs.filter(r=>!r.quotes.length),td=empty.filter(r=>r.title==='TD Scorer');
+  assert.equal(empty.length,19);assert.equal(td.length,2);
+  assert.ok(empty.filter(r=>r.title!=='TD Scorer').every(r=>/\d+\+/.test(r.rawSample)&&!/O\/U$/.test(r.title)));
+  assert.ok(td.every(r=>/Anytime TD Scorer[\s\S]*First TD Scorer[\s\S]*2\+ TDs/.test(r.rawSample)));
+  const {parseOddsText}=await loadModule(routerFile);
+  assert.equal(parseOddsText(empty.map(r=>'NFL_MARKET_V2: '+JSON.stringify(r)).join('\n'),{sportsbook:'DraftKings'}).length,0);
+});
 const nflEvent = 'Atlanta Falcons @ New Orleans Saints';
 const quote = (side, odds = -110) => ({ marketType: 'player_receiving_yards', subject: 'Drake London', side, line: 69.5, odds });
 const capture = (book, quotes = [quote('Over'), quote('Under')], extra = {}) => 'NFL_MARKET_V2: ' + JSON.stringify({ book, event: nflEvent, period: 'full_game', quotes, ...extra });
