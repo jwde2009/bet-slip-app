@@ -2,6 +2,14 @@
 
 The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.10** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
 
+## Current blocker: verified 1.4.10 still rejects all categories
+
+Do not repeat the capture or install another speculative fix. The latest export confirms1.4.10 / entry20261019_mgmpills1 / nfl-v2, correct event, and no available category controls. The cause is not yet established. The existing category HTML is sufficient; do not resend it.
+
+Smallest next evidence: select the **Players button** in browser DevTools Elements, then run the read-only [category discovery diagnostic](diagnostics/betmgm-category-discovery.js) in that page's Console (or DevTools Sources > Snippets). Return the printed JSON. It reports only category IDs/labels, sizes/styles, exclusion/visibility gates, bounded ancestor metadata and frame/root context. It does not click, navigate, send requests, write storage, read account data or copy full HTML. No extension/app update is required. If DevTools execution is inconvenient, report that rather than copying unrelated markup.
+
+The output determines whether any ancestor HTML is needed. For an exclusion/hidden ancestor it identifies the exact tag/class; a frame/shadow mismatch identifies the root. No specific additional ancestor outerHTML is justified before this diagnostic.
+
 ## Supplied BetMGM category-bar repair (1.4.10)
 
 The requested Players/category-bar HTML is supplied and preserved; do not request it again. Update directly from 1.4.8 to **1.4.10** in the clean test checkout, reload the extension and refresh the BetMGM event tab. Skip 1.4.9. No app rebuild, npm install or storage clearing is needed from app95b26d6.

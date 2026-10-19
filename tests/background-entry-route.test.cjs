@@ -9,7 +9,7 @@ const read = name => fs.readFileSync(path.join(root,name),'utf8');
 const exported = read('tests/fixtures/betmgm-nfl-sgp-legacy-20261019.txt').replace(/\r\n/g,'\n');
 const page = exported.split('BETMGM_INITIAL_CAPTURE\n')[1].split('\nBETMGM_CURRENT_CAPTURE:')[0];
 
-async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,mutatePills=null,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
+async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,mutatePills=null,browserOverrides=null,diagnose=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
   const manifest=JSON.parse(read('ev-parlay-extension/manifest.json'));
   const dom=new JSDOM('<main></main>',{url,runScripts:'outside-only'});
   const app=new JSDOM('',{url:'http://localhost:3000/ev-parlay-lab',runScripts:'outside-only'});
@@ -54,6 +54,9 @@ async function runEntry({text=page,playersControl=false,pills=false,pillsInsideM
     win.getComputedStyle=e=>({display:e.hidden?'none':'block',visibility:'visible'});
     win.alert=()=>{};
   }
+  if(browserOverrides)browserOverrides(w);
+  let discoveryDiagnostic=null;
+  if(diagnose){w.$0=w.$0||w.document.querySelector('[data-menu-item-id=Players]');w.console.log=()=>{};discoveryDiagnostic=JSON.parse(JSON.stringify(vm.runInContext(read('tests/diagnostics/betmgm-category-discovery.js'),dom.getInternalVMContext())));}
   app.window.localStorage.setItem('EV_LOADED_COVERAGE_SNAPSHOT',JSON.stringify(snapshot));
   const tab={id:1,url,title:w.document.title},appTab={id:2,url:app.window.location.href};
   let clicked;const injections=[],loaded=[];
@@ -78,7 +81,7 @@ async function runEntry({text=page,playersControl=false,pills=false,pillsInsideM
   const queue=JSON.parse(app.window.localStorage.getItem('EV_IMPORT_QUEUE')||'[]');
   const toast=JSON.parse(w.sessionStorage.getItem('EV_PARLAY_LAST_TOAST')||'null');
   dom.window.close();app.window.close();
-  return {queue,toast,playerClicks,drawerClicks,categoryClicks,injections,loaded};
+  return {queue,toast,playerClicks,drawerClicks,categoryClicks,injections,loaded,discoveryDiagnostic};
 }
 
 test('manifest service worker routes exact SGP starting-page text into NFL, not legacy',async()=>{
@@ -153,4 +156,29 @@ test('observed Spread/Totals/All IDs require structural content transitions, not
   assert.deepEqual(r.categoryClicks,['Spread','Totals','-1']);
   const diagnostics=r.queue[0].text.split(/\r?\n/).filter(l=>l.startsWith('NFL_CAPTURE_DIAGNOSTICS: ')).map(l=>JSON.parse(l.slice(25)));
   assert.deepEqual(diagnostics.filter(d=>d.phase==='navigation-confirmed').map(d=>d.tab),['Spreads','Totals','All']);
+});
+
+
+// These deliberately override the old all-elements-have-boxes harness. They
+// reproduce the same empty live symptom for DIFFERENT causes, not a live cause.
+for(const [name,browserOverrides,mutatePills,verify] of [
+  ['zero-size bar',w=>{const bar=w.document.querySelector('ul');bar.getBoundingClientRect=()=>({width:0,height:0});},null,d=>assert.equal(d.reports[0].bar.width,0)],
+  ['native visibility rejects bar',w=>{w.document.querySelector('ul').checkVisibility=()=>false;},null,d=>assert.equal(d.reports[0].bar.checkVisibility,false)],
+  ['excluded ancestor',null,d=>{const bar=d.querySelector('ul'),wrap=d.createElement('div');wrap.className='layout-betslip-column';bar.before(wrap);wrap.append(bar);},d=>assert.equal(d.reports[0].bar.excludedAncestor.className,'layout-betslip-column')],
+  ['two rendered bars',null,d=>d.body.insertAdjacentHTML('afterbegin',d.querySelector('ul').outerHTML),d=>assert.equal(d.renderedUnexcludedBarCount,2)],
+])test('read-only diagnostics distinguish actual pipeline rejection: '+name,async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,browserOverrides,mutatePills,diagnose:true});
+  assert.equal(r.playerClicks,0);assert.equal(r.drawerClicks,0);
+  assert.match(r.queue[0].text,/"availableTabs":\[\]/);
+  verify(r.discoveryDiagnostic);
+});
+
+
+test('read-only diagnostic identifies selected Players inside an open shadow root without traversing it for capture',async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,diagnose:true,mutatePills:d=>{
+    const bar=d.querySelector('ul'),host=d.createElement('div');host.id='event-shadow-host';bar.before(host);
+    host.attachShadow({mode:'open'}).append(bar);d.defaultView.$0=bar.querySelector('[data-menu-item-id=Players]');
+  }});
+  assert.equal(r.playerClicks,0);assert.equal(r.discoveryDiagnostic.lightDomBarCount,0);
+  assert.equal(r.discoveryDiagnostic.selectedRoot.id,'event-shadow-host');
 });
