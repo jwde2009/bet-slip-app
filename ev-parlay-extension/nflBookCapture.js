@@ -386,6 +386,27 @@ function createNflCaptureCore() {
     }
     return true;
   }
+  let headerRecoveryExhausted=false,headerFailureEvidence=null;
+  async function ensureContext() {
+    if(sameContext()){delete diagnostics.contextFailure;return true;}
+    if(book!=='BetMGM'||diagnostics.contextFailure?.reason!=='Selected-game header unavailable')return false;
+    if(headerRecoveryExhausted){diagnostics.contextFailure.headerEvidence=headerFailureEvidence;return false;}
+    // Re-read fresh evidence after a short render gap. Never infer pregame
+    // from a cached event or unchanged URL, and never click while unresolved.
+    for(let attempt=0;attempt<4;attempt++) {
+      await wait(150);
+      if(sameContext()) {
+        diagnostics.notes.push('Selected-game header recovered after bounded revalidation');
+        delete diagnostics.contextFailure;return true;
+      }
+      if(diagnostics.contextFailure?.reason!=='Selected-game header unavailable')return false;
+    }
+    headerRecoveryExhausted=true;
+    const tokens=value=>{const ls=lines(value),i=ls.findIndex(l=>/^(?:(?:USA|United States)\s*\|\s*NFL|NFL\s*\(\d+\))$/i.test(l));return i<0?[]:ls.slice(i,i+20).map(l=>l.slice(0,100));};
+    headerFailureEvidence={rootHeroTokens:tokens(raw()),bodyHeroTokens:tokens(document.body?.innerText||''),rechecks:4};
+    diagnostics.contextFailure.headerEvidence=headerFailureEvidence;
+    return false;
+  }
   function safeControl(el) {
     if(!visible(el)||el.disabled||el.getAttribute('aria-disabled')==='true'||el.closest(excluded))return false;
     const own=[el.getAttribute('data-testid'),el.className,el.getAttribute('data-test-id')].join(' ');
@@ -619,6 +640,12 @@ function createNflCaptureCore() {
   }
   const tabsNow=()=>[...new Set(tabCandidates().map(text))];
   const activeTab=()=>tabsNow().find(l=>tabActive(l,findTab(l)))||'';
+  if(request.mode==='visible-main'&&book==='BetMGM') {
+    if(!sameContext()||partialTab())return result({stopped:'Unsafe starting-page main-line context',records:[]});
+    const ls=lines(raw()),i=ls.findIndex((l,j)=>/^Game lines$/i.test(l)&&/^Full game$/i.test(ls[j+1]||''));
+    const quotes=i<0?[]:core.parseMain(book,event,ls.slice(i,i+45).join('\n'));
+    return result({records:quotes.length?[{book,event,period:'full_game',title:'Game Lines',quotes}]:[],diagnostics:{...diagnostics,phase:'starting-page-main-lines',quotedRows:quotes.length,notes:i<0?['No explicit visible full-game lines section']:[]}});
+  }
   if(request.mode==='probe')return result({path:startUrl.pathname,origin:startUrl.origin,href:startUrl.href,tabs:tabsNow(),activeTab:activeTab()});
   if(['tab-state','plan-tab','activate-tab'].includes(request.mode)) {
     const wanted=approvedTabs.find(l=>l.toLowerCase()===String(request.tab||'').toLowerCase());
@@ -847,7 +874,7 @@ function createNflCaptureCore() {
   async function settled(label) {
     let qs=[],previous='',matches=0;
     for(let n=0;n<(book==='FanDuel'?8:16);n++) {
-      if(!sameContext()||partialTab())return [];
+      if(!await ensureContext()||partialTab())return [];
       qs=readMarket(label,containerFor(findHeader(label)));
       const now=JSON.stringify(qs);
       matches=qs.length&&now===previous?matches+1:0;
@@ -893,7 +920,7 @@ function createNflCaptureCore() {
   }
   for(const label of wanted) {
     if(Date.now()>marketDeadline){diagnostics.notes.push('Per-tab time limit reached; capture is partial');break;}
-    if(!sameContext()||partialTab())return result({stopped:'Context changed while loading markets',records:[]});
+    if(!await ensureContext()||partialTab())return result({stopped:'Context changed while loading markets',records:[]});
     let h=findHeader(label);if(!h){diagnostics.unpricedDrawers.push(label);if(boundedBook)processedLabels.push(label);continue;}
     const d=h.closest('details'),open=d?d.open:h.getAttribute('aria-expanded')==='true';
     if(!open) {
@@ -902,7 +929,7 @@ function createNflCaptureCore() {
     }
     let qs=await settled(label);
     for(let round=0;round<4;round++) {
-      if(!sameContext())break;
+      if(!await ensureContext())break;
       const block=containerFor(findHeader(label));
       const more=list(block,'button,[role="button"],a').find(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
       if(!more)break;
@@ -940,7 +967,7 @@ function createNflCaptureCore() {
     const i=ls.findIndex((l,j)=>/^(?:Game|Game Lines)$/i.test(l)&&/^Spread$/i.test(ls[j+1]||''));
     if(i>=0)records.push({book,event,period:'full_game',title:'Game Lines',quotes:core.parseMain(book,event,ls.slice(i,i+35).join('\n'))});
   }
-  if(!sameContext()||partialTab())return result({stopped:'Context changed before capture completed',records:[]});
+  if(!await ensureContext()||partialTab())return result({stopped:'Context changed before capture completed',records:[]});
   diagnostics.quotedRows=records.reduce((s,r)=>s+r.quotes.length,0);
   diagnostics.availableHeadings=headers().map(headerTitle).slice(0,80);
   return result({records,...(boundedBook?{processedLabels,remaining:pending.some(x=>!processedLabels.includes(x)),notFoundTargetTypes}: {})});
@@ -1096,6 +1123,19 @@ async function tryNflNavigationCapture(tabId,book) {
         for(const record of visibleMain.value?.records||[])chunks.push('NFL_MARKET_V2: '+JSON.stringify(record));
         diag({...visibleMain.value?.diagnostics,phase:'visible-main-fallback'});
       }
+    }
+    if(book==='BetMGM'&&((demand.mode==='initial'&&!resume)||demand.mode==='refresh'||demand.mode==='missing'&&targets.some(t=>['spread','total','moneyline_2way'].includes(t)))) {
+      const guard=await currentTabGuard();
+      if(guard.error){diag({stopped:guard.error,phase:'starting-page-main-lines'});return response();}
+      const firstLines=await nflNavInject(tabId,nflDetailPageStep,[book,{...base,mode:'visible-main'}]);
+      if(firstLines.ok&&!firstLines.value?.stopped) {
+        for(const record of firstLines.value?.records||[]) {
+          const quotes=demand.mode==='missing'?record.quotes.filter(q=>targets.includes(q.marketType)):record.quotes;
+          if(quotes.length)chunks.push('NFL_MARKET_V2: '+JSON.stringify({...record,quotes}));
+        }
+        diag(firstLines.value?.diagnostics||{phase:'starting-page-main-lines',quotedRows:0});
+      } else diag({phase:'starting-page-main-lines',stopped:firstLines.value?.stopped||firstLines.error||'Header unavailable'});
+      if(fatalPage(firstLines.value))return response();
     }
     for(const label of todo) {
       if(fatal)break;

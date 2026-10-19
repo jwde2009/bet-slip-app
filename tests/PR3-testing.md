@@ -1,6 +1,14 @@
 # Test PR #3 without replacing local repairs
 
-The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.11** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+The draft branch is `codex/multisport-darkhorse-import`. Its extension manifest is **1.4.12** and preserves the October 13 `DRAFTKINGS_NFL_TABS_VERSION: 20261013_1` repair. A passing build is not live sportsbook verification. Consult [the coverage matrix](Multisport-import-audit.md) before testing.
+
+## BetMGM initial main lines and header revalidation (1.4.12)
+
+The live1.4.11 export confirms Players navigation now works. Its later header loss stops collection; no ordinary O/U prices are recoverable from the shown1+–5+ Passing TD ladder. BetMGM previously navigated straight to Players before reading the starting page. Version1.4.12 captures explicitly visible full-game main lines first on initial/refresh runs, preserving them if a later prop capture stops. Prop-only targeted retries do not broaden to main lines.
+
+Update the clean checkout directly to **1.4.12**, reload the extension, refresh the intended pregame event and use **one normal capture from the starting page**. Check the event and current main-line prices before evaluating props. Expect extensionVersion1.4.12 / entryVersion20261019_mgmcontext1 and starting-page-main-lines diagnostics. No app rebuild from95b26d6, install or storage clearing is required.
+
+The collector rechecks a disappearing header up to four times before stopping. It resumes only with fresh same-event pregame evidence, never cached identity/URL alone. The live cause of header disappearance is still unverified; a persistent failure now includes bounded headerEvidence. If it stops again, retain that one TXT. Do not resend category HTML or assume ladder prices should become paired O/U rows.
 
 ## Confirmed BetMGM root-class exclusion fix (1.4.11)
 

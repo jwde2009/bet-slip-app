@@ -9,7 +9,7 @@ const read = name => fs.readFileSync(path.join(root,name),'utf8');
 const exported = read('tests/fixtures/betmgm-nfl-sgp-legacy-20261019.txt').replace(/\r\n/g,'\n');
 const page = exported.split('BETMGM_INITIAL_CAPTURE\n')[1].split('\nBETMGM_CURRENT_CAPTURE:')[0];
 
-async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,mutatePlayers=null,mutatePills=null,browserOverrides=null,diagnose=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
+async function runEntry({text=page,playersControl=false,pills=false,pillsInsideMain=false,manualPlayers=false,transition=true,categoryTransitions=null,afterDrawerOpen=null,mutatePlayers=null,mutatePills=null,browserOverrides=null,diagnose=false,url='https://sports.betmgm.com/en/sports/events/commanders-49ers-123',snapshot={version:1,books:[]}}={}) {
   const manifest=JSON.parse(read('ev-parlay-extension/manifest.json'));
   const dom=new JSDOM('<main></main>',{url,runScripts:'outside-only'});
   const app=new JSDOM('',{url:'http://localhost:3000/ev-parlay-lab',runScripts:'outside-only'});
@@ -29,7 +29,7 @@ async function runEntry({text=page,playersControl=false,pills=false,pillsInsideM
       // shape; panel composition and transition behavior remain simulated.
       main.insertAdjacentHTML('beforeend','<button dsaccordiontoggle aria-expanded="false" aria-controls="prices"><span slot="title">Anytime TD scorer</span></button><div id="prices" hidden><pre></pre></div>');
       main.querySelector('pre').textContent=section;
-      const toggle=main.querySelector('[dsaccordiontoggle]');toggle.onclick=()=>{drawerClicks++;toggle.setAttribute('aria-expanded','true');main.querySelector('#prices').hidden=false;};
+      const toggle=main.querySelector('[dsaccordiontoggle]');toggle.onclick=()=>{drawerClicks++;toggle.setAttribute('aria-expanded','true');main.querySelector('#prices').hidden=false;if(afterDrawerOpen)afterDrawerOpen(main);};
       if(mutatePlayers)mutatePlayers(main);
     };
     if(manualPlayers)players();
@@ -92,7 +92,7 @@ test('manifest service worker routes exact SGP starting-page text into NFL, not 
   const text=r.queue[0].text;
   assert.match(text,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(text,/BETMGM_AUTOPASS|BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/);
   const diag=JSON.parse(text.split('EXTENSION_CAPTURE_DIAGNOSTICS: ')[1]);
-  assert.equal(diag.extensionVersion,'1.4.11');assert.equal(diag.entryVersion,'20261019_mgmroot1');
+  assert.equal(diag.extensionVersion,'1.4.12');assert.equal(diag.entryVersion,'20261019_mgmcontext1');
   assert.equal(diag.route,'nfl-v2');assert.equal(diag.event,'Washington Commanders @ San Francisco 49ers');
   assert.equal(r.injections.some(x=>x.name==='extractOddsTextFromCurrentPage'),false);
   // Text-only evidence cannot prove the actual Players control is clickable.
@@ -206,4 +206,56 @@ test('real BetMGM betslip drawer is excluded even under global HTML status',asyn
     const toggle=main.querySelector('[dsaccordiontoggle]'),panel=main.querySelector('#prices');toggle.before(wrap);wrap.append(toggle,panel);
   }});
   assert.equal(r.playerClicks,1);assert.equal(r.drawerClicks,0);assert.doesNotMatch(r.queue[0].text,/NFL_MARKET_V2:/);
+});
+
+
+function queuedRecords(r) {
+  return r.queue[0].text.split(/\r?\n/).filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15)));
+}
+function loseHeader(kind) {
+  return main=>{
+    const hero=main.firstChild,old=hero.textContent,w=main.ownerDocument.defaultView;
+    hero.textContent=old.replace('NFL (14)','Header loading');
+    let waits=0;const original=w.setTimeout;
+    w.setTimeout=fn=>original(()=>{
+      if(++waits===2&&kind!=='permanent') {
+        hero.textContent=kind==='live'?old.replace('Tomorrow','Live'):kind==='event'?old.replace('49ers','Cowboys'):kind==='no-schedule'?old.replace('Tomorrow',''):old;
+        if(kind==='path')w.history.pushState({},'',w.location.pathname+'-changed');
+      }
+      fn();
+    });
+  };
+}
+
+test('BetMGM initial action retains six exact starting-page main lines before Players fails context',async()=>{
+  const r=await runEntry({pills:true,afterDrawerOpen:loseHeader('permanent')});
+  const first=r.injections.findIndex(x=>x.name==='nflDetailPageStep'&&x.args[1]?.mode==='visible-main');
+  const navigate=r.injections.findIndex(x=>x.name==='nflDetailPageStep'&&x.args[1]?.mode==='activate-tab');
+  assert.ok(first>=0&&first<navigate);
+  const qs=queuedRecords(r).flatMap(r=>r.quotes);assert.equal(qs.length,6);
+  assert.deepEqual(qs.map(q=>[q.marketType,q.subject,q.line,q.odds]),[
+    ['spread','Washington Commanders',7.5,-112],['spread','San Francisco 49ers',-7.5,-105],
+    ['moneyline_2way','Washington Commanders',null,320],['moneyline_2way','San Francisco 49ers',null,-425],
+    ['total','',52,-110],['total','',52,-108]]);
+  assert.match(r.queue[0].text,/headerEvidence/);assert.doesNotMatch(r.queue[0].text,/"complete":true/);
+});
+
+test('BetMGM transient header loss recovers only after fresh same-event pregame evidence returns',async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,afterDrawerOpen:loseHeader('recover')});
+  assert.equal(queuedRecords(r).flatMap(r=>r.quotes).length,22);
+  assert.equal(r.playerClicks,1);assert.equal(r.drawerClicks,1);
+  assert.match(r.queue[0].text,/header recovered after bounded revalidation/);
+  assert.equal(r.injections.some(x=>x.args[1]?.mode==='visible-main'),false,'prop-only targeted capture must not broaden');
+});
+for(const kind of ['permanent','live','event','no-schedule','path'])test('BetMGM header recovery refuses '+kind,async()=>{
+  const r=await runEntry({pills:true,snapshot:tdDemand,afterDrawerOpen:loseHeader(kind)});
+  assert.equal(queuedRecords(r).flatMap(r=>r.quotes).length,0);
+  assert.equal(r.playerClicks,1);assert.equal(r.drawerClicks,1);
+  assert.match(r.queue[0].text,/Context changed/);
+});
+
+test('BetMGM starting-page capture refuses an explicitly selected half tab',async()=>{
+  const r=await runEntry({pills:true,browserOverrides:w=>w.document.querySelector('main').insertAdjacentHTML('beforeend','<button role="tab" aria-selected="true">1st Half</button>')});
+  assert.equal(queuedRecords(r).flatMap(r=>r.quotes).length,0);
+  assert.equal(r.playerClicks,0);
 });

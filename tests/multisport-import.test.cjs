@@ -213,6 +213,7 @@ test('Empty current coverage overrides stale completed, deferred and priced NFL 
         const r=args[1],info={...base,recognized:true,pregame:true};
         if(r.mode==='probe')return [{result:{...info,tabs:ctx.nflTabsForTypes(book,[])}}];
         if(['plan-tab','tab-state'].includes(r.mode))return [{result:{...info,ready:true,navigation:{found:true,active:true}}}];
+        if(r.mode==='visible-main')return [{result:{...info,records:[],diagnostics:{quotedRows:0}}}];
         calls.push(plain(r));return [{result:{...info,records:[{title:r.tab,quotes:unpriced?[]:[quote('Over'),quote('Under')]}],remaining:false,diagnostics:unpriced?{unpricedDrawers:[r.tab]}:{}}}];
       }}}});
     const tabs=plain(ctx.nflTabsForTypes(book,[]));
@@ -841,7 +842,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.11');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.12');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -1030,4 +1031,18 @@ test('BetMGM compact hero permits exactly one SGP badge followed by a known cate
   const hero='NFL (14)\nTomorrow\n7:15 PM\nESPN\nCommanders\n49ers\nSGP\nPlayers';
   assert.equal(core.inspect(hero,'BetMGM').pregame,true);
   for(const bad of [hero.replace('SGP','SGP\nSGP'),hero.replace('SGP','Promotion'),hero.replace('Players','Odds boost'),hero.replace('Tomorrow','Live'),hero.replace('Tomorrow','Final'),hero.replace('Tomorrow',''),hero.replace('Tomorrow','NBA\nTomorrow')])assert.notEqual(core.inspect(bad,'BetMGM')?.pregame,true,bad);
+});
+
+
+test('live BetMGM 1.4.11 confirms Players navigation but rejects Passing TD ladders and yields no quotes',async()=>{
+  const raw=read('tests/fixtures/betmgm-nfl-header-loss-1411-20261019.txt');
+  const ds=raw.split(/\r?\n/).filter(l=>l.startsWith('NFL_CAPTURE_DIAGNOSTICS: ')).map(l=>JSON.parse(l.slice(25)));
+  assert.ok(ds.some(d=>d.phase==='navigation-confirmed'&&d.tab==='Players'&&d.injectionRetries===0));
+  const failure=ds.find(d=>d.contextFailure);assert.equal(failure.contextFailure.reason,'Selected-game header unavailable');
+  const {createNflCaptureCore}=await loadModule(coreFile),core=createNflCaptureCore();
+  const sample=failure.unpricedSamples[0];assert.equal(sample.title,'Passing TDs');
+  assert.match(sample.rawSample,/1\+/);assert.match(sample.rawSample,/5\+/);
+  assert.match(sample.rawSample,/-295/);assert.match(sample.rawSample,/\+120/);
+  assert.equal(core.parsePropText(sample.title,sample.rawSample).length,0);
+  const {parseOddsText}=await loadModule(routerFile);assert.equal(parseOddsText(raw,{sportsbook:'BetMGM'}).length,0);
 });
