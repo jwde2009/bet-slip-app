@@ -1,0 +1,4 @@
+league,event,market,period,selection,line,sportsbook,odds,odds_format,odds_type,captured_at,participant,source
+NHL,Edmonton Oilers @ Florida Panthers,spread,full_game,Edmonton Oilers,1.5,BetMGM,-110,american,listed,2026-10-14T00:00:00Z,,Synthetic example - not current odds
+NHL,Edmonton Oilers @ Florida Panthers,spread,full_game,Florida Panthers,-1.5,Pinnacle,2.05,decimal,listed,2026-10-14T00:00:00Z,,Synthetic example - not current odds
+NFL,Atlanta Falcons @ New Orleans Saints,player_receiving_yards,full_game,Over,69.5,DraftKings,-110,american,listed,2026-10-14T00:00:00Z,Drake London,Synthetic example - not current odds

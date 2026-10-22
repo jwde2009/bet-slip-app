@@ -28,7 +28,9 @@ export function normalizeParsedRows(rows) {
     return {
       ...row,
       selectionNormalized,
-      oddsDecimal: Number.isFinite(row.oddsAmerican)
+      oddsDecimal: ["odds_table", "pinnacle_dom"].includes(row.sourceType) && row.originalOddsFormat === "decimal" && Number.isFinite(row.oddsDecimal)
+        ? row.oddsDecimal
+        : Number.isFinite(row.oddsAmerican)
         ? americanToDecimal(row.oddsAmerican)
         : row.oddsDecimal,
     };

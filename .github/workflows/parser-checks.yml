@@ -7,7 +7,11 @@ permissions:
   contents: read
 jobs:
   parsers:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Check out the exact public-repository commit
@@ -15,6 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           git init -q
+          if [ "$RUNNER_OS" = "Windows" ]; then git config core.autocrlf true; fi
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
@@ -22,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Regression tests and extension syntax
         shell: bash
         run: |
@@ -30,9 +35,16 @@ jobs:
           node --version
           node --check ev-parlay-extension/background.js
           node --check ev-parlay-extension/background-entry.js
+          node --check ev-parlay-extension/captureDemand.js
           node --check ev-parlay-extension/theScoreNflCapture.js
+          node --check ev-parlay-extension/nflBookCapture.js
+          node --check ev-parlay-extension/mlbVisibleCapture.js
+          node --check ev-parlay-extension/pinnacleMlbCapture.js
           node --experimental-vm-modules --test tests/*.test.cjs
           git diff --check
+      - name: Production dependency audit
+        shell: bash
+        run: npm audit --omit=dev --audit-level=low
       - name: Next.js production build
         shell: bash
         run: |

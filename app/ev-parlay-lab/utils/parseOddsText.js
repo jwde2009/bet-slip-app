@@ -1,3 +1,5 @@
+import { parseOddsTable, isOddsTable } from "./parsers/parseOddsTable";
+import { parseNflCapture } from "./parsers/parseNflCapture";
 import { parseDraftKingsText } from "./parsers/parseDraftKingsText";
 import { parseFanDuelText } from "./parsers/parseFanDuelText";
 import { parseBetMGMText } from "./parsers/parseBetMGMText";
@@ -6,6 +8,7 @@ import { parsePinnacleText } from "./parsers/parsePinnacleText";
 import { parseTheScoreText } from "./parsers/parseTheScoreText";
 import { parseBetOnlineText } from "./parsers/parseBetOnlineText";
 import { parseNflPlayerProps } from "./parsers/nflPlayerProps";
+import { normalizeParsedRows } from "./normalizeTeams";
 
 function normalizeSportsbook(value) {
   const s = String(value || "")
@@ -36,6 +39,22 @@ export function parseOddsText(rawText, context = {}) {
   if (!normalizedRawText.trim()) {
     console.log("NO RAW TEXT PROVIDED");
     return [];
+  }
+
+  if(normalizedRawText.startsWith('CAPTURE_DEMAND_V1: ')) {
+    let packet;try{packet=JSON.parse(normalizedRawText.slice(19));}catch{return [];}
+    if(!packet||!Array.isArray(packet.targets)||!packet.targets.length||typeof packet.text!=='string'||packet.text.startsWith('CAPTURE_DEMAND_V1:'))return [];
+    if(sportsbook!=='manual'&&sportsbook!==normalizeSportsbook(packet.book))return [];
+    const key=v=>String(v||'').toLowerCase().replace(/\s+/g,' ').trim();
+    const rows=normalizeParsedRows(parseOddsText(packet.text,{...context,sportsbook:packet.book}));
+    return rows.filter(r=>key(r.sportsbook)===key(packet.book)&&key(r.sport)===key(packet.sport)&&key(r.eventLabelRaw)===key(packet.event)&&packet.targets.includes(r.marketType))
+      .map(r=>({...r,incrementalCapture:true}));
+  }
+
+  if (sportsbook === "odds table" || isOddsTable(normalizedRawText)) return parseOddsTable(normalizedRawText);
+
+  if (/^NFL_MARKET_V2:|^NFL_CAPTURE_(?:RUN|DIAGNOSTICS):/m.test(normalizedRawText)) {
+    return parseNflCapture(normalizedRawText, { ...context, sportsbook });
   }
 
   // BetOnline must never fall through to another book's generic page detection.
@@ -69,7 +88,8 @@ export function parseOddsText(rawText, context = {}) {
   }
 
   if (sportsbook === "pinnacle") {
-    const rows = [...parsePinnacleText(normalizedRawText, context), ...parseNflPlayerProps(normalizedRawText, "Pinnacle")];
+    const rows = parsePinnacleText(normalizedRawText, context);
+    rows.push(...parseNflPlayerProps(normalizedRawText, "Pinnacle"));
     console.log("PINNACLE PARSER ROW COUNT", rows.length);
     return rows;
   }

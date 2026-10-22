@@ -1,0 +1,33 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: FanDuel
+Sport: NFL
+NFL_NAVIGATION_VERSION: 20261018_2
+
+FANDUEL_NFL_LAYOUT_VERSION: 20261012_2
+FANDUEL_NFL_HEADER_VERSION: 20261012_3
+
+NFL_CAPTURE_RUN: {"book":"FanDuel","event":"Washington Commanders @ San Francisco 49ers","mode":"resume-incomplete","targets":["player_passing_attempts","player_passing_completions","player_passing_interceptions","player_rushing_attempts","player_touchdowns"],"completedTabs":["Popular","Receiving Props"]}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-requested","tab":"Passing Props","control":{"className":"am aq ao ap af ib s h i j ah ai m aj o ak q al","role":"","tag":"A"},"method":"same-event-link"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-confirmed","tab":"Passing Props","activeTab":"Passing Props","injectionRetries":0}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","availableHeadings":["Brock Purdy - Passing Yds","Jayden Daniels - Passing Yds","Brock Purdy - Passing TDs","Jayden Daniels - Passing TDs"],"clickedTabs":[],"event":"Washington Commanders @ San Francisco 49ers","header":{"boundary":"Same Game Parlay™","conflictingEvents":[],"event":"Washington Commanders @ San Francisco 49ers","liveTokens":[],"scheduleTokens":["Mon, Oct 19"],"skippedBreadcrumbTab":"Passing Props","statusTokens":["/","Passing Props","Washington Commanders @ San Francisco 49ers Passing Props Odds","WAS","Mon, Oct 19","7:16PM CT","SF"]},"notes":["No safely identifiable market headings on this tab"],"openedDrawers":[],"quotedRows":0,"tab":"Passing Props","unavailableTabs":[],"unpricedDrawers":[],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-requested","tab":"Rushing Props","control":{"className":"am aq ao ap af ib s h i j ah ai m aj o ak q al","role":"","tag":"A"},"method":"same-event-link"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-confirmed","tab":"Rushing Props","activeTab":"Rushing Props","injectionRetries":0}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","availableHeadings":["Brock Purdy - Rushing Yds","Kaelon Black - Rushing Yds","Austin Ekeler - Rushing Yds","Jayden Daniels - Rushing Yds","Rachaad White - Rushing Yds","Christian McCaffrey - Rushing Yds","Rachaad White - Rushing + Receiving Yds","Christian McCaffrey - Rushing + Receiving Yds"],"clickedTabs":[],"event":"Washington Commanders @ San Francisco 49ers","header":{"boundary":"Same Game Parlay™","conflictingEvents":[],"event":"Washington Commanders @ San Francisco 49ers","liveTokens":[],"scheduleTokens":["Mon, Oct 19"],"skippedBreadcrumbTab":"Rushing Props","statusTokens":["/","Rushing Props","Washington Commanders @ San Francisco 49ers Rushing Props Odds","WAS","Mon, Oct 19","7:16PM CT","SF"]},"notes":["No safely identifiable market headings on this tab"],"openedDrawers":[],"quotedRows":0,"tab":"Rushing Props","unavailableTabs":[],"unpricedDrawers":[],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-requested","tab":"TD Scorer Props","control":{"className":"am aq ao ap af ib s h i j ah ai m aj o ak q al","role":"","tag":"A"},"method":"same-event-link"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"navigation-confirmed","tab":"TD Scorer Props","activeTab":"TD Scorer Props","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"FanDuel","event":"Washington Commanders @ San Francisco 49ers","period":"full_game","quotes":[],"rawSample":"","title":"Touchdown Scorers"}
+
+NFL_MARKET_V2: {"book":"FanDuel","event":"Washington Commanders @ San Francisco 49ers","period":"full_game","quotes":[],"rawSample":"Game Specials - Touchdowns\n1+ TDs to be Scored in Each Quarter\n-125\nChristian McCaffrey, George Kittle, and Mike Evans to Combine for 4+ TDs\n+330\nChristian McCaffrey, George Kittle, and Terry McLaurin to Combine for 4+ TDs\n+490\nGeorge Kittle, Mike Evans, and Terry McLaurin to Combine for 4+ TDs\n+850\nChristian McCaffrey, Mike Evans, and Terry McLaurin to Combine for 5+ TDs\n+1100\n2+ TDs to be Scored in Each Quarter\n+1100\nChristian McCaffrey, George Kittle, and Mike Evans to Combine for 5+ TDs\n+1100\nGeorge Kittle, Mike Evans, and Terry McLaurin to Combine for 5+ TDs\n+3000\nShow less","title":"Game Specials - Touchdowns"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","availableHeadings":["Touchdown Scorers","Game Specials - Touchdowns"],"clickedTabs":[],"event":"Washington Commanders @ San Francisco 49ers","header":{"boundary":"Same Game Parlay™","conflictingEvents":[],"event":"Washington Commanders @ San Francisco 49ers","liveTokens":[],"scheduleTokens":["Mon, Oct 19"],"skippedBreadcrumbTab":"TD Scorer Props","statusTokens":["/","TD Scorer Props","Washington Commanders @ San Francisco 49ers TD Scorer Props Odds","WAS","Mon, Oct 19","7:16PM CT","SF"]},"notes":[],"openedDrawers":["Game Specials - Touchdowns"],"quotedRows":0,"tab":"TD Scorer Props","unavailableTabs":[],"unpricedDrawers":["Touchdown Scorers","Game Specials - Touchdowns"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"FanDuel","phase":"run-finished","event":"Washington Commanders @ San Francisco 49ers","complete":false,"completedTabs":["Popular","Receiving Props"],"remainingTabs":["Passing Props","Rushing Props","TD Scorer Props"]}

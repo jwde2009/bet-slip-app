@@ -1,0 +1,127 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: DraftKings
+Sport: NFL
+NFL_NAVIGATION_VERSION: 20261018_2
+
+DRAFTKINGS_NFL_TABS_VERSION: 20261013_1
+DRAFTKINGS_NFL_HEADER_NAV_VERSION: 20261018_2
+
+NFL_CAPTURE_RUN: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","mode":"full-core-markets","targets":[],"completedTabs":[]}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"POPULAR","activeTab":"Popular","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nGame\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Game"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nTD Scorer\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"TD Scorer"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass TDs\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass TDs"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Game","TD Scorer","Pass Yards","Pass TDs","Receiving Yards","Receptions","Rush Yards","Rush + Rec Yards"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Pass Yards","Pass TDs"],"quotedRows":0,"tab":"POPULAR","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Game","TD Scorer","Pass Yards","Pass TDs"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nReceiving Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Receiving Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nReceptions\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Receptions"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":-102,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-118,"side":"Home","subject":"Green Bay Packers"},{"line":null,"marketType":"moneyline_2way","odds":-115,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":-105,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-115,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-105,"side":"Under","subject":""}],"title":"Game Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Game","TD Scorer","Pass Yards","Pass TDs","Receiving Yards","Receptions","Rush Yards","Rush + Rec Yards"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":["Per-tab time limit reached; capture is partial"],"openedDrawers":["Receiving Yards","Receptions"],"quotedRows":6,"tab":"POPULAR","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Receiving Yards","Receptions"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":-102,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-118,"side":"Home","subject":"Green Bay Packers"},{"line":null,"marketType":"moneyline_2way","odds":-115,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":-105,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-115,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-105,"side":"Under","subject":""}],"title":"Game Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Game","TD Scorer","Pass Yards","Pass TDs","Receiving Yards","Receptions","Rush Yards","Rush + Rec Yards"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":["Per-tab time limit reached; capture is partial"],"openedDrawers":["Rush Yards"],"quotedRows":6,"tab":"POPULAR","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Rush Yards"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush + Rec Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush + Rec Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[{"line":-1.5,"marketType":"spread","odds":-102,"side":"Away","subject":"Dallas Cowboys"},{"line":1.5,"marketType":"spread","odds":-118,"side":"Home","subject":"Green Bay Packers"},{"line":null,"marketType":"moneyline_2way","odds":-115,"side":"Away","subject":"Dallas Cowboys"},{"line":null,"marketType":"moneyline_2way","odds":-105,"side":"Home","subject":"Green Bay Packers"},{"line":53.5,"marketType":"total","odds":-115,"side":"Over","subject":""},{"line":53.5,"marketType":"total","odds":-105,"side":"Under","subject":""}],"title":"Game Lines"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Game","TD Scorer","Pass Yards","Pass TDs","Receiving Yards","Receptions","Rush Yards","Rush + Rec Yards"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Rush + Rec Yards"],"quotedRows":6,"tab":"POPULAR","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Rush + Rec Yards"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-requested","tab":"GAME LINES","control":{"className":"tab-switcher-tab  ","role":"tab","tag":"A"},"method":"scheduled-exact-control"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"GAME LINES","activeTab":"Game Lines","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nGame\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Game"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Game"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":[],"quotedRows":0,"tab":"GAME LINES","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Game"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-requested","tab":"TD SCORERS","control":{"className":"tab-switcher-tab  ","role":"tab","tag":"A"},"method":"scheduled-exact-control"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"TD SCORERS","activeTab":"TD Scorers","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nTD Scorer\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"TD Scorer"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["TD Scorer"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":[],"quotedRows":0,"tab":"TD SCORERS","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["TD Scorer"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-requested","tab":"PASSING","control":{"className":"tab-switcher-tab  ","role":"tab","tag":"A"},"method":"scheduled-exact-control"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"PASSING","activeTab":"Passing","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass TDs\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass TDs"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass Attempts\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass Attempts"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nCompletions\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Completions"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Pass Yards","Pass TDs","Pass Attempts","Completions","Pass + Rush Yards","Interceptions","Pass Yards O/U","Pass TDs O/U","Interceptions O/U","Pass Attempts O/U","Completions O/U","Pass + Rush Yards O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Pass TDs","Pass Attempts","Completions"],"quotedRows":0,"tab":"PASSING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Pass Yards","Pass TDs","Pass Attempts","Completions"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass + Rush Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass + Rush Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nInterceptions\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Interceptions"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass Yards O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass Yards O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass TDs O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass TDs O/U"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Pass Yards","Pass TDs","Pass Attempts","Completions","Pass + Rush Yards","Interceptions","Pass Yards O/U","Pass TDs O/U","Interceptions O/U","Pass Attempts O/U","Completions O/U","Pass + Rush Yards O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Pass + Rush Yards","Interceptions","Pass Yards O/U","Pass TDs O/U"],"quotedRows":0,"tab":"PASSING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Pass + Rush Yards","Interceptions","Pass Yards O/U","Pass TDs O/U"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nInterceptions O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Interceptions O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass Attempts O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass Attempts O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nCompletions O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Completions O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nPass + Rush Yards O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Pass + Rush Yards O/U"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Pass Yards","Pass TDs","Pass Attempts","Completions","Pass + Rush Yards","Interceptions","Pass Yards O/U","Pass TDs O/U","Interceptions O/U","Pass Attempts O/U","Completions O/U","Pass + Rush Yards O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Interceptions O/U","Pass Attempts O/U","Completions O/U","Pass + Rush Yards O/U"],"quotedRows":0,"tab":"PASSING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Interceptions O/U","Pass Attempts O/U","Completions O/U","Pass + Rush Yards O/U"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-requested","tab":"RECEIVING","control":{"className":"tab-switcher-tab  ","role":"tab","tag":"A"},"method":"scheduled-exact-control"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"RECEIVING","activeTab":"Receiving","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nReceiving Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Receiving Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nReceptions\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Receptions"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRec Yards O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rec Yards O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nReceptions O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Receptions O/U"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Receiving Yards","Receptions","Rec Yards O/U","Receptions O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Receptions","Rec Yards O/U","Receptions O/U"],"quotedRows":0,"tab":"RECEIVING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Receiving Yards","Receptions","Rec Yards O/U","Receptions O/U"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-requested","tab":"RUSHING","control":{"className":"tab-switcher-tab  ","role":"tab","tag":"A"},"method":"scheduled-exact-control"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"navigation-confirmed","tab":"RUSHING","activeTab":"Rushing","injectionRetries":0}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush + Rec Yards\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush + Rec Yards"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush Attempts\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush Attempts"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush Yards O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush Yards O/U"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Rush Yards","Rush + Rec Yards","Rush Attempts","Rush Yards O/U","Rush Attempts O/U","Rush + Rec Yards O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Rush + Rec Yards","Rush Attempts","Rush Yards O/U"],"quotedRows":0,"tab":"RUSHING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Rush Yards","Rush + Rec Yards","Rush Attempts","Rush Yards O/U"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush Attempts O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush Attempts O/U"}
+
+NFL_MARKET_V2: {"book":"DraftKings","event":"Dallas Cowboys @ Green Bay Packers","period":"full_game","quotes":[],"rawSample":"\n\n\n\n\nRush + Rec Yards O/U\n \n\n\n \n\n\n\n\n \n\n\n \n\n\n\n\n","title":"Rush + Rec Yards O/U"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","availableHeadings":["Rush Yards","Rush + Rec Yards","Rush Attempts","Rush Yards O/U","Rush Attempts O/U","Rush + Rec Yards O/U"],"clickedTabs":[],"event":"Dallas Cowboys @ Green Bay Packers","notes":[],"openedDrawers":["Rush Attempts O/U","Rush + Rec Yards O/U"],"quotedRows":0,"tab":"RUSHING","tabDiscovery":{"acceptedTabs":["Popular","TD Scorers","Passing","Receiving","Rushing","Game Lines"],"headerNavigationVersion":"20261018_2","matchedAnchors":19,"openShadowRoots":0,"rejected":{"non-core-or-mismatched-label":13},"rejectionSamples":[],"scanLimited":false,"strategy":"observed-event-tablist","version":"20261013_1","visibilityStrategy":"legacy-rendered-exact-label"},"unavailableTabs":[],"unpricedDrawers":["Rush Attempts O/U","Rush + Rec Yards O/U"],"version":"20261012_nav4","phase":"capture"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"DraftKings","phase":"run-finished","event":"Dallas Cowboys @ Green Bay Packers","complete":false,"completedTabs":[],"remainingTabs":["POPULAR","GAME LINES","TD SCORERS","PASSING","RECEIVING","RUSHING"]}
