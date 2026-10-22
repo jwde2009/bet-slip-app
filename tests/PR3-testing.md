@@ -186,7 +186,32 @@ This retry change is extension-only in use with app build 95b26d6: update the cl
 ## NFL follow-up: 1.4.13 (October 22)
 
 1. Keep the regular Chrome profile and current app at `http://localhost:3000/ev-parlay-lab`; 1.4.12 delivery is user-confirmed and the app capture format is unchanged. Do not start another server or clear browser storage.
-2. Update **only** the clean `C:\Users\jwde2\Documents\bet-slip-app-import-test` checkout from `codex/multisport-darkhorse-import`. In PowerShell, first run `git status --short` and `git branch --show-current` from that folder. If dirty or on another branch, stop; do not reset, stash automatically, or touch the original checkout. If clean on the expected branch, use `git pull --ff-only origin codex/multisport-darkhorse-import`.
+2. Update **only** `C:\Users\jwde2\Documents\bet-slip-app-import-test`. This test worktree was installed in **detached HEAD** mode (previously `9ed2174`); an empty branch name is expected. Do not use `git pull`. In PowerShell, run:
+
+   ```powershell
+   Set-Location 'C:\Users\jwde2\Documents\bet-slip-app-import-test'
+   git status --short --branch --untracked-files=all
+   ```
+
+   Continue only if the output has the detached-HEAD status header and **no modified, staged, or untracked file entries**. If any entries appear, or the folder/HEAD state differs, stop and preserve them for inspection. Do not reset, clean, force-switch, or automatically stash. Do not touch the original `bet-slip-app` checkout.
+
+   Once that prerequisite is confirmed, run these commands individually, stopping on any error:
+
+   ```powershell
+   git fetch origin codex/multisport-darkhorse-import
+   git rev-parse 'bddf108^{commit}'
+   ```
+
+   The second command must print `bddf10848da2a8edae9f43fcfbbd544171c31cb4`, the verified 1.4.13 code commit with passing Windows/Linux CI. Then run:
+
+   ```powershell
+   git switch --detach bddf10848da2a8edae9f43fcfbbd544171c31cb4
+   git status --short --branch --untracked-files=all
+   git rev-parse HEAD
+   ```
+
+   Confirm the worktree is still clean and HEAD is the full SHA above. These steps keep the test installation detached and do not restart the app server. No tracked, untracked, or ignored user files should be deleted; stop on a checkout conflict rather than overriding it.
+
 3. In `chrome://extensions`, reload the already loaded test extension; verify **1.4.13**. Its folder is `C:\Users\jwde2\Documents\bet-slip-app-import-test\ev-parlay-extension`. Keep any older duplicate disabled. No app rebuild is required.
 4. Refresh the intended pregame BetMGM sportsbook page. For the first diagnostic run, right-click EV Parlay Extractor → **Refresh all markets for this event**. Keep the resulting TXT. Expected entry version: `20261022_nflcoverage1`. Old progress is preserved, so this explicit refresh is needed to revisit drawers previously considered priced/complete.
 5. For FanDuel, after initial rows exist, use one normal toolbar capture to test targeted missing-market retry. Preserve that TXT if requested markets remain absent. Do not infer that a comparison-book gap means the market is offered here.
