@@ -281,3 +281,27 @@ Code audit confirms BetMGM starts by navigating Players; the only prior pre-navi
 Header handling remains fail-closed. On header-unavailable within drawer capture, at most four150ms rereads per injection seek fresh same-event pregame evidence. Recovery never substitutes saved event identity or an unchanged URL for missing pregame evidence. Changed event/path, live status, missing schedule or persistent absence stop. Persistent absence adds bounded root/body header tokens to contextFailure.headerEvidence without account shell text. The live disappearance cause is still unverified; this is tested transient recovery plus better failure evidence, not a claim of complete live repair.
 
 Actual entrypoint tests preserve six exact supplied starting-page main quotes before permanent Players failure; recover22 earlier supplied anytime quotes only after fresh header returns; refuse permanent/live/event/no-schedule/path variants; reject selected half and retain prop-only targeting. Existing NFL/MLB/NHL policy, NBA/WNBA parser and deletion/retry tests remain intact. All263 local tests pass. Combined next test is one normal initial-page capture on1.4.12; inspect matching event/current main lines, then props. App95b26d6 V2 schema is unchanged; no rebuild or repeated DOM request.
+
+## October 22 NFL follow-up — extension 1.4.13
+
+The user confirmed 1.4.12 delivers odds into the usual app. This confirms transport compatibility, not complete markets or current website accuracy. No app, saved-parlay schema, original checkout, or BetOnline changes are included here.
+
+### Corrections and evidence
+
+- BetMGM's October 19 23:32 refresh is retained as `betmgm-nfl-refresh-1412-20261019.txt`. Replay yields 71 unique rows / 15 markets. All 65 props match the player-bounded rendered price text; six main lines have only structured evidence. The supplied 71-row review matched every market, selection, line, price and event. All records specify full game. Nine empty ladder panels remain excluded, not reinterpreted as ordinary O/U. Six raw panels contain Show More; only five anytime scorers were captured. Spreads/Totals/All navigation was unavailable. This is refresh evidence, not targeted live validation.
+- BetMGM now treats an exact rendered Show More label as unfinished even when its control is unsupported, disabled or rejected. Partial prices survive, and the drawer is not checkpointed as complete. Existing safe semantic-control expansion is retained; no guessed new click selector is introduced. Bounded `expansionEvidence` reports at most two matching elements per drawer (1,200 HTML characters each), plus parent tag/class. It excludes account/page-shell HTML.
+- FanDuel now reports absent requested types even alongside priced requested markets or on an empty tab. The coordinator retains the successful quotes, keeps the absent work incomplete, and rechecks it on the next user action. A later successful observation removes the old deferral. There is no automatic no-match loop. Simulation verifies mixed priced/missing outcomes and subsequent availability; it does not establish which markets FanDuel actually offers.
+- Existing completion checkpoints are preserved. The first diagnostic run after updating must use explicit refresh, so old priced-drawer checkpoints cannot hide the Show More evidence. This does not clear app odds or saved parlays.
+
+### Remaining NFL evidence
+
+| Book | Existing evidence | Minimum unresolved check |
+| --- | --- | --- |
+| BetMGM | 71-row refresh replay; 65 raw prop prices verified | One 1.4.13 pregame refresh TXT, starting on main lines, with expansionEvidence. If control HTML is still absent: only the Show More element and immediate parent HTML in one affected drawer. No repeat category-pill HTML needed. |
+| FanDuel | User-confirmed delivery; prior 60-row review; absent-target TXT | One normal targeted retry TXT on a pregame event after initial rows exist. If Touchdown Scorers remains empty, the expanded TD container with column labels and two player rows is still needed. |
+| DraftKings | 86-row refresh / 14 markets; 80 raw props verified; six tabs confirmed | Normal targeted retry and expanded anytime TD container; existing Passing HTML is sufficient. Ladders remain outside ordinary O/U coverage. |
+| Pinnacle | 136-row replay plus user-reported successful capture | Current-event live completeness remains unverified; no evidenced new parser regression. |
+| theScore | 448-row replay / 15 markets | Current-event live completeness remains unverified; no evidenced new parser regression. |
+| Caesars | Generic visible import/demand path | One pregame NFL capture containing visible full-game lines and an expanded supported prop market. Native collapsed-prop navigation is not verified or claimed. |
+
+Tests distinguish actual capture replay from simulated DOM transitions. No authenticated sportsbook access, bet placement, storage migration, merge or deployment is performed.

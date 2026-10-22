@@ -92,7 +92,7 @@ test('manifest service worker routes exact SGP starting-page text into NFL, not 
   const text=r.queue[0].text;
   assert.match(text,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(text,/BETMGM_AUTOPASS|BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/);
   const diag=JSON.parse(text.split('EXTENSION_CAPTURE_DIAGNOSTICS: ')[1]);
-  assert.equal(diag.extensionVersion,'1.4.12');assert.equal(diag.entryVersion,'20261019_mgmcontext1');
+  assert.equal(diag.extensionVersion,'1.4.13');assert.equal(diag.entryVersion,'20261022_nflcoverage1');
   assert.equal(diag.route,'nfl-v2');assert.equal(diag.event,'Washington Commanders @ San Francisco 49ers');
   assert.equal(r.injections.some(x=>x.name==='extractOddsTextFromCurrentPage'),false);
   // Text-only evidence cannot prove the actual Players control is clickable.

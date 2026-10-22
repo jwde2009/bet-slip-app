@@ -906,18 +906,22 @@ function createNflCaptureCore() {
   const wanted=boundedBook?pending.slice(0,4):pending;
   const processedLabels=[];
   let notFoundTargetTypes=[];
-  if(!wanted.length) {
-    if(book==='FanDuel'&&targetTypes&&headers().length) {
-      const observed=new Set(headers().map(h=>core.describe(headerTitle(h))?.type));
-      const onTab=t=>request.tab==='Passing Props'?t.startsWith('player_passing'):
-        request.tab==='Rushing Props'?t.startsWith('player_rushing'):
-        request.tab==='Receiving Props'?['player_receiving_yards','player_receptions','player_rushing_receiving_yards'].includes(t):
-        request.tab==='TD Scorer Props'?t==='player_touchdowns':false;
-      notFoundTargetTypes=[...targetTypes].filter(t=>onTab(t)&&!observed.has(t));
+  // Check all requested types even when another requested drawer has prices.
+  // A successful subset is not evidence that the remaining types are available.
+  if(book==='FanDuel'&&targetTypes) {
+    const observed=new Set(headers().map(h=>core.describe(headerTitle(h))?.type));
+    const onTab=t=>request.tab==='Passing Props'?t.startsWith('player_passing'):
+      request.tab==='Rushing Props'?t.startsWith('player_rushing'):
+      request.tab==='Receiving Props'?['player_receiving_yards','player_receptions','player_rushing_receiving_yards'].includes(t):
+      request.tab==='TD Scorer Props'?t==='player_touchdowns':
+      request.tab==='Popular'?['spread','total','moneyline_2way'].includes(t):false;
+    notFoundTargetTypes=[...targetTypes].filter(t=>onTab(t)&&!observed.has(t)&&!(observed.has('main')&&['spread','total','moneyline_2way'].includes(t)));
+    if(notFoundTargetTypes.length) {
+      diagnostics.notFoundTargetTypes=notFoundTargetTypes;
+      diagnostics.notes.push("Requested market types were not observed among this tab's recognized headings; availability is unverified.");
     }
-    diagnostics.notes.push(notFoundTargetTypes.length?'Requested market types were not observed among this tab\'s recognized headings; availability is unverified.':'No unprocessed matching market headings on this tab');
-    if(notFoundTargetTypes.length)diagnostics.notFoundTargetTypes=notFoundTargetTypes;
   }
+  if(!wanted.length&&!notFoundTargetTypes.length)diagnostics.notes.push('No unprocessed matching market headings on this tab');
   for(const label of wanted) {
     if(Date.now()>marketDeadline){diagnostics.notes.push('Per-tab time limit reached; capture is partial');break;}
     if(!await ensureContext()||partialTab())return result({stopped:'Context changed while loading markets',records:[]});
@@ -937,7 +941,17 @@ function createNflCaptureCore() {
       if(readable(containerFor(findHeader(label)))===before)break;
     }
     const block=containerFor(findHeader(label));
-    const morePending=list(block,'button,[role="button"],a').some(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+    const actionableMore=list(block,'button,[role="button"],a').some(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+    // Supplied BetMGM text retains Show More even when no supported semantic
+    // control is found. Never checkpoint that truncated player list as complete.
+    const textMore=book==='BetMGM'&&lines(readable(block)).some(l=>/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(l));
+    const morePending=actionableMore||textMore;
+    if(textMore) {
+      diagnostics.expansionEvidence ||= [];
+      const leaves=list(block,'*').filter(el=>visible(el)&&!el.closest(excluded)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el))&&!Array.from(el.children).some(c=>text(c)===text(el)));
+      diagnostics.expansionEvidence.push({title:label,status:actionableMore?'supported-control-still-visible':'visible-label-without-supported-control',
+        controls:leaves.slice(0,2).map(el=>({tag:el.tagName,html:el.outerHTML.slice(0,1200),parentTag:el.parentElement?.tagName||'',parentClass:String(el.parentElement?.className||'').slice(0,180)}))});
+    }
     if(!qs.length||morePending) {
       diagnostics.unpricedDrawers.push(label);
       if(morePending)diagnostics.notes.push(`Expansion limit or unchanged content: ${label}; drawer remains incomplete`);
@@ -1189,12 +1203,12 @@ async function tryNflNavigationCapture(tabId,book) {
         const r=capture.value;
         if(fatalPage(r)||r?.stopped){diag({...r?.diagnostics,tab:label,stopped:r?.stopped||r?.reason||'Capture context changed'});fatal=true;break;}
         if(!r?.recognized){diag({stopped:'Selected NFL game no longer recognized',tab:label});fatal=true;break;}
-        if(book==='FanDuel'&&r.notFoundTargetTypes?.length&&!r.records?.length&&!r.remaining) {
+        if(book==='FanDuel'&&r.notFoundTargetTypes?.length) {
           deferredByTab[label]=r.notFoundTargetTypes;
           diag({...r.diagnostics,phase:'targets-not-observed',tab:label,notFoundTargetTypes:r.notFoundTargetTypes,
             note:'Requested types not observed in this pass; no automatic loop. A new normal capture rechecks availability.'});
-          await saveProgress();break;
-        }
+          if(!r.records?.length&&!r.remaining){await saveProgress();break;}
+        } else if(book==='FanDuel')delete deferredByTab[label];
         for(const record of r.records||[]) {
           chunks.push('NFL_MARKET_V2: '+JSON.stringify(record));
           if(record.quotes?.length){hasPrices=true;unpricedDrawers.delete(record.title);}
@@ -1211,7 +1225,7 @@ async function tryNflNavigationCapture(tabId,book) {
         processedByTab[label]=[...priorGood];await saveProgress();
         if(!r.remaining) {
           const unpriced=unpricedDrawers.size>0;
-          finished=hasPrices&&!unpriced;break;
+          finished=hasPrices&&!unpriced&&!r.notFoundTargetTypes?.length;break;
         }
         if(processed.size===before){diag({stopped:'No progress in bounded drawer batch',tab:label});break;}
       }

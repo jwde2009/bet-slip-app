@@ -842,7 +842,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.12');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.13');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -1045,4 +1045,89 @@ test('live BetMGM 1.4.11 confirms Players navigation but rejects Passing TD ladd
   assert.match(sample.rawSample,/-295/);assert.match(sample.rawSample,/\+120/);
   assert.equal(core.parsePropText(sample.title,sample.rawSample).length,0);
   const {parseOddsText}=await loadModule(routerFile);assert.equal(parseOddsText(raw,{sportsbook:'BetMGM'}).length,0);
+});
+
+test('BetMGM actual 1.4.12 refresh preserves 71 quotes and 65 player-bounded raw prices without inventing ladders',async()=>{
+  const raw=read('tests/fixtures/betmgm-nfl-refresh-1412-20261019.txt');
+  const records=raw.split(/\r?\n/).filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15)));
+  const {parseOddsText}=await loadModule(routerFile),rows=plain(parseOddsText(raw,{sportsbook:'BetMGM'}));
+  assert.equal(rows.length,71);assert.equal(new Set(rows.map(r=>r.id)).size,71);
+  assert.equal(new Set(rows.map(r=>r.marketType)).size,15);
+  assert.ok(rows.every(r=>r.eventLabelRaw==='Washington Commanders @ San Francisco 49ers'&&r.period==='full_game'&&r.sportsbook==='BetMGM'));
+  let verified=0;
+  for(const record of records.filter(r=>r.rawSample&&r.quotes.length)) {
+    const names=[...new Set(record.quotes.map(q=>q.subject))];
+    for(const q of record.quotes) {
+      const start=record.rawSample.indexOf(q.subject);assert.ok(start>=0);
+      const ends=names.map(n=>record.rawSample.indexOf(n,start+q.subject.length)).filter(i=>i>=0);
+      const tokens=record.rawSample.slice(start,ends.length?Math.min(...ends):undefined).split(/\n/).map(s=>s.trim()).filter(Boolean);
+      const label=q.single?'Yes':`${q.side==='Over'?'O':'U'} ${q.line}`,price=`${q.odds>0?'+':''}${q.odds}`;
+      assert.ok(tokens.some((t,i)=>t===label&&tokens[i+1]===price),`${q.subject} ${label} ${price}`);verified++;
+    }
+  }
+  assert.equal(verified,65);
+  const empty=records.filter(r=>!r.quotes.length);assert.equal(empty.length,9);
+  assert.ok(empty.every(r=>/\d+\+/.test(r.rawSample)));
+  assert.equal(parseOddsText(empty.map(r=>'NFL_MARKET_V2: '+JSON.stringify(r)).join('\n'),{sportsbook:'BetMGM'}).length,0);
+  assert.equal(records.filter(r=>/Show More/.test(r.rawSample||'')).length,6);
+});
+
+for(const variant of ['unsupported','disabled','outcome','working','unchanged','none'])test(`BetMGM Show More ${variant}: retain prices, scope clicks and report unfinished players`,async()=>{
+  const {JSDOM}=require('jsdom');
+  const raw=read('tests/fixtures/betmgm-nfl-refresh-1412-20261019.txt');
+  const record=raw.split('\n').filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15))).find(r=>r.title==='Anytime TD scorer');
+  const dom=new JSDOM('<main><pre id="hero">NFL (14)\nTomorrow\n7:15 PM\nESPN\nCommanders\n49ers\nPlayers\n</pre><button role="tab" aria-selected="true">Players</button><button dsaccordiontoggle aria-expanded="true" aria-controls="prices"><span slot="title">Anytime TD scorer</span></button><div id="prices"><pre></pre></div></main>',{url:'https://sports.betmgm.com/en/sports/events/commanders-49ers-123'});
+  const w=dom.window,block=w.document.getElementById('prices');
+  block.querySelector('pre').textContent=record.rawSample.replace('Show More','');
+  const more=w.document.createElement(variant==='unsupported'?'span':'button');more.textContent='Show More';
+  if(variant==='disabled')more.disabled=true;if(variant==='outcome')more.className='outcome';
+  if(variant!=='none')block.append(more);
+  let clicks=0;more.onclick=()=>{clicks++;if(variant==='working'){more.remove();block.querySelector('pre').textContent+='\nJayden Daniels\nYes\n+230';}};
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});w.HTMLElement.prototype.scrollIntoView=()=>{};
+  const ctx=extensionContext({document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{fn();return 0;},getComputedStyle:e=>({display:e.hidden?'none':'block',visibility:'visible'})});
+  const result=await ctx.nflDetailPageStep('BetMGM',{captureOnly:true,tab:'Players',targetTypes:['player_touchdowns']});
+  assert.equal(result.records[0].quotes.length,variant==='working'?6:5);
+  const pending=!['working','none'].includes(variant);
+  assert.equal(result.diagnostics.unpricedDrawers.includes('Anytime TD scorer'),pending);
+  assert.equal(clicks,['working','unchanged'].includes(variant)?1:0);
+  assert.equal(!!result.diagnostics.expansionEvidence?.length,pending);
+  if(pending)assert.equal(result.diagnostics.expansionEvidence[0].title,'Anytime TD scorer');
+  dom.window.close();
+});
+
+test('FanDuel mixed priced and absent targets stay incomplete and retry absent work on the next action',async()=>{
+  let saved=null,run=1;const calls=[];
+  const href='https://sportsbook.fanduel.com/football/atl-no/123?tab=passing-props';
+  const base={book:'FanDuel',recognized:true,pregame:true,event:nflEvent,origin:new URL(href).origin,path:new URL(href).pathname,href};
+  const snapshot={books:[{bookmaker:'FanDuel',sports:[{sport:'NFL',events:[{eventName:nflEvent,missingExpectedMarkets:['player_passing_yards','player_passing_attempts'].map(marketType=>({marketType})),missingSharpMarkets:[]}]}]}]};
+  const ctx=targetingContext({sleepBackground:async()=>{},safeShowToast:async()=>{},readCoverageSnapshotFromAppTab:async()=>snapshot,
+    chrome:{tabs:{get:async()=>({url:href})},scripting:{executeScript:async({func,args})=>{
+      if(func.name==='nflNavCheckpoint'){if(args[0]==='write')saved=plain(args[2]);return [{result:args[0]==='read'?saved:true}];}
+      const r=args[1];if(r.mode==='probe')return [{result:{...base,tabs:['Passing Props']}}];
+      if(['plan-tab','tab-state'].includes(r.mode))return [{result:{...base,ready:true,navigation:{found:true,active:true}}}];
+      calls.push({run,processed:plain(r.processedLabels)});
+      const title=run===1?'Passing Yards':'Passing Attempts';
+      return [{result:{...base,records:[{title,quotes:[quote('Over'),quote('Under')]}],processedLabels:[title],remaining:false,notFoundTargetTypes:run===1?['player_passing_attempts']:[],diagnostics:{}}}];
+    }}}});
+  const first=await ctx.tryNflNavigationCapture(1,'FanDuel');assert.match(first.text,/NFL_MARKET_V2/);assert.match(first.text,/targets-not-observed/);
+  assert.equal(saved.incomplete,true);assert.deepEqual(saved.completed,[]);assert.deepEqual(saved.deferredByTab['Passing Props'],['player_passing_attempts']);
+  run=2;await ctx.tryNflNavigationCapture(1,'FanDuel');assert.equal(calls.length,2);assert.deepEqual(calls[1].processed,['Passing Yards']);
+  assert.equal(saved.incomplete,false);assert.deepEqual(saved.deferredByTab,{});
+});
+
+test('FanDuel real page step reports absent requested attempts beside priced yards, including empty tabs',async()=>{
+  const {JSDOM}=require('jsdom');
+  for(const empty of [false,true]) {
+    const dom=new JSDOM('<main><a href="?tab=passing-props" aria-selected="true">Passing Props</a>'+(empty?'':'<details open><summary>Brock Purdy - Passing Yds</summary><button>Over 249.5 -110</button><button>Under 249.5 -115</button></details>')+'</main>',{url:'https://sportsbook.fanduel.com/football/was-sf/1?tab=passing-props'});
+    const w=dom.window;let clicks=0;
+    Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return /^(MAIN|BODY)$/.test(this.tagName)?'Football / NFL Odds / Washington Commanders @ San Francisco 49ers\nPassing Props\nMon, Oct 19\nSame Game Parlay™':this.textContent;}});
+    w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});w.HTMLElement.prototype.scrollIntoView=()=>{};
+    w.document.querySelectorAll('button,summary').forEach(el=>el.onclick=()=>clicks++);
+    const ctx=extensionContext({document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{fn();return 0;},getComputedStyle:()=>({display:'block',visibility:'visible'})});
+    const r=await ctx.nflDetailPageStep('FanDuel',{captureOnly:true,tab:'Passing Props',targetTypes:['player_passing_yards','player_passing_attempts','player_touchdowns']});
+    assert.deepEqual(plain(r.notFoundTargetTypes),empty?['player_passing_yards','player_passing_attempts']:['player_passing_attempts']);
+    assert.equal(r.records.reduce((n,r)=>n+r.quotes.length,0),empty?0:2);assert.equal(clicks,0);assert.equal(r.remaining,false);
+    dom.window.close();
+  }
 });
