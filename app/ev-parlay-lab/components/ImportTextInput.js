@@ -9,6 +9,15 @@ export default function ImportTextInput({ rawText, setRawText, sportsbook }) {
   const [replacement, setReplacement] = useState(null);
   const [copying, setCopying] = useState(false);
 
+  async function loadFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 5_000_000) { setNotice('Choose a text file smaller than 5 MB. Current input retained.'); return; }
+    try { setRawText(await file.text()); setReplacement(null); setNotice(`Loaded ${file.name}. Review the source, then choose Parse.`); }
+    catch { setNotice('File could not be read. Current input retained.'); }
+  }
+
   async function copy() {
     setCopying(true);
     setNotice("");
@@ -34,6 +43,9 @@ export default function ImportTextInput({ rawText, setRawText, sportsbook }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+        <label style={buttonStyle}>Load TXT / CSV / TSV
+          <input aria-label="Load odds file" type="file" accept=".txt,.csv,.tsv,text/plain,text/csv,text/tab-separated-values" onChange={loadFile} style={{ display: 'block', maxWidth: 240 }} />
+        </label>
         <button type="button" onClick={copy} disabled={!preview.length || copying} style={buttonStyle}>
           {copying ? "Copying…" : "Copy full text"}
         </button>
@@ -42,6 +54,13 @@ export default function ImportTextInput({ rawText, setRawText, sportsbook }) {
           <button type="button" onClick={() => setReplacement("")} style={buttonStyle}>Replace input</button>
         )}
       </div>
+      {sportsbook === 'Odds table' && <p style={{ fontSize: 13 }}>
+        Import one listed price per row. Required columns: league, event (Away @ Home), market, period,
+        selection, line, sportsbook, odds, odds_format, odds_type, captured_at. Player props also need participant.
+        Use canonical market names, american or decimal odds, odds_type listed, and an ISO timestamp with timezone.
+        <a href="/odds-table-example.csv" download> Download a synthetic example CSV</a>.
+        This accepts files you provide; it does not connect to Dark Horse or verify current prices.
+      </p>}
       {preview.truncated && (
         <p style={{ fontSize: 13 }}>
           Showing the first {preview.text.length.toLocaleString()} of {preview.length.toLocaleString()} characters.

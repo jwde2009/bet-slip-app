@@ -1,5 +1,7 @@
+const EXTENSION_ENTRY_VERSION = "20261025_mgmmore1";
 // Classic service-worker entry: preserve the existing multi-book implementation.
 importScripts("background.js", "theScoreNflCapture.js");
+importScripts("captureDemand.js");
 const extractWithoutNflProps = extractSinglePayloadFromTab;
 const nflRuns = new Set();
 extractSinglePayloadFromTab = async function extractWithNflProps(tabId) {
@@ -33,3 +35,8 @@ extractSinglePayloadFromTab = async function extractWithNflProps(tabId) {
     return { source: "TheScore", text: [mainText, ...captures].filter(Boolean).join("\n\n") };
   } finally { nflRuns.delete(tabId); }
 };
+
+// October 13 local repair, recovered without replacing legacy workflows.
+importScripts("nflBookCapture.js");
+importScripts("mlbVisibleCapture.js");
+importScripts("pinnacleMlbCapture.js");

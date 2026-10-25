@@ -1,0 +1,16 @@
+NFL_CAPTURE_VERSION: 20261012_1
+NFL_CAPTURE_BOOK: BetMGM
+Sport: NFL
+NFL_NAVIGATION_VERSION: 20261018_2
+
+NFL_CAPTURE_RUN: {"book":"BetMGM","event":"Washington Commanders @ San Francisco 49ers","mode":"refresh","targets":[],"completedTabs":[]}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","tab":"Players","unavailableTabs":["Players"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","tab":"Spreads","unavailableTabs":["Spreads"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","tab":"Totals","unavailableTabs":["Totals"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","tab":"All","unavailableTabs":["All"],"availableTabs":[],"error":"","note":"No safe exact-label control in the current event tab group"}
+
+NFL_CAPTURE_DIAGNOSTICS: {"book":"BetMGM","phase":"run-finished","event":"Washington Commanders @ San Francisco 49ers","complete":false,"completedTabs":[],"remainingTabs":["Players","Spreads","Totals","All"],"deferredTabs":{}}

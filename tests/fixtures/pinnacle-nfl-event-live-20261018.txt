@@ -1,0 +1,714 @@
+PINNACLE_NFL_MAIN_LINES_CAPTURE
+NFL_CAPTURE_LEAGUE: NFL
+Welcome to Pinnacle. We use cookies to provide you with the most relevant experience. To change your cookie settings or for more information on cookies, see our
+cookie policy
+.
+ACCEPT
+Forgot email or password?
+LOG IN
+JOIN
+SPORTS BETTING
+Log In or Join to access the Live Centre.
+LIVE CENTRE
+CASINO
+LIVE CASINO
+VIRTUAL SPORTS
+BETTING RESOURCES
+Decimal Odds
+EN
+18:15:01 (GMT -05:00)
+Help
+Football
+NFL
+Dallas Cowboys @ Green Bay Packers
+Sunday, October 18, 2026 at 19:20
+Dallas Cowboys
+Green Bay Packers
+ALLGAME1ST HALF1ST QUARTERPLAYER PROPSGAME PROPS
+Money Line – Game
+Hide All
+Dallas Cowboys
+1.900
+Green Bay Packers
+2.000
+Handicap – Game
+Dallas Cowboys	Green Bay Packers
+-1.0
+1.980
++1.0
+1.925
+See more
+Total – Game
+Over 53.5
+1.909
+Under 53.5
+1.980
+See more
+Team Total – Game
+Dallas Cowboys	Green Bay Packers
+Over 26.5
+1.729
+Under 26.5
+2.170
+Over 26.5
+1.813
+Under 26.5
+2.060
+Money Line – 1st Half
+Dallas Cowboys
+1.961
+Green Bay Packers
+1.917
+Handicap – 1st Half
+Dallas Cowboys	Green Bay Packers
+-0.5
+2.130
++0.5
+1.781
+See more
+Total – 1st Half
+Over 25.5
+1.746
+Under 25.5
+2.160
+See more
+Team Total – 1st Half
+Dallas Cowboys	Green Bay Packers
+Over 12.5
+1.694
+Under 12.5
+2.250
+Over 12.5
+1.684
+Under 12.5
+2.270
+Money Line – 1st Quarter
+Dallas Cowboys
+2.010
+Green Bay Packers
+1.862
+Handicap – 1st Quarter
+Dallas Cowboys	Green Bay Packers
++0.5
+1.689
+-0.5
+2.250
+See more
+Total – 1st Quarter
+Over 10
+1.884
+Under 10
+1.961
+See more
+Team Total – 1st Quarter
+Dallas Cowboys	Green Bay Packers
+Over 6.5
+1.961
+Under 6.5
+1.892
+Over 3.5
+1.813
+Under 3.5
+2.060
+Bo Melton Total Receiving Yards
+Over 8.5 Receiving Yards
+1.900
+Under 8.5 Receiving Yards
+1.917
+Bo Melton Total Receptions
+Over 0.5 Receptions
+1.617
+Under 0.5 Receptions
+2.330
+Bo Melton Total Touchdowns
+Over 0.5 Touchdowns
+6.450
+Under 0.5 Touchdowns
+1.120
+Brandon Aubrey Total Field Goals
+Over 1.5 Field Goals
+1.714
+Under 1.5 Field Goals
+2.150
+Brevyn Spann-Ford Total Receiving Yards
+Over 3.5 Receiving Yards
+1.909
+Under 3.5 Receiving Yards
+1.909
+Brevyn Spann-Ford Total Receptions
+Over 0.5 Receptions
+1.709
+Under 0.5 Receptions
+2.160
+Brevyn Spann-Ford Total Touchdowns
+Over 0.5 Touchdowns
+10.720
+Under 0.5 Touchdowns
+1.047
+CeeDee Lamb Total Receiving Yards
+Over 81.5 Receiving Yards
+1.884
+Under 81.5 Receiving Yards
+1.934
+CeeDee Lamb Total Receptions
+Over 6.5 Receptions
+2.000
+Under 6.5 Receptions
+1.826
+CeeDee Lamb Total Touchdowns
+Over 0.5 Touchdowns
+2.200
+Under 0.5 Touchdowns
+1.684
+Christian Watson Total Receiving Yards
+Over 75.5 Receiving Yards
+1.892
+Under 75.5 Receiving Yards
+1.925
+Christian Watson Total Receptions
+Over 4.5 Receptions
+1.826
+Under 4.5 Receptions
+2.000
+Christian Watson Total Touchdowns
+Over 0.5 Touchdowns
+2.250
+Under 0.5 Touchdowns
+1.657
+Dak Prescott Total Interceptions
+Over 0.5 Interceptions
+1.892
+Under 0.5 Interceptions
+1.925
+Dak Prescott Total Pass Attempts
+Over 36.5 Pass Attempts
+1.952
+Under 36.5 Pass Attempts
+1.869
+Dak Prescott Total Pass Completions
+Over 23.5 Pass Completions
+1.869
+Under 23.5 Pass Completions
+1.952
+Dak Prescott Total Passing Yards
+Over 274.5 Passing Yards
+1.909
+Under 274.5 Passing Yards
+1.909
+Dak Prescott Total Rush Attempts
+Over 2.5 Rush Attempts
+1.813
+Under 2.5 Rush Attempts
+2.020
+Dak Prescott Total Rushing Yards
+Over 8.5 Rushing Yards
+1.869
+Under 8.5 Rushing Yards
+1.952
+Dak Prescott Total Touchdown Passes
+Over 1.5 Touchdown Passes
+1.588
+Under 1.5 Touchdown Passes
+2.390
+Dak Prescott Total Touchdowns
+Over 0.5 Touchdowns
+7.150
+Under 0.5 Touchdowns
+1.101
+George Pickens Total Receiving Yards
+Over 69.5 Receiving Yards
+1.909
+Under 69.5 Receiving Yards
+1.909
+George Pickens Total Receptions
+Over 5.5 Receptions
+2.200
+Under 5.5 Receptions
+1.684
+George Pickens Total Touchdowns
+Over 0.5 Touchdowns
+2.460
+Under 0.5 Touchdowns
+1.561
+Jake Ferguson Total Receiving Yards
+Over 24.5 Receiving Yards
+1.909
+Under 24.5 Receiving Yards
+1.909
+Jake Ferguson Total Receptions
+Over 3.5 Receptions
+2.150
+Under 3.5 Receptions
+1.714
+Jake Ferguson Total Touchdowns
+Over 0.5 Touchdowns
+3.700
+Under 0.5 Touchdowns
+1.286
+Javonte Williams Total Receiving Yards
+Over 13.5 Receiving Yards
+1.917
+Under 13.5 Receiving Yards
+1.900
+Javonte Williams Total Receptions
+Over 2.5 Receptions
+1.847
+Under 2.5 Receptions
+1.970
+Javonte Williams Total Rush Attempts
+Over 16.5 Rush Attempts
+1.819
+Under 16.5 Rush Attempts
+2.010
+Javonte Williams Total Rushing Yards
+Over 67.5 Rushing Yards
+1.952
+Under 67.5 Rushing Yards
+1.869
+Javonte Williams Total Touchdowns
+Over 0.5 Touchdowns
+1.540
+Under 0.5 Touchdowns
+2.510
+Jonnu Smith Total Receiving Yards
+Over 6.5 Receiving Yards
+2.000
+Under 6.5 Receiving Yards
+1.826
+Jonnu Smith Total Receptions
+Over 0.5 Receptions
+1.523
+Under 0.5 Receptions
+2.560
+Jonnu Smith Total Touchdowns
+Over 0.5 Touchdowns
+9.190
+Under 0.5 Touchdowns
+1.065
+Jordan Love Total Interceptions
+Over 0.5 Interceptions
+2.100
+Under 0.5 Interceptions
+1.751
+Jordan Love Total Pass Attempts
+Over 34.5 Pass Attempts
+1.934
+Under 34.5 Pass Attempts
+1.884
+Jordan Love Total Pass Completions
+Over 22.5 Pass Completions
+2.020
+Under 22.5 Pass Completions
+1.813
+Jordan Love Total Passing Yards
+Over 274.5 Passing Yards
+1.892
+Under 274.5 Passing Yards
+1.925
+Jordan Love Total Rush Attempts
+Over 2.5 Rush Attempts
+1.934
+Under 2.5 Rush Attempts
+1.884
+Jordan Love Total Rushing Yards
+Over 6.5 Rushing Yards
+1.884
+Under 6.5 Rushing Yards
+1.884
+Jordan Love Total Touchdown Passes
+Over 1.5 Touchdown Passes
+1.526
+Under 1.5 Touchdown Passes
+2.550
+Jordan Love Total Touchdowns
+Over 0.5 Touchdowns
+9.700
+Under 0.5 Touchdowns
+1.058
+KaVontae Turpin Total Receiving Yards
+Over 5.5 Receiving Yards
+1.819
+Under 5.5 Receiving Yards
+2.000
+KaVontae Turpin Total Receptions
+Over 0.5 Receptions
+1.632
+Under 0.5 Receptions
+2.300
+KaVontae Turpin Total Touchdowns
+Over 0.5 Touchdowns
+8.680
+Under 0.5 Touchdowns
+1.072
+MarShawn Lloyd Total Receiving Yards
+Over 10.5 Receiving Yards
+1.909
+Under 10.5 Receiving Yards
+1.909
+MarShawn Lloyd Total Receptions
+Over 1.5 Receptions
+1.621
+Under 1.5 Receptions
+2.320
+MarShawn Lloyd Total Rush Attempts
+Over 11.5 Rush Attempts
+1.917
+Under 11.5 Rush Attempts
+1.900
+MarShawn Lloyd Total Rushing Yards
+Over 43.5 Rushing Yards
+1.909
+Under 43.5 Rushing Yards
+1.909
+MarShawn Lloyd Total Touchdowns
+Over 0.5 Touchdowns
+1.769
+Under 0.5 Touchdowns
+2.070
+Matthew Golden Total Receiving Yards
+Over 65.5 Receiving Yards
+1.869
+Under 65.5 Receiving Yards
+1.952
+Matthew Golden Total Receptions
+Over 4.5 Receptions
+1.709
+Under 4.5 Receptions
+2.160
+Matthew Golden Total Touchdowns
+Over 0.5 Touchdowns
+2.650
+Under 0.5 Touchdowns
+1.492
+Pierre Strong Total Receiving Yards
+Over 11.5 Receiving Yards
+1.990
+Under 11.5 Receiving Yards
+1.833
+Pierre Strong Total Receptions
+Over 2.5 Receptions
+2.420
+Under 2.5 Receptions
+1.578
+Pierre Strong Total Rushing Yards
+Over 16.5 Rushing Yards
+1.952
+Under 16.5 Rushing Yards
+1.869
+Pierre Strong Total Touchdowns
+Over 0.5 Touchdowns
+4.030
+Under 0.5 Touchdowns
+1.250
+Ryan Flournoy Total Receiving Yards
+Over 31.5 Receiving Yards
+1.877
+Under 31.5 Receiving Yards
+1.943
+Ryan Flournoy Total Receptions
+Over 3.5 Receptions
+2.360
+Under 3.5 Receptions
+1.602
+Ryan Flournoy Total Touchdowns
+Over 0.5 Touchdowns
+4.600
+Under 0.5 Touchdowns
+1.204
+Trey Smack Total Field Goals
+Over 1.5 Field Goals
+1.869
+Under 1.5 Field Goals
+1.952
+Tucker Kraft Total Receiving Yards
+Over 50.5 Receiving Yards
+1.892
+Under 50.5 Receiving Yards
+1.925
+Tucker Kraft Total Receptions
+Over 4.5 Receptions
+2.050
+Under 4.5 Receptions
+1.787
+Tucker Kraft Total Touchdowns
+Over 0.5 Touchdowns
+2.820
+Under 0.5 Touchdowns
+1.442
+Tyler Goodson Total Rushing Yards
+Over 8.5 Rushing Yards
+1.813
+Under 8.5 Rushing Yards
+2.020
+Tyler Goodson Total Touchdowns
+Over 0.5 Touchdowns
+10.210
+Under 0.5 Touchdowns
+1.052
+Dallas Cowboys Points Odd/Even
+Odd
+1.892
+Even
+1.943
+Dallas Cowboys Points Odd/Even 1st Half
+Odd
+1.909
+Even
+1.925
+Dallas Cowboys Points Range
+7 - 13
+17.500
+14 - 20
+5.900
+21 - 27
+3.400
+28 - 35
+2.850
+36+
+5.800
+Dallas Cowboys Points Range 1st Half
+0 - 6
+6.250
+7 - 13
+2.750
+14 - 20
+3.000
+21 - 27
+6.500
+28 - 35
+22.000
+Dallas Cowboys Points Range 1st Quarter
+0 - 5
+2.020
+6 - 10
+2.600
+11 - 15
+10.250
+16 - 20
+23.000
+21+
+33.000
+Green Bay Packers Points Odd/Even
+Odd
+1.909
+Even
+1.925
+Green Bay Packers Points Odd/Even 1st Half
+Odd
+1.909
+Even
+1.925
+Green Bay Packers Points Range
+0 - 6
+86.000
+7 - 13
+15.500
+14 - 20
+5.500
+21 - 27
+3.400
+28 - 35
+3.100
+36+
+5.900
+Green Bay Packers Points Range 1st Half
+0 - 6
+6.250
+7 - 13
+2.800
+14 - 20
+3.000
+21 - 27
+6.500
+28 - 35
+22.000
+Green Bay Packers Points Range 1st Quarter
+0 - 5
+2.020
+6 - 10
+2.550
+11 - 15
+10.500
+16 - 20
+25.000
+21+
+41.000
+Total Points Odd/Even
+Odd
+1.757
+Even
+2.100
+Total Points Odd/Even 1st Half
+Odd
+1.847
+Even
+1.980
+Total Points Range
+21 - 30
+31.000
+31 - 40
+7.750
+41 - 50
+4.200
+51 - 60
+3.050
+61 - 70
+5.100
+71+
+8.000
+Total Points Range 1st Half
+0 - 10
+13.500
+11 - 20
+4.800
+21 - 30
+2.650
+31 - 40
+3.700
+41+
+8.500
+Total Points Range 1st Quarter
+0 - 6
+4.100
+7 - 13
+2.460
+14 - 20
+4.300
+21+
+6.000
+Winning Margin Range
+Dallas Cowboys By 1 - 6
+4.600
+Dallas Cowboys By 7 - 13
+6.750
+Dallas Cowboys By 14 - 20
+9.250
+Dallas Cowboys By 21 - 27
+25.000
+Dallas Cowboys By 28+
+41.000
+Green Bay Packers By 1 - 6
+4.700
+Green Bay Packers By 7 - 13
+6.500
+Green Bay Packers By 14 - 20
+10.500
+Green Bay Packers By 21 - 27
+27.000
+Green Bay Packers By 28+
+51.000
+FAVOURITES
+Log in or Join to change your favourites.
+TOP SPORTS
+Soccer
+950
+Esports
+19
+Football
+77
+Tennis
+96
+Baseball
+10
+Basketball
+182
+MMA
+11
+Hockey
+130
+Volleyball
+1
+Handball
+5
+A-Z SPORTS
+Baseball
+10
+Basketball
+182
+Boxing
+5
+Chess
+1
+Cricket
+3
+Curling
+2
+Entertainment
+1
+Esports
+19
+Football
+77
+Formula 1
+1
+Handball
+5
+Hockey
+130
+MMA
+11
+Politics
+7
+Rugby Union
+1
+Snooker
+6
+Soccer
+950
+Tennis
+96
+Volleyball
+1
+BET SLIP
+MY BETS
+SINGLES
+There are no bets on your ticket.
+Click the odds to add a bet.
+MULTIPLES
+To place a Multiple bet you need a minimum of two bets on your Bet Slip. Alternatively, you can place a Single bet.
+TEASERS
+Sports Betting
+Soccer betting
+Basketball betting
+Baseball betting
+Football betting
+Tennis betting
+Hockey betting
+Esports betting
+About Pinnacle
+Press
+Why Pinnacle?
+API Products
+Policies
+Responsible Gaming
+Terms & Conditions
+Privacy Policy
+Cookie Policy
+Help & Support
+Contact us
+Betting Rules
+Bets Offered
+Help
+Sitemap
+Payment Options
+Social
+X
+YouTube
+Facebook
+LinkedIn
+Reddit
+Spotify
+Apple Podcasts
+
+Gambling can be addictive. Please know your limits and gamble responsibly.
+
+Pinnacle.com is owned and operated by Balder Media Ltd. Registration number: 000045057, registered address: San Victor Street, Orange Walk Town, Belize. Contact us customerservice@pinnacle.com. Pinnacle.com is licensed and regulated by the Government of the Autonomous Island of Anjouan, Union of Comoros and operates under License ALSI-202412052-FI2. Pinnacle.com has passed all regulatory compliance and is legally authorized to conduct gaming operations for any and all games of chance and wagering.
+
+Online sports betting from Pinnacle bookmakers - your premier international sportsbook © 2004 - 2026 Pinnacle.
+Pinnacle, Pinnacle Sports, Pinbet, Pinny and all other derivative marks are registered trademarks of Pinnacle. Any and all content on the website (desktop and mobile), including sports odds, are proprietary and may not be copied or disseminated without the express written consent of Pinnacle. All Rights Reserved.
+
+v.8.4.35-rel
+Extracting odds…
+×
+The EV Parlay extension is running. Keep this tab open.
+Last import: 6:15:01 PM

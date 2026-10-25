@@ -1,0 +1,588 @@
+BETMGM_AUTOPASS_1
+BETMGM_INITIAL_CAPTURE
+Help & Customer Care
+Log in
+Sign up
+NFL (14)
+Tomorrow
+7:15 PM
+ESPN
+Commanders
+49ers
+Players
+TD scorers
+Passing
+Receiving
+Rushing
+Anytime TD scorer
+BetDefense
+All
+Commanders
+49ers
+Christian McCaffrey
+Avg:
+1.0
+Yes
+-275
+Mike Evans
+Avg:
+0.6
+Yes
+-120
+George Kittle
+Avg:
+0.8
+Yes
++100
+Rachaad White
+Avg:
+0.3
+Yes
++110
+Stefon Diggs
+Avg:
+0.8
+Yes
++225
+Jayden Daniels
+Avg:
+0.7
+Yes
++230
+Terry McLaurin
+Avg:
+0.3
+Yes
++230
+Brandin Cooks
+Avg:
+0.5
+Yes
++260
+Austin Ekeler
+Avg:
+0.0
+Yes
++290
+Brock Purdy
+Avg:
+0.2
+Yes
++320
+Chig Okonkwo
+Avg:
+0.0
+Yes
++320
+Jacob Cowing
+Avg:
+0.0
+Yes
++320
+SF D/ST
+Avg:
+0.2
+Yes
++350
+Kaelon Black
+Avg:
+0.0
+Yes
++380
+Antonio Williams
+Avg:
+0.2
+Yes
++425
+Treylon Burks
+Avg:
+0.5
+Yes
++525
+WAS D/ST
+Avg:
+0.2
+Yes
++600
+Luke Farrell
+Avg:
+0.0
+Yes
++900
+Jordan Watkins
+Avg:
+0.0
+Yes
++1050
+Dyami Brown
+Avg:
+0.0
+Yes
++1200
+John Bates
+Avg:
+0.0
+Yes
++1300
+Ben Sinnott
+Avg:
+0.0
+Yes
++1400
+Jordan James
+Avg:
+0.0
+Yes
++2000
+Luke McCaffrey
+Avg:
+0.0
+Yes
++2800
+Show Less
+Player to score 2+ TDs
+Player to score 4+ TDs
+Passing TDs
+Passing + rushing yards
+Passing completions
+Rushing yards
+Rushing attempts
+1st quarter receiving yards
+1st quarter rushing yards
+1st quarter passing TDs
+1st quarter passing yards
+First away team TD scorer
+Passing TDs O/U
+Passing attempts O/U
+First TD scorer
+BetDefense
+Christian McCaffrey
+Hit Rate:
+20%
++300
+George Kittle
+Hit Rate:
+0%
++675
+Mike Evans
+Hit Rate:
+20%
++725
+Rachaad White
+Hit Rate:
+25%
++750
+Terry McLaurin
+Hit Rate:
+0%
++1600
+Stefon Diggs
+Hit Rate:
+0%
++1600
+Jayden Daniels
+Hit Rate:
+0%
++1700
+Brock Purdy
+Hit Rate:
+0%
++1750
+Jacob Cowing
+Hit Rate:
+0%
++1850
+Austin Ekeler
+Hit Rate:
+0%
++1900
+Chig Okonkwo
+Hit Rate:
+0%
++2000
+Brandin Cooks
+Hit Rate:
+0%
++2200
+Kaelon Black
+Hit Rate:
+0%
++2200
+SF D/ST
+Hit Rate:
+0%
++2200
+Antonio Williams
+Hit Rate:
+0%
++2500
+WAS D/ST
+Hit Rate:
+0%
++3000
+Treylon Burks
+Hit Rate:
+0%
++3300
+Luke Farrell
+Hit Rate:
+0%
++4000
+Jordan Watkins
+Hit Rate:
+0%
++5000
+Dyami Brown
+Hit Rate:
+0%
++6000
+Ben Sinnott
+Hit Rate:
+0%
++6000
+John Bates
+Hit Rate:
+0%
++6000
+Jordan James
+Hit Rate:
+0%
++8000
+No TD
++10000
+Show Less
+Player to score 3+ TDs
+Passing yards
+Passing attempts
+Longest pass
+Receiving yards
+Rushing and receiving yards
+1st half receiving yards
+1st half rushing yards
+1st half passing TDs
+1st half passing yards
+First home team TD scorer
+Passing yards O/U
+Passing completions O/U
+Passing + rushing yards O/U
+Missouri
+
+We use cookies and third-party cookies. You can modify the settings and obtain further information in our Privacy Policy. You accept its use by continuing the navigation.
+
+We are licensed and regulated by the Missouri Gaming Commission as a Sports Wagering Operator, pursuant to Missouri Revised Statutes Chapter 313, specifically under the provisions governing sports wagering enacted in 2024. We are offering online sports betting in Missouri under an agreement with Century Casino & Hotel Cape Girardeau, a licensed Missouri casino operator. Our online sports betting platform is tested by an independent test laboratory approved by the Missouri Gaming Commission to ensure fairness and proper operation.
+
+BetMGM is committed to providing a website that is accessible, regardless of technology or ability. If you experience any difficulty in accessing any part of this website, please feel free to email us at accessibility@betmgm.com.
+
+Approved for real money gaming, Missouri.
+
+ALWAYS BET RESPONSIBLY
+
+IF YOU OR SOMEONE YOU KNOW HAS A GAMBLING PROBLEM, CALL 1-800-GAMBLER FOR CRISIS COUNSELING AND REFERRAL SERVICES. SELECT YOUR STATE OF RESIDENCE TO VIEW ADDITIONAL STATE-SPECIFIC TERMS AND RESOURCES.
+
+Current time: 8:39:12 PM
+Copyright © 2026
+Home
+My Bets
+Rewards
+Account
+0
+Bet slip
+Extracting BetMGM…
+×
+Pass 1 of 24: capturing starting section.
+Last import: 8:39:11 PM
+
+BETMGM_CURRENT_CAPTURE: show more 0
+Help & Customer Care
+Log in
+Sign up
+NFL (14)
+Tomorrow
+7:15 PM
+ESPN
+Commanders
+49ers
+Players
+TD scorers
+Passing
+Receiving
+Rushing
+Anytime TD scorer
+BetDefense
+All
+Commanders
+49ers
+Christian McCaffrey
+Avg:
+1.0
+Yes
+-275
+Mike Evans
+Avg:
+0.6
+Yes
+-120
+George Kittle
+Avg:
+0.8
+Yes
++100
+Rachaad White
+Avg:
+0.3
+Yes
++110
+Stefon Diggs
+Avg:
+0.8
+Yes
++225
+Jayden Daniels
+Avg:
+0.7
+Yes
++230
+Terry McLaurin
+Avg:
+0.3
+Yes
++230
+Brandin Cooks
+Avg:
+0.5
+Yes
++260
+Austin Ekeler
+Avg:
+0.0
+Yes
++290
+Brock Purdy
+Avg:
+0.2
+Yes
++320
+Chig Okonkwo
+Avg:
+0.0
+Yes
++320
+Jacob Cowing
+Avg:
+0.0
+Yes
++320
+SF D/ST
+Avg:
+0.2
+Yes
++350
+Kaelon Black
+Avg:
+0.0
+Yes
++380
+Antonio Williams
+Avg:
+0.2
+Yes
++425
+Treylon Burks
+Avg:
+0.5
+Yes
++525
+WAS D/ST
+Avg:
+0.2
+Yes
++600
+Luke Farrell
+Avg:
+0.0
+Yes
++900
+Jordan Watkins
+Avg:
+0.0
+Yes
++1050
+Dyami Brown
+Avg:
+0.0
+Yes
++1200
+John Bates
+Avg:
+0.0
+Yes
++1300
+Ben Sinnott
+Avg:
+0.0
+Yes
++1400
+Jordan James
+Avg:
+0.0
+Yes
++2000
+Luke McCaffrey
+Avg:
+0.0
+Yes
++2800
+Show Less
+Player to score 2+ TDs
+Player to score 4+ TDs
+Passing TDs
+Passing + rushing yards
+Passing completions
+Rushing yards
+Rushing attempts
+1st quarter receiving yards
+1st quarter rushing yards
+1st quarter passing TDs
+1st quarter passing yards
+First away team TD scorer
+Passing TDs O/U
+Passing attempts O/U
+First TD scorer
+BetDefense
+Christian McCaffrey
+Hit Rate:
+20%
++300
+George Kittle
+Hit Rate:
+0%
++675
+Mike Evans
+Hit Rate:
+20%
++725
+Rachaad White
+Hit Rate:
+25%
++750
+Terry McLaurin
+Hit Rate:
+0%
++1600
+Stefon Diggs
+Hit Rate:
+0%
++1600
+Jayden Daniels
+Hit Rate:
+0%
++1700
+Brock Purdy
+Hit Rate:
+0%
++1750
+Jacob Cowing
+Hit Rate:
+0%
++1850
+Austin Ekeler
+Hit Rate:
+0%
++1900
+Chig Okonkwo
+Hit Rate:
+0%
++2000
+Brandin Cooks
+Hit Rate:
+0%
++2200
+Kaelon Black
+Hit Rate:
+0%
++2200
+SF D/ST
+Hit Rate:
+0%
++2200
+Antonio Williams
+Hit Rate:
+0%
++2500
+WAS D/ST
+Hit Rate:
+0%
++3000
+Treylon Burks
+Hit Rate:
+0%
++3300
+Luke Farrell
+Hit Rate:
+0%
++4000
+Jordan Watkins
+Hit Rate:
+0%
++5000
+Dyami Brown
+Hit Rate:
+0%
++6000
+Ben Sinnott
+Hit Rate:
+0%
++6000
+John Bates
+Hit Rate:
+0%
++6000
+Jordan James
+Hit Rate:
+0%
++8000
+No TD
++10000
+Show Less
+Player to score 3+ TDs
+Passing yards
+Passing attempts
+Longest pass
+Receiving yards
+Rushing and receiving yards
+1st half receiving yards
+1st half rushing yards
+1st half passing TDs
+1st half passing yards
+First home team TD scorer
+Passing yards O/U
+Passing completions O/U
+Passing + rushing yards O/U
+Missouri
+
+We use cookies and third-party cookies. You can modify the settings and obtain further information in our Privacy Policy. You accept its use by continuing the navigation.
+
+We are licensed and regulated by the Missouri Gaming Commission as a Sports Wagering Operator, pursuant to Missouri Revised Statutes Chapter 313, specifically under the provisions governing sports wagering enacted in 2024. We are offering online sports betting in Missouri under an agreement with Century Casino & Hotel Cape Girardeau, a licensed Missouri casino operator. Our online sports betting platform is tested by an independent test laboratory approved by the Missouri Gaming Commission to ensure fairness and proper operation.
+
+BetMGM is committed to providing a website that is accessible, regardless of technology or ability. If you experience any difficulty in accessing any part of this website, please feel free to email us at accessibility@betmgm.com.
+
+Approved for real money gaming, Missouri.
+
+ALWAYS BET RESPONSIBLY
+
+IF YOU OR SOMEONE YOU KNOW HAS A GAMBLING PROBLEM, CALL 1-800-GAMBLER FOR CRISIS COUNSELING AND REFERRAL SERVICES. SELECT YOUR STATE OF RESIDENCE TO VIEW ADDITIONAL STATE-SPECIFIC TERMS AND RESOURCES.
+
+Current time: 8:39:13 PM
+Copyright © 2026
+Home
+My Bets
+Rewards
+Account
+0
+Bet slip
+Extracting BetMGM…
+×
+Pass 1 of 24: capturing starting section.
+Last import: 8:39:11 PM
+
+BETMGM_MANUAL_PLAYER_PROPS_REQUIRED: Captured current BetMGM page only. Open Player Props, open target drawers, click Show More, then rerun the extension.

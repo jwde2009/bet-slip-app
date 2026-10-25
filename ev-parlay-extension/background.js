@@ -624,7 +624,7 @@ async function extractFanDuelMultiPassPayload(tabId, options = {}) {
   };
 }
 
-chrome.action.onClicked.addListener(async (tab) => {
+async function runOddsCapture(tab, options = {}) {
   if (!tab.id) return;
 
   const sourceTabId = tab.id;
@@ -634,7 +634,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   await safeShowToast(
     sourceTabId,
     "Extracting odds…",
-    "The EV Parlay extension is running. Keep this tab open.",
+    `EV Parlay ${chrome.runtime.getManifest().version} is running. Keep this tab open.`,
     {
       loading: true,
       pulse: true,
@@ -653,9 +653,19 @@ chrome.action.onClicked.addListener(async (tab) => {
             ? "TheScore"
             : "";
 
-  const missingMarketsForBook = tabSourceForSnapshot
-    ? summarizeMissingMarketsForToast(coverageSnapshot, tabSourceForSnapshot)
-    : [];
+  const demandBook = typeof captureDemandBook === 'function' ? captureDemandBook(tab.url) : tabSourceForSnapshot;
+  const demand = typeof prepareCaptureDemand === 'function' ? await prepareCaptureDemand(sourceTabId,demandBook,coverageSnapshot,options) : null;
+  if(demand)captureDemandRuns.set(sourceTabId,demand);
+  const nativeNfl=(demand?.sport==='NFL'||/\bNFL\b|\/nfl(?:\/|-|$)/i.test(String(tab.title||'')+' '+String(tab.url||'')))&&['DraftKings','FanDuel','BetMGM','TheScore'].includes(demand?.book);
+  if(demand?.mode==='unresolved'||demand?.mode==='complete'&&(!nativeNfl||demand.markedComplete)) {
+    await setExtensionWorkingBadge(false);
+    const title=demand.mode==='unresolved'?'Capture could not be verified':demand.markedComplete?'Event marked complete':'No missing markets requested';
+    await safeShowToast(sourceTabId,title,demand.reason||(demand.markedComplete?'This event is marked complete in the app. Unmark it or explicitly refresh.':'No outstanding market demand for this event. Use Refresh all markets for an intentional fresh-price run.'),{loading:false,complete:true});
+    return;
+  }
+  const missingMarketsForBook = demand?.mode==='missing'
+    ? demand.targets.map(type=>`${demand.sport}: ${demand.event} - ${type}`)
+    : demand ? [] : tabSourceForSnapshot ? summarizeMissingMarketsForToast(coverageSnapshot, tabSourceForSnapshot) : [];
 
   if (missingMarketsForBook.length) {
     await safeShowToast(
@@ -674,7 +684,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     ? buildFanDuelTargetLabelsFromMissingMarkets(missingMarketsForBook)
     : [];
 
-  const draftKingsTargetLabels = isDraftKingsTabUrl(tab.url)
+  const draftKingsTargetLabels = demand?.book==='DraftKings'&&demand.sport==='MLB'&&demand.mode==='missing' ? captureTargetLabels('MLB',demand.targets) : isDraftKingsTabUrl(tab.url)
     ? buildDraftKingsTargetLabelsFromMissingMarkets(missingMarketsForBook)
     : [];
 
@@ -728,9 +738,14 @@ chrome.action.onClicked.addListener(async (tab) => {
     });
   }
 
+  if(demand&&isDraftKingsTabUrl(tab.url))await safeExecuteScript({tabId:sourceTabId,func:seedDraftKingsTargetWorkflowLabels,args:[draftKingsTargetLabels]});
+  if(demand&&isFanDuelTabUrl(tab.url))await safeExecuteScript({tabId:sourceTabId,func:seedFanDuelTargetWorkflowLabels,args:[fanDuelTargetLabels]});
   let payload;
 
-  if (isFanDuelTabUrl(tab.url)) {
+  if(demand?.mode==='missing'&&(!demandUsesNativeCollector(demand)||demand.sport==='NHL'&&!(demand.book==='DraftKings'?draftKingsTargetLabels:demand.book==='FanDuel'?fanDuelTargetLabels:theScoreTargetLabels).length)) {
+    const visible=await safeExecuteScript({tabId:sourceTabId,func:captureDemandVisiblePage,args:[demand.book,demand.identity]});
+    payload=visible?.[0]?.result;
+  } else if (isFanDuelTabUrl(tab.url)) {
     payload = await extractFanDuelMultiPassPayload(sourceTabId, {
       targetLabels: fanDuelTargetLabels,
     });
@@ -748,7 +763,19 @@ chrome.action.onClicked.addListener(async (tab) => {
   } else {
     payload = await extractSinglePayloadFromTab(sourceTabId);
   }
-  const finalText = String(payload?.text || "");
+  let captureText=String(payload?.text||'');
+  if(captureText && demandBook==='BetMGM') {
+    const route=/^NFL_CAPTURE_VERSION:/m.test(captureText)?'nfl-v2':/^MLB_VISIBLE_CAPTURE:/m.test(captureText)?'mlb-visible':/^BETMGM_AUTOPASS_/m.test(captureText)?'legacy-multipass':'legacy-single';
+    captureText+='\n\nEXTENSION_CAPTURE_DIAGNOSTICS: '+JSON.stringify({
+      extensionVersion:chrome.runtime.getManifest().version,
+      entryVersion:typeof EXTENSION_ENTRY_VERSION==='string'?EXTENSION_ENTRY_VERSION:'unknown',
+      nflNavigationVersion:typeof NFL_NAVIGATION_VERSION==='string'?NFL_NAVIGATION_VERSION:'unloaded',
+      book:demandBook,route,demandMode:demand?.mode||'',sport:demand?.sport||'',event:demand?.event||'',capturedAt:new Date().toISOString()
+    });
+  }
+  const finalText=demand?.mode==='missing'&&captureText&&!nativeNfl
+    ? 'CAPTURE_DEMAND_V1: '+JSON.stringify({book:demand.book,sport:demand.sport,event:demand.event,targets:demand.targets,diagnostic:payload?.message||'Targeted native capture',text:captureText})
+    : captureText;
   const source = String(payload?.source || "");
   const action = String(payload?.action || "");
   const message = String(payload?.message || "");
@@ -825,8 +852,8 @@ chrome.action.onClicked.addListener(async (tab) => {
   await safeShowToast(
     sourceTabId,
     isFanDuelCapture
-      ? "✅ COMPLETE — FanDuel captured"
-      : `✅ COMPLETE — ${source} import sent`,
+      ? "FanDuel capture sent"
+      : `${source} capture sent`,
     isFanDuelCapture
       ? `${finalText.length.toLocaleString()} characters queued. Load newest import, then parse in EV Lab.`
       : estimatedRows > 0
@@ -840,7 +867,12 @@ chrome.action.onClicked.addListener(async (tab) => {
       pulse: true,
     }
   );
+}
+chrome.action.onClicked.addListener(tab=>runOddsCapture(tab));
+chrome.runtime.onInstalled?.addListener(()=>{
+  chrome.contextMenus?.removeAll(()=>chrome.contextMenus.create({id:'ev-refresh-all',title:'Refresh all markets for this event',contexts:['action']}));
 });
+chrome.contextMenus?.onClicked.addListener((info,tab)=>{if(info.menuItemId==='ev-refresh-all')runOddsCapture(tab,{refresh:true});});
 
 function waitForTabComplete(tabId) {
   return new Promise((resolve) => {
@@ -1055,7 +1087,7 @@ function showImportToast(title, message, details = {}) {
 function readEvLoadedCoverageSnapshotFromApp() {
   try {
     const parsed = JSON.parse(localStorage.getItem("EV_LOADED_COVERAGE_SNAPSHOT") || "null");
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.books)) return null;
     return parsed;
   } catch (err) {
     return null;
@@ -2593,8 +2625,14 @@ function isDraftKingsMlbPage() {
 }
 
 function getDraftKingsWorkflowLabels() {
+  if (/\/nhl\b|nhl-odds|hockey-odds/i.test(String(window.location.pathname || "")) ||
+      /Sportsbook\s*\/\s*Hockey Odds\s*\/\s*NHL Odds/i.test(clean(document.body?.innerText || ""))) {
+    try { const targets=JSON.parse(sessionStorage.getItem('EV_DK_TARGET_WORKFLOW_LABELS')||'[]').filter(l=>['Game Lines','Goalscorer','Shots On Goal','Points','Assists','Goalie'].includes(l)); if(targets.length)return targets; } catch {}
+    return ["Game Lines", "Goalscorer", "Shots On Goal", "Points", "Assists", "Goalie"];
+  }
   // Resolve the sport before basketball target labels can override it.
   if (isDraftKingsMlbPage()) {
+    try { const wanted=JSON.parse(sessionStorage.getItem('EV_DK_TARGET_WORKFLOW_LABELS')||'[]').filter(l=>/^(?:Batter Props|Batter|Pitcher Props|Pitcher|Game Lines|Main Lines|Moneyline|Spread|Total|Hits(?: O\/U)?|Total Bases(?: O\/U)?|Bases|Home Runs|RBIs(?: O\/U)?|Runs Batted In|Runs(?: O\/U)?|Hits \+ Runs \+ RBIs|Strikeouts(?: O\/U)?|Outs|Outs Recorded|Pitching Outs|Hits Allowed|Earned Runs|Walks Allowed)$/i.test(l)); if(wanted.length)return wanted; } catch {}
     return ["Game Lines", "Batter Props", "Batter", "Home Runs", "Hits", "Hits O/U", "Total Bases", "Total Bases O/U",
       "RBIs", "RBIs O/U", "Runs", "Runs O/U", "Hits + Runs + RBIs", "Hits + Runs + RBIs O/U",
       "Pitcher Props", "Pitcher", "Strikeouts", "Strikeouts O/U", "Outs", "Outs Recorded", "Earned Runs", "Hits Allowed", "Walks Allowed", "Hits", "Walks"];
@@ -6387,11 +6425,16 @@ async function buildFanDuelOneNextNbaTabRawText() {
     if (host.includes("betmgm")) return "BetMGM";
     if (host.includes("draftkings")) return "DraftKings";
     if (host.includes("thescore")) return "TheScore";
+    if (host === "caesars.com" || host.endsWith(".caesars.com")) return "Caesars";
 
     return "";
   }
 
   const detectedSource = detectBookSource();
+
+  if (detectedSource === "Caesars") {
+    return { source: detectedSource, text: `CAESARS_VISIBLE_CAPTURE\n${rawPageText()}` };
+  }
 
   function footballCaptureLeague() {
     const path = String(window.location.pathname || "");

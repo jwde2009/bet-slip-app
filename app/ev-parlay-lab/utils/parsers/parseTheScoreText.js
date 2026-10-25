@@ -17,6 +17,10 @@ export function parseTheScoreText(rawText = "", context = {}) {
     .map(normalizeLine)
     .filter(Boolean);
 
+  if (lines.includes("THESCORE_STRUCTURED_EXPORT") && lines.some(line => /^Sport:\s*MLB$/i.test(line)) &&
+      !lines.includes("THESCORE_CAPTURE_VERSION: 20260905_MLB_1")) {
+    throw new Error("Unversioned theScore MLB export has ambiguous price-column labels. Recapture with the updated extension; historic labels cannot be repaired safely.");
+  }
   const sport = inferSport(lines, context);
   const rows = [];
 
@@ -562,10 +566,18 @@ function parseStructuredExport(lines, context = {}) {
   let currentSport = String(context?.sport || "").toUpperCase() || "UNKNOWN";
   let currentEvent = String(context?.eventName || "").trim() || "Unknown Event";
   let currentMarket = "";
+  let currentPeriod = "full_game";
   let currentStructuredMainMarketIsJunk = false;
 
   for (const line of lines) {
     if (/^THESCORE_STRUCTURED_EXPORT$/i.test(line)) continue;
+
+    const periodMatch = line.match(/^Period:\s*(.*)$/i);
+    if (periodMatch) {
+      currentPeriod = normalizeLine(periodMatch[1]).toLowerCase();
+      currentMarket = "";
+      continue;
+    }
 
     const sportMatch = line.match(/^Sport:\s*(.+)$/i);
     if (sportMatch) {
@@ -598,7 +610,7 @@ function parseStructuredExport(lines, context = {}) {
       continue;
     }
 
-    if (isTheScoreFakeEventName(currentEvent)) {
+    if (!["full_game", "full game", "game"].includes(currentPeriod) || isTheScoreFakeEventName(currentEvent)) {
       continue;
     }
 
@@ -1051,6 +1063,8 @@ function buildMainRows(event, away, home, sport, parsed) {
 function inferSport(lines, context) {
   if (context?.sport) return String(context.sport).toUpperCase();
 
+  const explicit = lines.map(line => line.match(/^Sport: (MLB|NHL|NFL|NBA|WNBA)$/i)?.[1]?.toUpperCase()).filter(Boolean);
+  if (new Set(explicit).size === 1) return explicit[0];
   const text = lines.slice(0, 220).join(" ");
 
   if (/The Score NHL|NHL Landing Page|Game Page – Main|Game Page – Shots on Goal|Game Page – Goals|Game Page – Points \/ Assists|Game Page – Saves|Shots On Goal|Goalie\/Defense|SEA Kraken|COL Avalanche|MTL Canadiens|TB Lightning|OTT Senators|CAR Hurricanes|Vegas Golden Knights|Colorado Avalanche|Montreal Canadiens|Carolina Hurricanes/i.test(text)) {
