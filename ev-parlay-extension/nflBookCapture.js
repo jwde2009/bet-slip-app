@@ -871,6 +871,29 @@ function createNflCaptureCore() {
     if(d.type==='player_touchdowns')for(const t of tablesIn(container))qs.push(...core.tdTable(t));
     return core.validQuotes(qs,event);
   }
+  function moreControl(block, hasPrices) {
+    const semantic=list(block,'button,[role="button"],a').filter(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+    if(book!=='BetMGM')return semantic[0]||null;
+    // October 25 live expansionEvidence: <span>Show More</span> directly
+    // inside DIV.show-more-less-button. Only expand a priced supported market;
+    // the same control in an ambiguous N+ ladder does not authorize its import.
+    const observed=hasPrices?list(block,'div.show-more-less-button').filter(visible):[];
+    if(observed.length>1)return null;
+    const candidates=[...semantic];
+    for(const el of observed) {
+      const labels=Array.from(el.children).filter(c=>c.tagName==='SPAN'&&text(c)==='Show More'&&visible(c));
+      if(labels.length!==1||text(el)!=='Show More'||!safeControl(el)||!safeControl(labels[0])||!safeLink(el))continue;
+      if(el.closest('[disabled],[aria-disabled="true"],[inert]')||el.querySelector('button,a,input,[role="button"],[data-type],[aria-expanded]'))continue;
+      let safe=true;
+      for(let p=el;p&&p!==block;p=p.parentElement) {
+        const markers=[p.className,p.getAttribute('data-testid'),p.getAttribute('data-test-id')].join(' ');
+        if(!visible(p)||p.matches('[disabled],[aria-disabled="true"],[data-type],button,a,[role="button"]')||/(?:outcome|selection|add.to.bet|place.bet)/i.test(markers)){safe=false;break;}
+      }
+      if(safe&&!candidates.includes(el))candidates.push(el);
+    }
+    // Ambiguous controls never justify choosing an arbitrary click target.
+    return candidates.length===1?candidates[0]:null;
+  }
   async function settled(label) {
     let qs=[],previous='',matches=0;
     for(let n=0;n<(book==='FanDuel'?8:16);n++) {
@@ -933,15 +956,17 @@ function createNflCaptureCore() {
     }
     let qs=await settled(label);
     for(let round=0;round<4;round++) {
-      if(!await ensureContext())break;
+      if(!await ensureContext()||partialTab())break;
       const block=containerFor(findHeader(label));
-      const more=list(block,'button,[role="button"],a').find(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+      const more=moreControl(block,qs.length>0);
       if(!more)break;
-      const before=readable(block);more.click();await wait(450);qs=await settled(label);
-      if(readable(containerFor(findHeader(label)))===before)break;
+      const before=readable(block),beforeQuotes=qs.length;more.click();await wait(450);qs=await settled(label);
+      const changed=readable(containerFor(findHeader(label)))!==before;
+      if(book==='BetMGM'){diagnostics.expansions ||= [];diagnostics.expansions.push({title:label,attempt:round+1,control:more.matches('div.show-more-less-button')?'observed-show-more-less-button':'semantic-control',beforeQuotes,afterQuotes:qs.length,contentChanged:changed});}
+      if(!changed)break;
     }
     const block=containerFor(findHeader(label));
-    const actionableMore=list(block,'button,[role="button"],a').some(el=>safeControl(el)&&safeLink(el)&&/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(text(el)));
+    const actionableMore=!!moreControl(block,qs.length>0);
     // Supplied BetMGM text retains Show More even when no supported semantic
     // control is found. Never checkpoint that truncated player list as complete.
     const textMore=book==='BetMGM'&&lines(readable(block)).some(l=>/^(?:Show more|See more|Show all|See all|Load more)(?:\s*\(\d+\))?$/i.test(l));

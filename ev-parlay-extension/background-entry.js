@@ -1,4 +1,4 @@
-const EXTENSION_ENTRY_VERSION = "20261022_nflcoverage1";
+const EXTENSION_ENTRY_VERSION = "20261025_mgmmore1";
 // Classic service-worker entry: preserve the existing multi-book implementation.
 importScripts("background.js", "theScoreNflCapture.js");
 importScripts("captureDemand.js");

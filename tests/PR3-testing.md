@@ -217,3 +217,19 @@ This retry change is extension-only in use with app build 95b26d6: update the cl
 5. For FanDuel, after initial rows exist, use one normal toolbar capture to test targeted missing-market retry. Preserve that TXT if requested markets remain absent. Do not infer that a comparison-book gap means the market is offered here.
 
 This release fixes unfinished-work accounting and retry behavior; it does not yet implement an unobserved BetMGM Show More control. See the October 22 section of `Multisport-import-audit.md` for the smallest remaining samples and verified versus simulated coverage.
+
+## October 25: install 1.4.14 in the existing detached test worktree
+
+The 1.4.14 handoff supplies the exact code commit SHA. Use that SHA, not the older bddf108 (1.4.13) above. Work only in `C:\Users\jwde2\Documents\bet-slip-app-import-test`:
+
+```powershell
+Set-Location 'C:\Users\jwde2\Documents\bet-slip-app-import-test'
+git status --short --branch --untracked-files=all
+git fetch origin codex/multisport-darkhorse-import
+```
+
+Run individually and stop on errors. The expected state is detached HEAD with no tracked changes. The two previously verified untracked root logs, `parser-test-results.txt` and `parser-test-results-updated.txt`, may remain in place: this release adds neither those paths nor conflicting directories. Preserve them. Stop for inspection if any other local changes appear. Never pull on detached HEAD or reset/clean/force/stash files automatically.
+
+Verify the supplied full SHA with `git rev-parse '<SHA>^{commit}'`, then run `git switch --detach <SHA>` and recheck `git status --short --branch --untracked-files=all` plus `git rev-parse HEAD`. Reload the existing extension in chrome://extensions and verify **1.4.14**. Expected entry version is **20261025_mgmmore1**. The app server/profile, saved parlays, and capture format remain unchanged; no rebuild, restart, or storage clearing is needed.
+
+On the intended BetMGM pregame event, refresh the sportsbook tab and use **Refresh all markets for this event** once. In EV Lab, expand Import Odds and use **Download TXT**. The raw file should include expansion counts for supported Show More player lists. This is the first live validation of the new control; ladder thresholds and unavailable category navigation remain unresolved. Afterward, the smallest FanDuel test is one normal toolbar capture with initial rows already loaded, followed by Download TXT.

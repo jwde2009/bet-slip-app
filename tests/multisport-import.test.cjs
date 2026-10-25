@@ -842,7 +842,7 @@ test('DK latest failed capture proves SECTION exclusion and old resume checkpoin
   const checkpoint={...base,incomplete:true,returnedPartial:true,updatedAt:Date.now(),targets:[],completed:['POPULAR'],processedByTab:{PASSING:['old drawer']}};
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261012_4'},base,[]),false);
   assert.equal(ctx.nflCheckpointMatches({...checkpoint,version:'20261018_2'},base,[]),true);
-  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.13');
+  assert.equal(JSON.parse(read('ev-parlay-extension/manifest.json')).version,'1.4.14');
 });
 
 test('October 19 DK capture reached all six tabs but contains only six recoverable main lines',async()=>{
@@ -1130,4 +1130,87 @@ test('FanDuel real page step reports absent requested attempts beside priced yar
     assert.equal(r.records.reduce((n,r)=>n+r.quotes.length,0),empty?0:2);assert.equal(clicks,0);assert.equal(r.remaining,false);
     dom.window.close();
   }
+});
+
+test('October 25 replacement BetMGM capture: 69 unique quotes, 63 raw prop prices, observed expansion shape and honest partial coverage',async()=>{
+  const raw=read('tests/fixtures/betmgm-nfl-show-more-1413-20261025.txt');
+  const objects=p=>raw.split(/\r?\n/).filter(l=>l.startsWith(p)).map(l=>JSON.parse(l.slice(p.length)));
+  const records=objects('NFL_MARKET_V2: '),ds=objects('NFL_CAPTURE_DIAGNOSTICS: ');
+  assert.equal(objects('EXTENSION_CAPTURE_DIAGNOSTICS: ')[0].extensionVersion,'1.4.13');
+  assert.equal(objects('NFL_CAPTURE_RUN: ')[0].mode,'full-core-markets');
+  const {parseOddsText}=await loadModule(routerFile),rows=plain(parseOddsText(raw,{sportsbook:'BetMGM'}));
+  assert.equal(rows.length,69);assert.equal(new Set(rows.map(r=>r.id)).size,69);assert.equal(new Set(rows.map(r=>r.marketType)).size,15);
+  assert.ok(rows.every(r=>r.eventLabelRaw==='Indianapolis Colts @ Minnesota Vikings'&&r.period==='full_game'&&r.sportsbook==='BetMGM'));
+  let verified=0;
+  for(const record of records.filter(r=>r.rawSample&&r.quotes.length)) {
+    const names=[...new Set(record.quotes.map(q=>q.subject))];
+    for(const q of record.quotes) {
+      const start=record.rawSample.indexOf(q.subject);assert.ok(start>=0);
+      const ends=names.map(n=>record.rawSample.indexOf(n,start+q.subject.length)).filter(i=>i>=0);
+      const tokens=record.rawSample.slice(start,ends.length?Math.min(...ends):undefined).split(/\n/).map(s=>s.trim()).filter(Boolean);
+      assert.ok(tokens.some((t,i)=>t===(q.single?'Yes':`${q.side==='Over'?'O':'U'} ${q.line}`)&&tokens[i+1]===`${q.odds>0?'+':''}${q.odds}`));verified++;
+    }
+  }
+  assert.equal(verified,63);
+  const empty=records.filter(r=>!r.quotes.length);assert.equal(empty.length,9);assert.ok(empty.every(r=>/\d+\+/.test(r.rawSample)));
+  assert.equal(parseOddsText(empty.map(r=>'NFL_MARKET_V2: '+JSON.stringify(r)).join('\n'),{sportsbook:'BetMGM'}).length,0);
+  const expansion=ds.flatMap(d=>d.expansionEvidence||[]);assert.equal(expansion.length,4);
+  assert.ok(expansion.every(e=>e.controls.length===1&&e.controls[0].html==='<span>Show More</span>'&&e.controls[0].parentTag==='DIV'&&e.controls[0].parentClass==='show-more-less-button ng-star-inserted'));
+  assert.equal(ds.at(-1).complete,false);assert.deepEqual(ds.at(-1).completedTabs,[]);
+  assert.deepEqual(ds.filter(d=>d.phase==='navigation-confirmed').map(d=>d.tab),['Players']);
+  assert.deepEqual(ds.flatMap(d=>d.unavailableTabs||[]),['Spreads','Totals','All']);
+});
+
+for(const variant of ['expand','receptions','replacement','unchanged','limit','hidden','disabled','ancestor-disabled','ancestor-hidden','panel-disabled','outcome','ancestor-outcome','duplicate','neighbor','show-less','wrong-class','nested-control','ladder','event-change','live-change','path-change'])test(`Observed BetMGM Show More: ${variant}`,async()=>{
+  const {JSDOM}=require('jsdom');
+  const raw=read('tests/fixtures/betmgm-nfl-show-more-1413-20261025.txt');
+  const title=variant==='receptions'?'Receptions O/U':variant==='ladder'?'Receiving yards':'Anytime TD scorer';
+  const record=raw.split('\n').filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15))).find(r=>r.title===title);
+  // Reconstruct only the observed SPAN + immediate DIV class. The surrounding
+  // panel and post-click player rows below are simulated, not live DOM evidence.
+  const dom=new JSDOM('<main><pre id="hero">NFL (14)\nTomorrow\n7:15 PM\nESPN\nColts\nVikings\nPlayers\n</pre><button role="tab" aria-selected="true">Players</button><button dsaccordiontoggle aria-expanded="true" aria-controls="prices"><span slot="title"></span></button><div id="prices"><pre></pre></div><div id="neighbor"></div></main>',{url:'https://sports.betmgm.com/en/sports/events/colts-vikings-123'});
+  const w=dom.window,block=w.document.getElementById('prices');w.document.querySelector('[slot=title]').textContent=title;
+  block.querySelector('pre').textContent=record.rawSample.replace('Show More','');
+  let clicks=0,outcomeClicks=0;
+  function control() {
+    const el=w.document.createElement('div');el.className='show-more-less-button ng-star-inserted';el.innerHTML='<span>Show More</span>';
+    el.onclick=()=>{
+      clicks++;
+      if(variant==='event-change')w.document.getElementById('hero').textContent=w.document.getElementById('hero').textContent.replace('Colts','Bears');
+      if(variant==='live-change')w.document.getElementById('hero').textContent=w.document.getElementById('hero').textContent.replace('Tomorrow','Live');
+      if(variant==='path-change')w.history.replaceState({},'', '/en/sports/events/other-999');
+      if(variant==='unchanged')return;
+      const name=['Josh Downs','Keenan Allen','Michael Pittman','Alec Pierce'][clicks-1]||'Anthony Richardson';
+      block.querySelector('pre').textContent+=variant==='receptions'?'\nMichael Pittman\nO 3.5\n-110\nU 3.5\n-115':`\n${name}\nYes\n+300`;
+      if(variant==='replacement'&&clicks===1)el.replaceWith(control());
+      else if(variant!=='limit')el.querySelector('span').textContent='Show Less';
+    };return el;
+  }
+  const more=control();block.append(more);
+  if(variant==='hidden')more.hidden=true;
+  if(variant==='disabled')more.setAttribute('aria-disabled','true');
+  if(variant==='outcome')more.classList.add('outcome');
+  if(variant.startsWith('ancestor-')){const wrapper=w.document.createElement('div');more.replaceWith(wrapper);wrapper.append(more);if(variant==='ancestor-disabled')wrapper.setAttribute('aria-disabled','true');else if(variant==='ancestor-hidden')wrapper.hidden=true;else wrapper.className='outcome';}
+  if(variant==='panel-disabled')block.setAttribute('aria-disabled','true');
+  if(variant==='duplicate')block.append(control());
+  if(variant==='neighbor')w.document.getElementById('neighbor').append(more);
+  if(variant==='show-less')more.querySelector('span').textContent='Show Less';
+  if(variant==='wrong-class')more.className='unobserved-toggle';
+  if(variant==='nested-control'){const button=w.document.createElement('button');button.className='outcome';button.textContent='+200';button.onclick=()=>outcomeClicks++;more.append(button);}
+  const outcome=w.document.createElement('button');outcome.className='outcome';outcome.textContent='Yes +200';outcome.onclick=()=>outcomeClicks++;block.append(outcome);
+  Object.defineProperty(w.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:100,height:30});w.HTMLElement.prototype.scrollIntoView=()=>{};
+  const ctx=extensionContext({document:w.document,location:w.location,Node:w.Node,setTimeout:fn=>{fn();return 0;},getComputedStyle:e=>({display:e.hidden?'none':'block',visibility:'visible'})});
+  const result=await ctx.nflDetailPageStep('BetMGM',{captureOnly:true,tab:'Players',targetTypes:[variant==='receptions'?'player_receptions':variant==='ladder'?'player_receiving_yards':'player_touchdowns']});
+  const acted=['expand','receptions','replacement','unchanged','limit','event-change','live-change','path-change'].includes(variant);
+  assert.equal(clicks,variant==='limit'?4:variant==='replacement'?2:acted?1:0);assert.equal(outcomeClicks,0);
+  if(variant.endsWith('-change')) {assert.equal(result.records.length,0);assert.match(result.stopped,/Context changed/);}
+  else {
+    const qs=result.records[0].quotes;
+    assert.equal(qs.length,variant==='expand'?6:variant==='receptions'?12:variant==='replacement'?7:variant==='limit'?9:variant==='ladder'?0:5);
+    assert.deepEqual(plain(qs.slice(0,record.quotes.length)),record.quotes);
+    if(['unchanged','limit','duplicate','wrong-class','ladder'].includes(variant))assert.ok(result.diagnostics.unpricedDrawers.includes(title));
+    if(acted)assert.equal(result.diagnostics.expansions.length,clicks);
+  }
+  dom.window.close();
 });

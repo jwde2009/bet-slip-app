@@ -305,3 +305,21 @@ The user confirmed 1.4.12 delivers odds into the usual app. This confirms transp
 | Caesars | Generic visible import/demand path | One pregame NFL capture containing visible full-game lines and an expanded supported prop market. Native collapsed-prop navigation is not verified or claimed. |
 
 Tests distinguish actual capture replay from simulated DOM transitions. No authenticated sportsbook access, bet placement, storage migration, merge or deployment is performed.
+
+## October 25 replacement capture — observed BetMGM Show More (1.4.14)
+
+Source: `betmgm-import-2026-10-25T01-19-01-864Z.txt`, Library `libfile_f31dad93178c8191a6878e510783b7e7`, 56,578 bytes / 82 lines, preserved as `tests/fixtures/betmgm-nfl-show-more-1413-20261025.txt`. Only the replacement file is used; the withdrawn preceding upload is excluded.
+
+- Actual installed capture reports extension 1.4.13 / entry 20261022_nflcoverage1, NFL V2, initial/full-core-markets (not refresh), Indianapolis Colts @ Minnesota Vikings, capturedAt 2026-10-25T01:18:57.809Z.
+- App-router replay yields 69 unique rows across 15 markets. All market records specify BetMGM, that same event, and full_game. All 63 player tuples independently match player-bounded raw text; six starting-page main lines have structured evidence only. There is no independent current website comparison or copied parsed-review comparison for this run.
+- Main lines: Colts +6.5 -110 / Vikings -6.5 -108; moneyline Colts +240 / Vikings -295; total 41.5 Over -108 / Under -110.
+- Players navigation is confirmed with zero injection retries. Five anytime players and 29 ordinary O/U pairs were captured. Nine N+ ladder panels correctly produce zero quotes; unknown selected thresholds are not inferred. Spreads/Totals/All controls remain unavailable. Completion remains false.
+- Four panels (Anytime TD scorer, Receiving yards ladder, Receiving yards O/U, Receptions O/U) report exactly `<span>Show More</span>` with immediate parent DIV class `show-more-less-button ng-star-inserted`. This is observed selector evidence, not a complete parent outerHTML or live expansion test.
+
+1.4.14 recognizes that exact DIV class token and direct visible SPAN label only inside the current priced market panel. It requires one unambiguous control, rejects disabled/hidden/inert/outcome/selection/link or nested interactive controls, and retains same-event/pregame/period checks. The existing four-click bound and unchanged-content stop remain. Fresh DOM lookup supports replaced controls. Ambiguous ladder panels do not qualify for the new expansion path. Existing semantic-control handling for other books is retained.
+
+Diagnostics now include `expansions` with title, control kind, attempt, before/after quote count and contentChanged. Remaining Show More labels still leave the drawer incomplete. Twenty-three new tests cover the actual replay/raw tuples; observed control reconstruction; simulated TD and O/U expansion; replacement/unchanged/four-attempt behavior; hidden/disabled/outcome/neighbor/duplicate/unobserved controls; event/live/path changes; and actual manifest/action/serialized-injection delivery of newly revealed quotes. All 295 local tests pass. DOM transitions and additional players in these tests are explicitly simulated. Live expansion is still unverified.
+
+Next smallest live check: update only the detached test worktree to the supplied 1.4.14 code commit, reload the extension, refresh the pregame BetMGM page, and use one explicit Refresh all markets for this event. Download TXT without copying the full app page. Check expansions and whether the affected priced player lists grow; do not claim all-book coverage from this change. No duplicate pill-bar HTML or new screenshot is needed. Then test FanDuel with one normal targeted capture on an event with initial rows already loaded.
+
+No app/storage/server changes, delivery-handshake changes, wagers, merge or deployment. The previous delivery error's cause remains unproven.

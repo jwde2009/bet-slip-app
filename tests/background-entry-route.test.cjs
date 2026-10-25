@@ -92,7 +92,7 @@ test('manifest service worker routes exact SGP starting-page text into NFL, not 
   const text=r.queue[0].text;
   assert.match(text,/NFL_CAPTURE_VERSION/);assert.doesNotMatch(text,/BETMGM_AUTOPASS|BETMGM_MANUAL_PLAYER_PROPS_REQUIRED/);
   const diag=JSON.parse(text.split('EXTENSION_CAPTURE_DIAGNOSTICS: ')[1]);
-  assert.equal(diag.extensionVersion,'1.4.13');assert.equal(diag.entryVersion,'20261022_nflcoverage1');
+  assert.equal(diag.extensionVersion,'1.4.14');assert.equal(diag.entryVersion,'20261025_mgmmore1');
   assert.equal(diag.route,'nfl-v2');assert.equal(diag.event,'Washington Commanders @ San Francisco 49ers');
   assert.equal(r.injections.some(x=>x.name==='extractOddsTextFromCurrentPage'),false);
   // Text-only evidence cannot prove the actual Players control is clickable.
@@ -258,4 +258,20 @@ test('BetMGM starting-page capture refuses an explicitly selected half tab',asyn
   const r=await runEntry({pills:true,browserOverrides:w=>w.document.querySelector('main').insertAdjacentHTML('beforeend','<button role="tab" aria-selected="true">1st Half</button>')});
   assert.equal(queuedRecords(r).flatMap(r=>r.quotes).length,0);
   assert.equal(r.playerClicks,0);
+});
+
+test('actual serialized action pipeline expands observed BetMGM wrapper and queues newly revealed player prices',async()=>{
+  let expansions=0;
+  const r=await runEntry({pills:true,pillsInsideMain:true,snapshot:tdDemand,mutatePlayers:main=>{
+    const block=main.querySelector('#prices'),pre=block.querySelector('pre');
+    pre.textContent='Christian McCaffrey\nYes\n-275\nMike Evans\nYes\n-120\nGeorge Kittle\nYes\n+100\nRachaad White\nYes\n+110\nStefon Diggs\nYes\n+225';
+    // Observed October 25 control shape; event/price transition is simulated.
+    const more=main.ownerDocument.createElement('div');more.className='show-more-less-button ng-star-inserted';more.innerHTML='<span>Show More</span>';
+    more.onclick=()=>{expansions++;pre.textContent+='\nJayden Daniels\nYes\n+230';more.querySelector('span').textContent='Show Less';};block.append(more);
+  }});
+  assert.equal(expansions,1);assert.equal(r.queue.length,1);
+  const records=r.queue[0].text.split(/\r?\n/).filter(l=>l.startsWith('NFL_MARKET_V2: ')).map(l=>JSON.parse(l.slice(15)));
+  const qs=records.flatMap(r=>r.quotes);assert.equal(qs.length,6);assert.equal(qs.find(q=>q.subject==='Jayden Daniels').odds,230);
+  assert.match(r.queue[0].text,/observed-show-more-less-button/);assert.match(r.queue[0].text,/"beforeQuotes":5,"afterQuotes":6/);
+  assert.match(r.queue[0].text,/"extensionVersion":"1.4.14"/);
 });
